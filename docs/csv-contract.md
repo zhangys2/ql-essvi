@@ -21,7 +21,7 @@ quote_id,time_to_expiry,strike,log_moneyness,fitted_total_variance,fitted_iv,sta
 ## surface_grid.csv
 
 ```text
-time_to_expiry,log_moneyness,strike,fitted_total_variance,fitted_iv,is_tail
+time_to_expiry,forward,discount_factor,log_moneyness,strike,fitted_total_variance,fitted_iv,is_tail
 ```
 
 ## parameters.csv

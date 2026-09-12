@@ -7,6 +7,12 @@ def f(row,key):
     try: return float(row[key])
     except (KeyError,TypeError,ValueError): return None
 
+def black_normalized(f,k,t,w):
+    if t <= 0 or w <= 0: return max(f-k, 0.0)
+    s=math.sqrt(w); d1=(math.log(f/k)+.5*w)/s; d2=d1-s
+    cdf=lambda x: .5*(1+math.erf(x/math.sqrt(2)))
+    return f*cdf(d1)-k*cdf(d2)
+
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument('quotes'); ap.add_argument('--grid'); ap.add_argument('--output',required=True); args=ap.parse_args()
     rows=list(csv.DictReader(open(args.quotes,newline='')))
@@ -18,20 +24,24 @@ def main():
         grid=list(csv.DictReader(open(args.grid,newline='')))
         by_t=defaultdict(list)
         for r in grid:
-            t=f(r,'time_to_expiry'); k=f(r,'log_moneyness'); w=f(r,'fitted_total_variance')
-            if t is not None and k is not None and w is not None: by_t[t].append((k,w))
+            t=f(r,'time_to_expiry'); k=f(r,'log_moneyness'); w=f(r,'fitted_total_variance'); strike=f(r,'strike'); forward=f(r,'forward')
+            if t is not None and k is not None and w is not None and strike is not None and forward is not None:
+                by_t[t].append((k,w,strike,forward))
         butterfly=0
         for vals in by_t.values():
             vals.sort();
             for i in range(1,len(vals)-1):
-                # Convexity of call price is approximated by convexity of total variance only
-                # as a cheap diagnostic; production output should also include prices.
-                if vals[i][1] > vals[i-1][1] + (vals[i+1][1]-vals[i-1][1])*(vals[i][0]-vals[i-1][0])/(vals[i+1][0]-vals[i-1][0]) + 1e-8: butterfly+=1
+                # Convexity of undiscounted call prices on the strike grid.
+                c0=black_normalized(vals[i-1][3],vals[i-1][2],times[0] if False else 1.0,vals[i-1][1])
+                c1=black_normalized(vals[i][3],vals[i][2],1.0,vals[i][1])
+                c2=black_normalized(vals[i+1][3],vals[i+1][2],1.0,vals[i+1][1])
+                s1=(c1-c0)/(vals[i][2]-vals[i-1][2]); s2=(c2-c1)/(vals[i+1][2]-vals[i][2])
+                if s2 < s1-1e-8: butterfly+=1
         times=sorted(by_t)
         calendar=0
-        common=sorted(set(k for t in times for k,_ in by_t[t]))
+        common=sorted(set(k for t in times for k,_,_,_ in by_t[t]))
         for a,b in zip(times,times[1:]):
-            da=dict(by_t[a]); db=dict(by_t[b])
+            da={k:w for k,w,_,_ in by_t[a]}; db={k:w for k,w,_,_ in by_t[b]}
             for k in common:
                 if k in da and k in db and db[k] < da[k]-1e-8: calendar+=1
         result.update({'butterfly_violations':butterfly,'calendar_violations':calendar,'grid_points':sum(map(len,by_t.values()))})
