@@ -2,7 +2,7 @@
   "benchmark": "eSSVI-vs-CVI",
   "effective_date": "2024-11-11",
   "generated_at": "2026-09-13",
-  "ql_essvi_commit": "e03857075b4cb05c6d8ac581cc76ec9df133e2d1",
+  "ql_essvi_commit": "c4c89cf65ad3cb0f4b5419e08cb5e55c2d5de599",
   "cvi_repository": "https://github.com/zhangys2/CVI-Vol-Surface-Fitting",
   "cvi_commit": "e22f93b79dad108f02d32722b00dea21b34b1c59",
   "cvi_notebook": "CVI Vol Surface Fitting.ipynb",
