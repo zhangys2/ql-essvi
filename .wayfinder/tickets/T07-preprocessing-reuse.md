@@ -2,7 +2,7 @@
 id: T07
 title: Decide the shared preprocessing and scoring pipeline
 type: Research (AFK)
-status: open
+status: resolved
 blocked_by: []
 claimed_by: null
 map: ../maps/essvi-vs-cvi-benchmark.md

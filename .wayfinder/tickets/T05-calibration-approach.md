@@ -2,7 +2,7 @@
 id: T05
 title: Choose the eSSVI calibration approach under no-arbitrage constraints
 type: Research (AFK)
-status: open
+status: resolved
 blocked_by: [T01]
 claimed_by: null
 map: ../maps/essvi-vs-cvi-benchmark.md

@@ -2,7 +2,7 @@
 id: T04
 title: Define the shared CSV contract between the two fitters
 type: Grilling (HITL)
-status: open
+status: resolved
 blocked_by: [T07]
 claimed_by: null
 map: ../maps/essvi-vs-cvi-benchmark.md

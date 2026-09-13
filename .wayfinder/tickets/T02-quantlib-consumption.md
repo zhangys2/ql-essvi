@@ -2,7 +2,7 @@
 id: T02
 title: Decide how the project consumes QuantLib
 type: Research (AFK)
-status: open
+status: resolved
 blocked_by: [T03]
 claimed_by: null
 map: ../maps/essvi-vs-cvi-benchmark.md

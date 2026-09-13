@@ -2,7 +2,7 @@
 id: T03
 title: Choose the build and run platform
 type: Grilling (HITL)
-status: open
+status: resolved
 blocked_by: []
 claimed_by: null
 map: ../maps/essvi-vs-cvi-benchmark.md

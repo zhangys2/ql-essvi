@@ -2,7 +2,7 @@
 id: T06
 title: Export CVI's fitted surface and diagnostics to the shared contract
 type: Task (AFK)
-status: open
+status: resolved
 blocked_by: [T04]
 claimed_by: null
 map: ../maps/essvi-vs-cvi-benchmark.md

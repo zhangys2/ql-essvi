@@ -2,7 +2,7 @@
 id: T01
 title: Fix the eSSVI parameterization and its no-arbitrage conditions
 type: Research (AFK)
-status: open
+status: resolved
 blocked_by: []
 claimed_by: null
 map: ../maps/essvi-vs-cvi-benchmark.md
