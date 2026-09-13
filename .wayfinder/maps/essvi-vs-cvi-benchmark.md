@@ -53,7 +53,19 @@ Execution exception: **none**. This map plans decisions only.
 
 ## Decisions so far
 
-- None yet. This was a charting session; no decision ticket has been resolved.
+- **D9** Build and run the C++ project on WSL Ubuntu/GCC, using the existing QuantLib build tree.
+- **D10** Python owns the canonical preprocessing and scoring pipeline; C++ consumes the normalized CSV contract.
+- **D11** Add a minimal, additive CVI export adapter without changing CVI fitting behavior.
+- **D12** Implement a plain eSSVI evaluator first; add a QuantLib surface adapter after calibration and scoring are validated.
+
+These decisions were confirmed by the user on 2026-09-12. Additional confirmed implementation decisions:
+
+- **D13** Use power-law `phi`, smooth low-dimensional maturity-dependent `rho`, hard constraints during calibration, and jointly fitted `theta_t` initialized from ATM data.
+- **D14** Use NLopt SLSQP, fail explicitly rather than falling back to unconstrained fitting, and use total variance canonically with IV as a reporting field.
+- **D15** Use deterministic shared filtering, long-form CSV, a common dense grid with tail-only arbitrage checks, and empty fields plus status/reason columns for missing values.
+- **D16** Add the CVI export cell directly to the existing notebook; the user authorized modifying, committing, and pushing that repository.
+
+The exact sufficient conditions and schemas are documented in `docs/parameterization.md` and `docs/csv-contract.md`. The implementation is complete as a reproducible benchmark run, with the CVI/eSSVI included-quote count difference documented as a residual fairness gap.
 
 ## Not yet specified
 
