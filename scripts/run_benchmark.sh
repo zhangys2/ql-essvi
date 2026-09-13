@@ -9,6 +9,11 @@ cmake --build build -j"$(nproc)"
 .venv/bin/python python/prepare_inputs.py "$1" "$2" normalized_quotes.csv
 ./build/essvi_fit normalized_quotes.csv parameters.csv fitted_quotes.csv surface_grid.csv diagnostics.csv
 .venv/bin/python python/score_outputs.py normalized_quotes.csv --fitted fitted_quotes.csv --grid surface_grid.csv --output score.json
+.venv/bin/python python/validate_schema.py normalized normalized_quotes.csv
+.venv/bin/python python/validate_schema.py parameters parameters.csv
+.venv/bin/python python/validate_schema.py fitted fitted_quotes.csv
+.venv/bin/python python/validate_schema.py grid surface_grid.csv
+.venv/bin/python python/validate_schema.py diagnostics diagnostics.csv
 ctest --test-dir build --output-on-failure
 .venv/bin/python -m pytest -q
 cat score.json
