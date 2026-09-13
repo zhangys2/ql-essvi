@@ -9,6 +9,7 @@ parameters.csv
 fitted_quotes.csv
 surface_grid.csv
 score.json
+diagnostics.csv
 essvi_score.json
 cvi_score.json
 .pi-subagents/
