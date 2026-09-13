@@ -5,8 +5,9 @@
 
 namespace essvi {
 struct Quote { std::string id; double expiry, forward, strike, mid_iv; bool included; };
-struct CalibrationResult { Surface surface; bool converged{}; double objective{}; int iterations{}; std::string error; };
+struct CalibrationResult { Surface surface; bool converged{}; double objective{}; int iterations{}; double runtime_seconds{}; std::string error; };
 CalibrationResult calibrate(const std::vector<Quote>& quotes);
 std::vector<Quote> readQuotes(const std::string& path);
 void writeParameters(const CalibrationResult& result, const std::string& path);
+void writeDiagnostics(const CalibrationResult& result, const std::string& path);
 }

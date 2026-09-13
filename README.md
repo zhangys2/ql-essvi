@@ -33,7 +33,7 @@ Prepare and fit the real dataset:
 .venv/bin/python python/prepare_inputs.py \
   /mnt/c/Users/zhang/source/repos/CVI-Vol-Surface-Fitting/option_chain.csv \
   /mnt/c/Users/zhang/source/repos/CVI-Vol-Surface-Fitting/sofrDFs.csv normalized_quotes.csv
-./build/essvi_fit normalized_quotes.csv parameters.csv fitted_quotes.csv surface_grid.csv
+./build/essvi_fit normalized_quotes.csv parameters.csv fitted_quotes.csv surface_grid.csv diagnostics.csv
 .venv/bin/python python/score_outputs.py normalized_quotes.csv \
   --fitted fitted_quotes.csv --grid surface_grid.csv --output score.json
 ```

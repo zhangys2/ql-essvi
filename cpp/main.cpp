@@ -5,8 +5,8 @@
 #include <sstream>
 
 int main(int argc, char** argv) {
-  if (argc != 5) {
-    std::cerr << "usage: essvi_fit normalized_quotes.csv parameters.csv fitted_quotes.csv surface_grid.csv\n";
+  if (argc != 6) {
+    std::cerr << "usage: essvi_fit normalized_quotes.csv parameters.csv fitted_quotes.csv surface_grid.csv diagnostics.csv\n";
     return 2;
   }
   auto quotes = essvi::readQuotes(argv[1]);
@@ -16,6 +16,7 @@ int main(int argc, char** argv) {
     return 1;
   }
   essvi::writeParameters(result, argv[2]);
+  essvi::writeDiagnostics(result, argv[5]);
   std::ofstream qout(argv[3]);
   qout << "quote_id,time_to_expiry,strike,log_moneyness,fitted_total_variance,fitted_iv,status\n";
   qout << std::setprecision(15);
