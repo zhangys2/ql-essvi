@@ -14,8 +14,10 @@ def black_normalized(f,k,t,w):
     return f*cdf(d1)-k*cdf(d2)
 
 def main():
-    ap=argparse.ArgumentParser(); ap.add_argument('quotes'); ap.add_argument('--grid'); ap.add_argument('--output',required=True); args=ap.parse_args()
+    ap=argparse.ArgumentParser(); ap.add_argument('quotes'); ap.add_argument('--fitted',required=True); ap.add_argument('--grid'); ap.add_argument('--output',required=True); args=ap.parse_args()
     rows=list(csv.DictReader(open(args.quotes,newline='')))
+    fitted={r['quote_id']:r for r in csv.DictReader(open(args.fitted,newline=''))}
+    for r in rows: r.update(fitted.get(r['quote_id'], {}))
     eligible=[r for r in rows if r.get('included','').lower()=='true' and f(r,'bid_iv') is not None and f(r,'ask_iv') is not None]
     scored=[r for r in eligible if f(r,'fitted_iv') is not None]
     inside=sum(f(r,'bid_iv')-1e-12<=f(r,'fitted_iv')<=f(r,'ask_iv')+1e-12 for r in scored)
