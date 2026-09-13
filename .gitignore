@@ -4,6 +4,13 @@ __pycache__/
 *.py[cod]
 *.so
 *.o
+normalized_quotes.csv
+parameters.csv
+fitted_quotes.csv
+surface_grid.csv
+score.json
+essvi_score.json
+cvi_score.json
 .pi-subagents/
 
 .pi/
