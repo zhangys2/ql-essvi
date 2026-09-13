@@ -1,4 +1,5 @@
 #include "calibrator.hpp"
+#include <algorithm>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -31,9 +32,9 @@ int main(int argc, char** argv) {
   gout << "time_to_expiry,forward,discount_factor,log_moneyness,strike,fitted_total_variance,fitted_iv,is_tail\n";
   gout << std::setprecision(15);
   for (const auto& s : result.surface.slices) {
-    auto fwd = 0.0; for (const auto& q : quotes) if (q.expiry == s.expiry) { fwd=q.forward; break; }
-    for (int i=0; i<=100; ++i) { const double k=-0.5+i*0.01; const double w=essvi::sliceTotalVariance(s,k);
-      gout << s.expiry << ',' << fwd << ',' << ',' << k << ',' << fwd*std::exp(k) << ',' << w << ',' << std::sqrt(w/s.expiry) << ",true\n"; }
+    auto fwd = 0.0, df = 1.0, min_k = 1e9, max_k = -1e9; for (const auto& q : quotes) if (q.expiry == s.expiry) { fwd=q.forward; df=q.discount_factor; if(q.included){const auto k=std::log(q.strike/q.forward);min_k=std::min(min_k,k);max_k=std::max(max_k,k);} }
+    for (int i=0; i<=100; ++i) { const double k=-0.5+i*0.01; const double w=essvi::sliceTotalVariance(s,k); const bool tail=k<min_k||k>max_k;
+      gout << s.expiry << ',' << fwd << ',' << df << ',' << k << ',' << fwd*std::exp(k) << ',' << w << ',' << std::sqrt(w/s.expiry) << ',' << (tail?"true":"false") << "\n"; }
   }
   std::cout << "objective=" << result.objective << " slices=" << result.surface.slices.size() << '\n';
 }

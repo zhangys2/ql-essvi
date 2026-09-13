@@ -4,9 +4,11 @@ Run on WSL2/GCC against the 2024-11-11 snapshot.
 
 | model | included/scored quotes | bid/ask containment | butterfly violations | calendar violations | grid points |
 |---|---:|---:|---:|---:|---:|
-| eSSVI | 7,740 | 0.7106% | 0 | 0 | 5,151 |
-| CVI | 7,631 | 0.0262% | 2,138 | 2,398 | 5,000 |
+| model | common scored quotes | bid/ask containment | butterfly violations | calendar violations | grid points | fit time (s) |
+|---|---:|---:|---:|---:|---:|---:|
+| eSSVI | 7,365 | 0.6925% | 0 | 0 | 5,151 | 2.389 |
+| CVI | 7,365 | 0.2444% | 2,138 | 2,398 | 5,000 | 3.177 |
 
-The eSSVI fit used hard explicit sufficient constraints and NLopt SLSQP. CVI was run through its existing notebook and its additive export cell. Timings are intentionally not compared because cross-language timing is indicative only.
+Both outputs are adapted to the strict 14,364-row fitted-quote schema; scoring uses the common 7,365 rows for which both models produced fitted values. CVI was run through its existing notebook and additive export cell. Timings are indicative only and are not a decisive cross-language metric. Tail/grid metadata is normalized by the shared adapter before scoring.
 
-The quote counts differ by 109 because CVI's existing notebook permits some one-sided bid/ask inputs that the strict shared IV-inversion filter excludes. This is a known fairness gap requiring a follow-up adapter decision before treating the scores as a definitive model comparison. The reported values are therefore a pipeline validation run, not a final scientific conclusion.
+The legacy CVI notebook still fits only selected OTM rows and permits a different set of one-sided inputs internally. The common-intersection policy makes the reported comparison auditable but means the single-snapshot result should not be generalized beyond this benchmark dataset.

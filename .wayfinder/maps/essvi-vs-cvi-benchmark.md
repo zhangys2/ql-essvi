@@ -69,14 +69,9 @@ The exact sufficient conditions and schemas are documented in `docs/parameteriza
 
 ## Not yet specified
 
-- Wing and tail extrapolation policy for the fitted surface, and how it is scored where no
-  quotes exist.
-- Handling of zero-bid, crossed and stale quotes during filtering, and whether both fitters must
-  use an identical filter for the comparison to be fair.
-- What the single-snapshot dataset (one effective date) permits concluding, and whether more
-  snapshots are worth sourcing.
-- Whether the fitted surface should be exposed as a QuantLib `BlackVolTermStructure` /
-  `SmileSection` or as a plain grid plus parameters.
+- None. Tail policy, filtering, common-quote intersection, single-snapshot interpretation, and
+  plain-grid-first exposure are documented in `docs/parameterization.md`, `docs/csv-contract.md`,
+  and `benchmark_report.md`.
 
 ## Out of scope
 

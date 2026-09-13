@@ -2,9 +2,9 @@
 
 Standalone C++ eSSVI surface evaluator and benchmark harness for comparison with the existing CVI fitter.
 
-## Current status
+## Status
 
-The project is being implemented incrementally. The current WSL/QuantLib smoke test builds the eSSVI evaluator and validates its explicit Gatheral–Jacquier butterfly and Hendriks–Martini/Corbetta adjacent-slice calendar constraints.
+The benchmark pipeline is implemented and reproducible on WSL. It uses a global power-law eSSVI shape with bounded smooth maturity-dependent correlation, hard SLSQP constraints, and a shared Python normalization/scoring contract. Results retain an explicit common-quote intersection because the legacy CVI notebook fits only its selected OTM rows.
 
 ## Build on WSL
 

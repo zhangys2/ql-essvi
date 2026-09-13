@@ -32,7 +32,7 @@ void constraints(unsigned, double* r, unsigned, const double* xp, double*, void*
 }
 std::vector<Quote> readQuotes(const std::string& path) {
  std::ifstream f(path); std::string line; std::getline(f,line); auto h=split(line); std::unordered_map<std::string,size_t> ix; for(size_t i=0;i<h.size();++i)ix[h[i]]=i;
- std::vector<Quote> out; while(std::getline(f,line)){auto v=split(line);if(v.size()<h.size())continue;try{out.push_back({v[ix["quote_id"]],val(v[ix["time_to_expiry"]]),val(v[ix["forward"]]),val(v[ix["strike"]]),val(v[ix["mid_iv"]]),v[ix["included"]]=="true"});}catch(...){}}
+ std::vector<Quote> out; while(std::getline(f,line)){auto v=split(line);if(v.size()<h.size())continue;try{out.push_back({v[ix["quote_id"]],val(v[ix["time_to_expiry"]]),val(v[ix["forward"]]),val(v[ix["discount_factor"]]),val(v[ix["strike"]]),val(v[ix["mid_iv"]]),v[ix["included"]]=="true"});}catch(...){}}
  return out;
 }
 CalibrationResult calibrate(const std::vector<Quote>& quotes) {
