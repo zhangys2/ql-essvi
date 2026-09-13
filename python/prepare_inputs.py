@@ -54,11 +54,14 @@ def main():
     out=[]
     for r in raw:
         ed0,xd0=r['Effective Date'],r['Expiry Date']; ed=parse_date(ed0).isoformat(); xd=parse_date(xd0).isoformat(); t=yearfrac(parse_date(ed0),parse_date(xd0)); df=discount(t)
+        last_trade=parse_date(r['Last Trade Date'])
         fwd=sum(forwards.get((ed0,xd0),[float(r['Strike'])]))/len(forwards.get((ed0,xd0),[float(r['Strike'])]))
         try: strike=float(r['Strike']); bid=float(r['Bid']); ask=float(r['Ask'])
         except ValueError: strike=bid=ask=float('nan')
         reason=''; included=True
         if not (t>0 and math.isfinite(strike) and math.isfinite(bid) and math.isfinite(ask) and bid>=0 and ask>=bid and ask>0): included=False; reason='invalid_or_crossed_quote'
+        elif last_trade < parse_date(ed0)-dt.timedelta(days=7): included=False; reason='stale_quote'
+        elif (r['Option Type'].upper().startswith('C') and strike <= fwd) or (r['Option Type'].upper().startswith('P') and strike >= fwd): included=False; reason='not_otm'
         biv=aiv=None
         if included:
             call=r['Option Type'].upper().startswith('C'); biv=implied(bid,fwd,strike,t,df,call); aiv=implied(ask,fwd,strike,t,df,call)

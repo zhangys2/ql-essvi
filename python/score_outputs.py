@@ -4,7 +4,8 @@ import argparse,csv,json,math
 from collections import defaultdict
 
 def f(row,key):
-    try: return float(row[key])
+    try:
+        x=float(row[key]); return x if math.isfinite(x) else None
     except (KeyError,TypeError,ValueError): return None
 
 def black_normalized(f,k,t,w):
