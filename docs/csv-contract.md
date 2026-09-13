@@ -1,6 +1,6 @@
 # Shared CSV contract
 
-All files are UTF-8 CSV, comma-delimited, with a header and decimal floating-point values. Dates use `YYYY-MM-DD`; times are year fractions; variance and `psi` are dimensionless.
+All files are UTF-8 CSV, comma-delimited, with an exact header and decimal floating-point values. Numeric output uses at least 12 significant digits where generated from a fitted surface. Dates use `YYYY-MM-DD`; times are year fractions; variance and `psi` are dimensionless. Empty numeric fields are allowed only where the row status/flag explains why the value is unavailable; no `NaN` or `inf` tokens are emitted.
 
 ## normalized_quotes.csv
 
@@ -35,3 +35,19 @@ time_to_expiry,theta,psi,rho,phi,butterfly_safe,calendar_safe
 ```text
 model,converged,objective,iterations,runtime_seconds,error
 ```
+
+Exactly one row is emitted per fit. `converged` is `true` only when the requested constrained
+solver completed and all safety checks passed. A failed fit emits `converged=false` and a
+non-empty `error`; it never falls back to an unconstrained result. `runtime_seconds` is wall
+clock time and is indicative only across languages.
+
+The legacy CVI notebook additionally emits `benchmark_output/parameters.csv` with this
+notebook-specific schema (its CVI fitting behavior is unchanged):
+
+```text
+time_to_expiry,atm_total_variance,observed_min_log_moneyness,observed_max_log_moneyness,grid_points,fit_rows
+```
+
+This is a parameter summary, not an eSSVI `(theta, psi, rho, phi)` file. The shared adapter
+retains the eSSVI parameter schema separately and joins both models only through quote IDs and
+the dense-grid contract.

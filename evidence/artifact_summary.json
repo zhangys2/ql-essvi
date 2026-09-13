@@ -1,0 +1,114 @@
+{
+  "normalized_quotes.csv": {
+    "rows": 14364,
+    "header": [
+      "quote_id",
+      "effective_date",
+      "expiry_date",
+      "time_to_expiry",
+      "forward",
+      "discount_factor",
+      "strike",
+      "option_type",
+      "bid_iv",
+      "ask_iv",
+      "mid_iv",
+      "included",
+      "filter_reason"
+    ],
+    "included_counts": {
+      "false": 6624,
+      "true": 7740
+    }
+  },
+  "fitted_quotes.csv": {
+    "rows": 14364,
+    "header": [
+      "quote_id",
+      "time_to_expiry",
+      "strike",
+      "log_moneyness",
+      "fitted_total_variance",
+      "fitted_iv",
+      "status"
+    ],
+    "status_counts": {
+      "excluded": 6624,
+      "ok": 7740
+    }
+  },
+  "cvi_fitted_quotes.csv": {
+    "rows": 14364,
+    "header": [
+      "quote_id",
+      "time_to_expiry",
+      "strike",
+      "log_moneyness",
+      "fitted_total_variance",
+      "fitted_iv",
+      "status"
+    ],
+    "status_counts": {
+      "excluded": 6624,
+      "ok": 7365,
+      "not_fitted": 375
+    }
+  },
+  "surface_grid.csv": {
+    "rows": 5151,
+    "header": [
+      "time_to_expiry",
+      "forward",
+      "discount_factor",
+      "log_moneyness",
+      "strike",
+      "fitted_total_variance",
+      "fitted_iv",
+      "is_tail"
+    ],
+    "tail_counts": {
+      "true": 1513,
+      "false": 3638
+    }
+  },
+  "cvi_surface_grid.csv": {
+    "rows": 5000,
+    "header": [
+      "time_to_expiry",
+      "forward",
+      "discount_factor",
+      "log_moneyness",
+      "strike",
+      "fitted_total_variance",
+      "fitted_iv",
+      "is_tail"
+    ],
+    "tail_counts": {
+      "true": 1664,
+      "false": 3336
+    }
+  },
+  "parameters.csv": {
+    "rows": 51,
+    "header": [
+      "time_to_expiry",
+      "theta",
+      "psi",
+      "rho",
+      "phi",
+      "butterfly_safe",
+      "calendar_safe"
+    ]
+  },
+  "diagnostics.csv": {
+    "rows": 1,
+    "header": [
+      "model",
+      "converged",
+      "objective",
+      "iterations",
+      "runtime_seconds",
+      "error"
+    ]
+  }
+}

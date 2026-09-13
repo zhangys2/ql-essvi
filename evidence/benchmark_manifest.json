@@ -1,0 +1,51 @@
+{
+  "benchmark": "eSSVI-vs-CVI",
+  "effective_date": "2024-11-11",
+  "generated_at": "2026-09-13",
+  "ql_essvi_commit": "e03857075b4cb05c6d8ac581cc76ec9df133e2d1",
+  "cvi_repository": "https://github.com/zhangys2/CVI-Vol-Surface-Fitting",
+  "cvi_commit": "e22f93b79dad108f02d32722b00dea21b34b1c59",
+  "cvi_notebook": "CVI Vol Surface Fitting.ipynb",
+  "commands": [
+    "uv run python python/prepare_inputs.py <option_chain.csv> <sofrDFs.csv> normalized_quotes.csv",
+    "./build/essvi_fit normalized_quotes.csv parameters.csv fitted_quotes.csv surface_grid.csv diagnostics.csv",
+    "python python/adapt_cvi_output.py normalized_quotes.csv <cvi>/benchmark_output/fitted_quotes.csv cvi_fitted_quotes.csv",
+    "python python/adapt_cvi_grid.py normalized_quotes.csv <cvi>/benchmark_output/surface_grid.csv cvi_surface_grid.csv",
+    "python python/score_outputs.py normalized_quotes.csv --fitted fitted_quotes.csv --grid surface_grid.csv --output essvi_score.json"
+  ],
+  "artifacts": {
+    "normalized_quotes.csv": {
+      "sha256": "7601c5b5c4834c7aa0f760312ee33b6a7a16301a4291e8af9a2e920b63d7a540",
+      "rows": 14364
+    },
+    "fitted_quotes.csv": {
+      "sha256": "86984f41908aef5cb6bc9c2ae21a40463cbf705ab4a7b52f4294443821c1f8e6",
+      "rows": 14364
+    },
+    "surface_grid.csv": {
+      "sha256": "348f6345fe76ee6db09999a6665c6105a3eb1345198572ae8872ae916f317921",
+      "rows": 5151
+    },
+    "parameters.csv": {
+      "sha256": "64ea504e3edd3fff059b96baf890c34c02a40f0fe2881371e623419929e62ed8",
+      "rows": 51
+    },
+    "diagnostics.csv": {
+      "sha256": "c60a0f6afcf5624cc1fc88b0c32ff6fcabd5ab70a54862cd93fd082d54ea0ae5",
+      "rows": 1
+    },
+    "cvi_fitted_quotes.csv": {
+      "sha256": "5c2a64b4c5c13f53b97ae793c79d4ce1b3a2676abde49a400ce86b14358f29c3",
+      "rows": 14364
+    },
+    "cvi_surface_grid.csv": {
+      "sha256": "5fc3947095f72cea503e2105c44731df4798e115068db9d9fddfa67e2b2f10d2",
+      "rows": 5000
+    }
+  },
+  "notes": [
+    "CVI fitting behavior remains in the notebook; export cell is additive and writes surface_grid, fitted_quotes, parameters, and diagnostics.",
+    "The adapters preserve all 14,364 normalized quote IDs and explicitly mark excluded/not_fitted rows.",
+    "Timing is indicative and not a decisive cross-language metric."
+  ]
+}

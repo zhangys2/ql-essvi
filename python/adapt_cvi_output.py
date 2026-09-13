@@ -15,4 +15,9 @@ with open(a.output,'w',newline='') as f:
     w=csv.DictWriter(f,fieldnames=fields);w.writeheader()
     for q in csv.DictReader(open(a.normalized,newline='')):
         key=(round(num(q['time_to_expiry']),6),round(num(q['strike']),8),q['option_type'].upper()[:1]);r=fit.get(key)
-        w.writerow({'quote_id':q['quote_id'],'time_to_expiry':q['time_to_expiry'],'strike':q['strike'],'log_moneyness':q.get('log_moneyness',''),'fitted_total_variance':r.get('fitted_total_variance','') if r else '','fitted_iv':r.get('fitted_iv','') if r else '','status':'ok' if r and q['included']=='true' else ('excluded' if q['included']!='true' else 'not_fitted')})
+        log_k=q.get('log_moneyness','')
+        if not log_k and num(q.get('forward')) and num(q.get('strike')):
+            import math
+            log_k=math.log(num(q['strike'])/num(q['forward']))
+        status='ok' if r and q['included']=='true' else ('excluded' if q['included']!='true' else 'not_fitted')
+        w.writerow({'quote_id':q['quote_id'],'time_to_expiry':q['time_to_expiry'],'strike':q['strike'],'log_moneyness':log_k,'fitted_total_variance':r.get('fitted_total_variance','') if r else '','fitted_iv':r.get('fitted_iv','') if r else '','status':status})

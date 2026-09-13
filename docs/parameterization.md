@@ -21,9 +21,24 @@ For numerical safety, calibration enforces strict versions of the following suff
 
 The scorer independently checks the generated surface on a dense grid from `k=-0.5` to `k=0.5` at 0.01 increments per expiry. Points outside the observed included quote range are marked `is_tail=true`; all points are included in arbitrage checks, while quote containment uses only observed quotes. The MM necessary-and-sufficient butterfly infimum is not used; this is explicitly a conservative sufficient-condition benchmark.
 
+## Enforcement and independent checks
+
+| Property | Calibration enforcement | Post-fit check |
+|---|---|---|
+| `theta > 0`, `0 <= lambda <= 1/2`, `eta > 0`, `-5 <= a <= 5`, `-2 <= b <= 2` | NLopt bounds | parameter CSV and diagnostics |
+| bounded smooth `rho(theta)` family | derived from bounded `a,b` in every objective/constraint evaluation | `abs(rho) < 1` |
+| GJ butterfly sufficient bounds | hard SLSQP inequalities with strict epsilon margin | dense-grid butterfly scan |
+| HM/Corbetta calendar sufficient conditions | hard adjacent-slice SLSQP inequalities with strict epsilon margin | dense-grid calendar scan |
+| solver failure | no unconstrained fallback; `converged=false` and error are emitted | diagnostics CSV |
+| tail safety | dense grid extends to `k in [-0.5,0.5]`; tail points are retained | all grid points included in arbitrage checks |
+
+Missing or non-finite quote inputs are excluded by the shared Python filter and retain an
+empty numeric field plus `included=false` and `filter_reason`. Excluded quotes are never
+silently scored as fitted values.
+
 References:
 
-- Gatheral & Jacquier, *Arbitrage-free SVI volatility surfaces*, arXiv:1204.0646.
-- Corbetta, Cohort, Laachir & Martini, *Robust calibration and arbitrage-free interpolation of SSVI slices*, arXiv:1804.04924.
-- Hendriks & Martini, *The Extended SSVI Volatility Surface*.
-- Mingone et al., *No arbitrage global parametrization for the eSSVI volatility surface*, arXiv:2204.00312.
+- Gatheral & Jacquier, *Arbitrage-free SVI volatility surfaces*, https://arxiv.org/abs/1204.0646.
+- Corbetta, Cohort, Laachir & Martini, *Robust calibration and arbitrage-free interpolation of SSVI slices*, https://arxiv.org/abs/1804.04924.
+- Hendriks & Martini, *The Extended SSVI Volatility Surface*, https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3351795.
+- Mingone et al., *No arbitrage global parametrization for the eSSVI volatility surface*, https://arxiv.org/abs/2204.00312.
