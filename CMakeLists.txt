@@ -7,10 +7,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(QuantLib CONFIG REQUIRED
   PATHS "$ENV{QUANTLIB_BUILD}/cmake" "$ENV{HOME}/QuantLib/build/release/cmake")
+find_package(NLopt CONFIG REQUIRED)
 
-add_library(essvi cpp/essvi_surface.cpp)
+add_library(essvi cpp/essvi_surface.cpp cpp/calibrator.cpp)
 target_include_directories(essvi PUBLIC cpp)
-target_link_libraries(essvi PUBLIC QuantLib::QuantLib)
+target_link_libraries(essvi PUBLIC QuantLib::QuantLib NLopt::nlopt)
 target_compile_options(essvi PRIVATE -Wall -Wextra -Wpedantic)
 
 add_executable(essvi_fit cpp/main.cpp)
