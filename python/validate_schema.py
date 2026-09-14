@@ -12,6 +12,7 @@ SCHEMAS = {
     "grid": ["time_to_expiry", "forward", "discount_factor", "log_moneyness", "strike", "fitted_total_variance", "fitted_iv", "is_tail"],
     "parameters": ["time_to_expiry", "theta", "psi", "rho", "phi", "butterfly_safe", "calendar_safe"],
     "diagnostics": ["model", "converged", "objective", "iterations", "runtime_seconds", "error"],
+    "cvi_parameters": ["time_to_expiry", "atm_total_variance", "observed_min_log_moneyness", "observed_max_log_moneyness", "grid_points", "fit_rows"],
 }
 
 
@@ -93,6 +94,11 @@ def validate(kind, rows):
                 fail(f"row {i}: iterations must be nonnegative")
             if number(row["runtime_seconds"], "runtime_seconds", i) < 0:
                 fail(f"row {i}: runtime_seconds must be nonnegative")
+        elif kind == "cvi_parameters":
+            for field in ("time_to_expiry", "atm_total_variance", "observed_min_log_moneyness", "observed_max_log_moneyness"):
+                number(row[field], field, i)
+            if int(number(row["grid_points"], "grid_points", i)) <= 0 or int(number(row["fit_rows"], "fit_rows", i)) <= 0:
+                fail(f"row {i}: grid_points and fit_rows must be positive")
 
 
 def main():
