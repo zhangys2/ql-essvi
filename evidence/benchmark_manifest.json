@@ -2,7 +2,7 @@
   "benchmark": "eSSVI-vs-CVI",
   "effective_date": "2024-11-11",
   "generated_at": "2026-09-13",
-  "ql_essvi_commit": "aecd149a19cde97dcf7ad82c38dfd87bb8d8213b",
+  "ql_essvi_commit": "a0bcd009b6350ee21597683da318e6dcfe9ffd41",
   "cvi_repository": "https://github.com/zhangys2/CVI-Vol-Surface-Fitting",
   "cvi_commit": "f7da1b3829e8bb2bc00426605e15aaad20ddad09",
   "cvi_notebook": "CVI Vol Surface Fitting.ipynb",
@@ -16,7 +16,8 @@
     "python python/validate_schema.py grid essvi_common_grid.csv --expected-rows 5050",
     "python python/validate_schema.py grid cvi_common_grid.csv --expected-rows 5050",
     "python python/score_outputs.py normalized_quotes.csv --fitted fitted_quotes.csv --grid essvi_common_grid.csv --output essvi_common_score.json",
-    "python python/score_outputs.py normalized_quotes.csv --fitted cvi_fitted_quotes.csv --grid cvi_common_grid.csv --output cvi_common_score.json"
+    "python python/score_outputs.py normalized_quotes.csv --fitted cvi_fitted_quotes.csv --grid cvi_common_grid.csv --output cvi_common_score.json",
+    "cmake -S . -B build -DBUILD_TESTING=ON && cmake --build build && ctest --test-dir build --output-on-failure (includes quantlib_smoke)"
   ],
   "artifacts": {
     "normalized_quotes.csv": {
