@@ -25,6 +25,9 @@ ctest --test-dir build --output-on-failure
 .venv/bin/python -m pytest -q
 ```
 
+CTest includes `quantlib_smoke`, which compiles and exercises the existing QuantLib CMake
+package by constructing a TARGET calendar/date object. No QuantLib source is modified.
+
 The existing QuantLib build is consumed through its CMake package; no QuantLib source is modified.
 
 Prepare and fit the real dataset:

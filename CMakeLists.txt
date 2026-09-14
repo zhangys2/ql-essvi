@@ -22,4 +22,8 @@ if(BUILD_TESTING)
   add_executable(essvi_tests tests/test_essvi.cpp)
   target_link_libraries(essvi_tests PRIVATE essvi)
   add_test(NAME essvi_tests COMMAND essvi_tests)
+
+  add_executable(quantlib_smoke tests/test_quantlib.cpp)
+  target_link_libraries(quantlib_smoke PRIVATE QuantLib::QuantLib)
+  add_test(NAME quantlib_smoke COMMAND quantlib_smoke)
 endif()
