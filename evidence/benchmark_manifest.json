@@ -2,7 +2,7 @@
   "benchmark": "eSSVI-vs-CVI",
   "effective_date": "2024-11-11",
   "generated_at": "2026-09-13",
-  "ql_essvi_commit": "1777228ee9f992701891cc8cfb8d02620b327896",
+  "ql_essvi_commit": "8eee7bfdf4adbab94329e208c2da03a2f3dafd7e",
   "cvi_repository": "https://github.com/zhangys2/CVI-Vol-Surface-Fitting",
   "cvi_commit": "f7da1b3829e8bb2bc00426605e15aaad20ddad09",
   "cvi_notebook": "CVI Vol Surface Fitting.ipynb",
@@ -11,7 +11,8 @@
     "./build/essvi_fit normalized_quotes.csv parameters.csv fitted_quotes.csv surface_grid.csv diagnostics.csv",
     "python python/adapt_cvi_output.py normalized_quotes.csv <cvi>/benchmark_output/fitted_quotes.csv cvi_fitted_quotes.csv",
     "python python/adapt_cvi_grid.py normalized_quotes.csv <cvi>/benchmark_output/surface_grid.csv cvi_surface_grid.csv",
-    "python python/score_outputs.py normalized_quotes.csv --fitted fitted_quotes.csv --grid surface_grid.csv --output essvi_score.json"
+    "python python/score_outputs.py normalized_quotes.csv --fitted fitted_quotes.csv --grid surface_grid.csv --output essvi_score.json",
+    "python python/make_common_grid.py normalized_quotes.csv surface_grid.csv cvi_surface_grid.csv essvi_common_grid.csv cvi_common_grid.csv"
   ],
   "artifacts": {
     "normalized_quotes.csv": {
@@ -71,6 +72,14 @@
       "sha256": "162415eafd9a5fe0f08abe495b0f81ed61dda1108a33ccdcc90c1d0628ec0c14",
       "rows": 1,
       "source_path": "C:\\Users\\zhang\\source\\repos\\CVI-Vol-Surface-Fitting\\benchmark_output\\diagnostics.csv"
+    },
+    "essvi_common_grid.csv": {
+      "sha256": "21cf0652100c70c71ebb859df3f9cbbbe71bc35f00f9cdbe3d0c57bf9fc8b4a8",
+      "rows": 5050
+    },
+    "cvi_common_grid.csv": {
+      "sha256": "8e957a64b5a99b178e55870d40b16cee1251a457cdf25da06225efe23e8ffec2",
+      "rows": 5050
     }
   },
   "notes": [
