@@ -4,7 +4,7 @@
   "generated_at": "2026-09-13",
   "ql_essvi_commit": "6f36507eb412327ab22ebd639267399557fa06ee",
   "cvi_repository": "https://github.com/zhangys2/CVI-Vol-Surface-Fitting",
-  "cvi_commit": "a17218131122b047e3985a8db030cac0f03ad1eb",
+  "cvi_commit": "bc127289de6d7b53cfa747407bb23ebabeaeddad",
   "cvi_notebook": "CVI Vol Surface Fitting.ipynb",
   "commands": [
     "uv run python python/prepare_inputs.py <option_chain.csv> <sofrDFs.csv> normalized_quotes.csv",
@@ -51,6 +51,26 @@
       "sha256": "9c66e32cd7d48b8734a33bf882ccc997fb1e57eba5ca55ffa068fe041cbe607c",
       "rows": 50,
       "source_path": "C:\\Users\\zhang\\source\\repos\\CVI-Vol-Surface-Fitting\\benchmark_output\\parameters.csv"
+    },
+    "cvi_raw_fitted_quotes.csv": {
+      "sha256": "d7c18e42c2bdfe3f0315f2a63a926ca98568ac2593908c5891a44758ca6b6483",
+      "rows": 7685,
+      "source_path": "C:\\Users\\zhang\\source\\repos\\CVI-Vol-Surface-Fitting\\benchmark_output\\fitted_quotes.csv"
+    },
+    "cvi_raw_surface_grid.csv": {
+      "sha256": "541c928dc0c0e7acd55ca8400aeea0dda76f16797f58dc828f70d1223c6589e9",
+      "rows": 5000,
+      "source_path": "C:\\Users\\zhang\\source\\repos\\CVI-Vol-Surface-Fitting\\benchmark_output\\surface_grid.csv"
+    },
+    "cvi_raw_parameters.csv": {
+      "sha256": "9c66e32cd7d48b8734a33bf882ccc997fb1e57eba5ca55ffa068fe041cbe607c",
+      "rows": 50,
+      "source_path": "C:\\Users\\zhang\\source\\repos\\CVI-Vol-Surface-Fitting\\benchmark_output\\parameters.csv"
+    },
+    "cvi_raw_diagnostics.csv": {
+      "sha256": "ac16bb850467cfc7aa3be7f490aa0de33cf9eb81355c5f62319e43724551475c",
+      "rows": 1,
+      "source_path": "C:\\Users\\zhang\\source\\repos\\CVI-Vol-Surface-Fitting\\benchmark_output\\diagnostics.csv"
     }
   },
   "notes": [
