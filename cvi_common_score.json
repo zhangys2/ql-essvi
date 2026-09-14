@@ -1,0 +1,9 @@
+{
+  "quotes_total": 14364,
+  "quotes_included": 7740,
+  "quotes_scored": 7594,
+  "bid_ask_containment": 0.00237029233605478,
+  "butterfly_violations": 1780,
+  "calendar_violations": 3963,
+  "grid_points": 5050
+}

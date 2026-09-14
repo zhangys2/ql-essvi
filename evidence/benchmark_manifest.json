@@ -2,7 +2,7 @@
   "benchmark": "eSSVI-vs-CVI",
   "effective_date": "2024-11-11",
   "generated_at": "2026-09-13",
-  "ql_essvi_commit": "04f38d82ebe7ecfefca0e4c1cb6236fbe8791c38",
+  "ql_essvi_commit": "4a24071dc0104a0c92c2d9f1f05238317aae2d67",
   "cvi_repository": "https://github.com/zhangys2/CVI-Vol-Surface-Fitting",
   "cvi_commit": "f7da1b3829e8bb2bc00426605e15aaad20ddad09",
   "cvi_notebook": "CVI Vol Surface Fitting.ipynb",
@@ -12,7 +12,11 @@
     "python python/adapt_cvi_output.py normalized_quotes.csv <cvi>/benchmark_output/fitted_quotes.csv cvi_fitted_quotes.csv",
     "python python/adapt_cvi_grid.py normalized_quotes.csv <cvi>/benchmark_output/surface_grid.csv cvi_surface_grid.csv",
     "python python/score_outputs.py normalized_quotes.csv --fitted fitted_quotes.csv --grid surface_grid.csv --output essvi_score.json",
-    "python python/make_common_grid.py normalized_quotes.csv surface_grid.csv cvi_surface_grid.csv essvi_common_grid.csv cvi_common_grid.csv"
+    "python python/make_common_grid.py normalized_quotes.csv surface_grid.csv cvi_surface_grid.csv essvi_common_grid.csv cvi_common_grid.csv",
+    "python python/validate_schema.py grid essvi_common_grid.csv --expected-rows 5050",
+    "python python/validate_schema.py grid cvi_common_grid.csv --expected-rows 5050",
+    "python python/score_outputs.py normalized_quotes.csv --fitted fitted_quotes.csv --grid essvi_common_grid.csv --output essvi_common_score.json",
+    "python python/score_outputs.py normalized_quotes.csv --fitted cvi_fitted_quotes.csv --grid cvi_common_grid.csv --output cvi_common_score.json"
   ],
   "artifacts": {
     "normalized_quotes.csv": {
@@ -80,6 +84,14 @@
     "cvi_common_grid.csv": {
       "sha256": "8e957a64b5a99b178e55870d40b16cee1251a457cdf25da06225efe23e8ffec2",
       "rows": 5050
+    },
+    "essvi_common_score.json": {
+      "sha256": "b8c6410e35c99c110b3505db005603c6a7b75afc76d393914a05e8ce61930857",
+      "rows": 1
+    },
+    "cvi_common_score.json": {
+      "sha256": "ae2ed542d732f68688d2ee09646e2800fc5bf986b47faa6c9f1b2150c234d6d5",
+      "rows": 1
     }
   },
   "notes": [
