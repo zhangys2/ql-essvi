@@ -41,10 +41,10 @@ with open(args.output, "w", newline="", encoding="utf-8") as handle:
         m = nearest(t)
         k = f(row["log_moneyness"])
         row.update(
-            time_to_expiry=f"{t:.12g}",
-            forward=f"{m['forward']:.12g}",
-            discount_factor=f"{m['discount_factor']:.12g}",
-            strike=f"{m['forward'] * math.exp(k):.12g}",
+            time_to_expiry=f"{t:.17f}",
+            forward=f"{m['forward']:.17f}",
+            discount_factor=f"{m['discount_factor']:.17f}",
+            strike=f"{m['forward'] * math.exp(k):.17f}",
             is_tail="true" if k < m["lo"] or k > m["hi"] else "false",
         )
         writer.writerow({field: row.get(field, "") for field in fields})

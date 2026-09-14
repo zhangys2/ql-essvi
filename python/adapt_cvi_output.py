@@ -38,10 +38,10 @@ with open(args.output, "w", newline="", encoding="utf-8") as handle:
             status = "ok" if row and quote["included"] == "true" else ("excluded" if quote["included"] != "true" else "not_fitted")
             writer.writerow({
                 "quote_id": quote["quote_id"],
-                "time_to_expiry": quote["time_to_expiry"] if status == "ok" else "",
-                "strike": quote["strike"] if status == "ok" else "",
-                "log_moneyness": log_k if status != "excluded" else "",
-                "fitted_total_variance": row.get("fitted_total_variance", "") if row else "",
-                "fitted_iv": row.get("fitted_iv", "") if row else "",
+                "time_to_expiry": f'{num(quote["time_to_expiry"]):.17f}' if status == "ok" else "",
+                "strike": f'{num(quote["strike"]):.17f}' if status == "ok" else "",
+                "log_moneyness": f'{float(log_k):.17f}' if status != "excluded" else "",
+                "fitted_total_variance": f'{num(row.get("fitted_total_variance")):.17f}' if row and row.get("fitted_total_variance") else "",
+                "fitted_iv": f'{num(row.get("fitted_iv")):.17f}' if row and row.get("fitted_iv") else "",
                 "status": status,
             })
