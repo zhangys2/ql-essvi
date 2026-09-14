@@ -38,6 +38,17 @@ def boolean(value, field, row):
     return value == "true"
 
 
+def require_precision(value, field, row, digits=12):
+    """Require generated decimal fields to retain at least `digits` significant digits."""
+    if value == "":
+        fail(f"row {row}: {field} is empty")
+    if value.lstrip("+-").isdigit():
+        return  # An integer literal is exact, not a low-precision rounded decimal.
+    mantissa = value.lower().split("e", 1)[0].lstrip("+-").replace(".", "").lstrip("0")
+    if len(mantissa) < digits:
+        fail(f"row {row}: {field} has fewer than {digits} significant digits: {value!r}")
+
+
 def validate(kind, rows):
     for i, row in enumerate(rows, 2):
         if kind == "normalized":
@@ -58,7 +69,7 @@ def validate(kind, rows):
                 fail(f"row {i}: option_type must be C/P")
             included = boolean(row["included"], "included", i)
             for field in ("bid_iv", "ask_iv", "mid_iv"):
-                number(row[field], field, i, allow_empty=True)
+                number(row[field], field, i, allow_empty=not included)
             if included and row["filter_reason"]:
                 fail(f"row {i}: included quote cannot have filter_reason")
             if not included and not row["filter_reason"]:
@@ -68,18 +79,24 @@ def validate(kind, rows):
             if status not in {"ok", "excluded", "not_fitted", "error"}:
                 fail(f"row {i}: unsupported fitted status {status!r}")
             allow_empty = status != "ok"
-            number(row["time_to_expiry"], "time_to_expiry", i, allow_empty=allow_empty)
-            number(row["strike"], "strike", i, allow_empty=allow_empty)
-            number(row["log_moneyness"], "log_moneyness", i, allow_empty=allow_empty)
-            number(row["fitted_total_variance"], "fitted_total_variance", i, allow_empty=allow_empty)
-            number(row["fitted_iv"], "fitted_iv", i, allow_empty=allow_empty)
+            for field in ("time_to_expiry", "strike", "log_moneyness"):
+                number(row[field], field, i, allow_empty=allow_empty)
+                if not allow_empty:
+                    require_precision(row[field], field, i)
+            for field in ("fitted_total_variance", "fitted_iv"):
+                number(row[field], field, i, allow_empty=allow_empty)
+                if not allow_empty:
+                    require_precision(row[field], field, i)
         elif kind == "grid":
             for field in ("time_to_expiry", "forward", "discount_factor", "log_moneyness", "strike", "fitted_total_variance", "fitted_iv"):
                 number(row[field], field, i)
+                if field != "log_moneyness":
+                    require_precision(row[field], field, i)
             boolean(row["is_tail"], "is_tail", i)
         elif kind == "parameters":
             for field in ("time_to_expiry", "theta", "psi", "phi"):
                 number(row[field], field, i)
+                require_precision(row[field], field, i)
             rho = number(row["rho"], "rho", i)
             if not -1 < rho < 1:
                 fail(f"row {i}: rho must be strictly between -1 and 1")
