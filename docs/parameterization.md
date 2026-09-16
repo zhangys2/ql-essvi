@@ -8,7 +8,7 @@ w(k,T) = 1/2 * (theta + rho*psi*k
 ```
 
 The implementation uses `phi(theta)=eta*theta^(-lambda)` with `eta>0` and `0<=lambda<=1/2`. It uses the exact bounded smooth correlation family
-`rho(theta) = -0.98 + 1.96*sigmoid(a + b*log(theta))`, with `a in [-5,5]` and `b in [-2,2]`; this guarantees `-0.98 < rho < 0.98`. Constant rho reduces eSSVI to SSVI; the current calibration family is the eSSVI extension.
+`rho(T) = -0.98 + 1.96*sigmoid(a + b*log(T))`, driven by time to expiry `T` rather than `theta`,, with `a in [-5,5]` and `b in [-2,2]`; this guarantees `-0.98 < rho < 0.98`. Constant rho reduces eSSVI to SSVI; the current calibration family is the eSSVI extension.
 
 For numerical safety, calibration enforces strict versions of the following sufficient conditions:
 
@@ -26,7 +26,7 @@ The scorer independently checks the generated surface on a dense grid from `k=-0
 | Property | Calibration enforcement | Post-fit check |
 |---|---|---|
 | `theta > 0`, `0 <= lambda <= 1/2`, `eta > 0`, `-5 <= a <= 5`, `-2 <= b <= 2` | NLopt bounds | parameter CSV and diagnostics |
-| bounded smooth `rho(theta)` family | derived from bounded `a,b` in every objective/constraint evaluation | `abs(rho) < 1` |
+| bounded smooth `rho(T)` family | derived from bounded `a,b` in every objective/constraint evaluation | `abs(rho) < 1` |
 | GJ butterfly sufficient bounds | hard SLSQP inequalities with strict epsilon margin | dense-grid butterfly scan |
 | HM/Corbetta calendar sufficient conditions | hard adjacent-slice SLSQP inequalities with strict epsilon margin | dense-grid calendar scan |
 | solver failure | no unconstrained fallback; `converged=false` and error are emitted | diagnostics CSV |
