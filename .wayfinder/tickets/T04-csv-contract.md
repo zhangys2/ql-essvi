@@ -55,6 +55,6 @@ Closed 2026-09-13 (`bd8383d`); resolution recorded 2026-09-16. The canonical sch
 - **CVI divergence:** the CVI notebook's `parameters.csv` has its own schema (ATM total variance and
   observed range), because CVI has no eSSVI parameters.
 
-**Gap against "Done when":** only `schemas/normalized_quotes.example.csv` exists; the four output
-schemas have no example files. The input example also uses `filter_reason=zero_bid` and a
-blank-space `mid_iv`, neither of which `prepare_inputs.py` emits.
+- **Examples:** every schema has an example file, `schemas/<file>.example.csv`, and each one must
+  pass `validate_schema.py` (`tests/test_pipeline.py`). Added 2026-09-16; before that only an
+  invalid input example existed.

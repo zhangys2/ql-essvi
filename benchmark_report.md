@@ -8,7 +8,7 @@ CVI notebook commit and hashes/row counts of the generated artifacts.
 
 | model | normalized rows | fitted rows | common scored quotes | bid/ask containment | butterfly violations | calendar violations | common grid points | fit time (s) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| eSSVI | 14,364 | 7,740 | 7,594 | 0.6848% | 0 | 0 | 5,050 | 2.425 |
+| eSSVI | 14,364 | 7,740 | 7,594 | 1.1370% | 0 | 0 | 5,050 | 4.042 |
 | CVI | 14,364 | 7,594 | 7,594 | 0.2370% | 1,780 | 3,963 | 5,050 | 26.936 |
 
 Both models are scored on the same 50-maturity intersection and identical 101-point
@@ -31,6 +31,8 @@ cross-language metric.
 - Python owns normalization, adaptation, common-grid construction, schema validation, and scoring.
 - C++ consumes normalized total-variance inputs and enforces the eSSVI power-law and smooth
   bounded-rho family with hard NLopt SLSQP constraints; no unconstrained fallback is used.
+  The objective penalises only fitted total variance outside each quote's bid/ask band, starting
+  each `theta_t` from its nearest-ATM quote. Hitting the evaluation limit is reported as a failure.
 - Dense-grid arbitrage checks include tail points; quote containment uses observed quotes only.
 - Raw/archive directories and QuantLib sources are not modified.
 - Re-run the commands in the manifest after checking out the recorded ql-essvi and CVI commits.

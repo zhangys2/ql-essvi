@@ -42,8 +42,17 @@ Closed 2026-09-13 (`bd8383d`); resolution recorded 2026-09-16 (D13, D14). Implem
 
 - **Strategy:** one joint surface fit. The variables are the global `log eta`, `lambda`, `a`, `b`
   plus a free `theta_t` per expiry.
-- **Objective:** unweighted least squares on total variance against `T * mid_iv^2` over included
-  quotes.
+- **Objective:** bid/ask band loss in total variance. A quote costs nothing while the fitted `w`
+  lies in `[T bid_iv^2, T ask_iv^2]`; outside the band it costs the squared distance to the nearer
+  edge. This matches D6's containment metric. Adopted 2026-09-16, replacing unweighted least squares
+  against `T * mid_iv^2`. The planned tiny mid-IV tie-break term was dropped: overlapping bands
+  with different mids would pull the fit onto a band edge and just past it.
+- **Starting point:** each `theta_t` starts at `T * mid_iv^2` of that expiry's included quote
+  nearest ATM (smallest `|k|`), raised where needed to at least 1.01 times the previous expiry's
+  start. Adopted 2026-09-16, replacing `0.002 + 0.04 T`, which could not reach a feasible band fit
+  within `maxeval` on the synthetic test. The increasing floor is needed on the real chain: without
+  it, the 7-day expiry's ~116% near-ATM IV starts above the next expiry, and SLSQP stops at an
+  infeasible point.
 - **Constraints:** every T01 condition as a hard inequality, per slice and per adjacent slice pair,
   with a `1e-8` margin. Parameter domains are box bounds.
 - **Optimizer:** NLopt `LD_SLSQP` with forward-difference gradients, `maxeval 3000`,
@@ -62,12 +71,11 @@ D13/D14.
 
 **Failure modes:**
 - SLSQP is a local method on a non-convex problem, so the result depends on the starting point.
-- Running out of `maxeval` reports non-convergence.
+- Running out of `maxeval` or `maxtime` reports `converged=false`. Before 2026-09-16 it counted as
+  converged, because `rc > 0` includes `NLOPT_MAXEVAL_REACHED`.
 - `NLOPT_ROUNDOFF_LIMITED` counts as converged if the post-fit `validate` passes.
 - Finite-difference gradients dominate the runtime.
 
-**Discrepancies found while recording:**
-- D13 says `theta_t` is initialised from ATM data. The code starts every expiry at
-  `0.002 + 0.04 T`, with no ATM input.
-- The objective fits mid IV, not the bid/ask band that D6 scores. This likely contributes to the
-  low containment reported in `benchmark_report.md`.
+**Discrepancies found while recording, fixed 2026-09-16:** the code did not start `theta_t` from
+ATM data as D13 says, and it fitted mid IV rather than the band D6 scores. Both are fixed as
+described above and covered by the `essvi::calibrate` test in `tests/test_essvi.cpp`.

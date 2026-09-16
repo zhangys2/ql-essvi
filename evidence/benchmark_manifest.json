@@ -1,8 +1,8 @@
 {
   "benchmark": "eSSVI-vs-CVI",
   "effective_date": "2024-11-11",
-  "generated_at": "2026-09-13",
-  "ql_essvi_commit": "8e5cce96b270e1e8447169fc99f9c1a26f5b6313",
+  "generated_at": "2026-09-16",
+  "ql_essvi_commit": "a3fbba63165d6fb48fff76c1d2c08d6e9a23c6a3",
   "cvi_repository": "https://github.com/zhangys2/CVI-Vol-Surface-Fitting",
   "cvi_commit": "f7da1b3829e8bb2bc00426605e15aaad20ddad09",
   "cvi_notebook": "CVI Vol Surface Fitting.ipynb",
@@ -25,19 +25,19 @@
       "rows": 14364
     },
     "fitted_quotes.csv": {
-      "sha256": "94af1d319f98de99ad11b37d0999a0bac88c85b4ebd40d4ea3c89041f442d649",
+      "sha256": "dfcc50d4cc6d046b4b4adfdb9e3089fbd5c58c04008a986928155aa5915a7732",
       "rows": 14364
     },
     "surface_grid.csv": {
-      "sha256": "a09158b0615f44ad15a0c107f35c2505303bc9de81da3bc7face1436135b7898",
+      "sha256": "e9026cdff64e062704bf9e0d3d98b55693261b4bb51bfc3f1d9eb12c30fdd1b0",
       "rows": 5151
     },
     "parameters.csv": {
-      "sha256": "cb9aceaee44a5f178b99ae0ce7b338b2acd41abb3e55e44c52f0b4860161a0e7",
+      "sha256": "e5ccc46327e9b684cc4741fdf30fcddb8b979162ab0019ccbd6317901838a0ab",
       "rows": 51
     },
     "diagnostics.csv": {
-      "sha256": "0fb01c814432d33758ae604d50b61c4020739689e34d0f8cefaeb5e55917c471",
+      "sha256": "3f6a837baa018697117ac6e51bed52b3cc757dddf5dcd7498e20344d326aa69a",
       "rows": 1
     },
     "cvi_fitted_quotes.csv": {
@@ -79,7 +79,7 @@
       "source_path": "C:\\Users\\zhang\\source\\repos\\CVI-Vol-Surface-Fitting\\benchmark_output\\diagnostics.csv"
     },
     "essvi_common_grid.csv": {
-      "sha256": "21cf0652100c70c71ebb859df3f9cbbbe71bc35f00f9cdbe3d0c57bf9fc8b4a8",
+      "sha256": "041a02cd27028c33c18b517b3aa2aa405577efa5c9935df7aa6bdf4d200cca45",
       "rows": 5050
     },
     "cvi_common_grid.csv": {
@@ -87,7 +87,7 @@
       "rows": 5050
     },
     "essvi_common_score.json": {
-      "sha256": "b8c6410e35c99c110b3505db005603c6a7b75afc76d393914a05e8ce61930857",
+      "sha256": "0cc57d6fbad3e6e9818bc795b4049b6b231a7a43e4352e2e7a2bde5b36e23e28",
       "rows": 1
     },
     "cvi_common_score.json": {

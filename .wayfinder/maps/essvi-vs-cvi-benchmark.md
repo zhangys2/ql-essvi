@@ -64,6 +64,7 @@ These decisions were confirmed by the user on 2026-09-12. Additional confirmed i
 - **D14** Use NLopt SLSQP, fail explicitly rather than falling back to unconstrained fitting, and use total variance canonically with IV as a reporting field.
 - **D15** Use deterministic shared filtering, long-form CSV, a common dense grid with tail-only arbitrage checks, and empty fields plus status/reason columns for missing values.
 - **D16** Add the CVI export cell directly to the existing notebook; the user authorized modifying, committing, and pushing that repository.
+- **D17** Calibrate eSSVI against the bid/ask band in total variance rather than mid IV, starting each `theta_t` from its nearest-ATM quote (confirmed 2026-09-16; see [Choose the eSSVI calibration approach](../tickets/T05-calibration-approach.md)).
 
 The exact sufficient conditions and schemas are documented in `docs/parameterization.md` and `docs/csv-contract.md`. The implementation is complete as a reproducible benchmark run, with the CVI/eSSVI included-quote count difference documented as a residual fairness gap.
 

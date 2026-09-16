@@ -1,4 +1,5 @@
 #include <ql/quantlib.hpp>
+#undef NDEBUG  // Release builds define NDEBUG, which would compile these checks away.
 #include <cassert>
 
 int main() {

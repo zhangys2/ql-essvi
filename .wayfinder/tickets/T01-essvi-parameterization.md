@@ -42,7 +42,7 @@ Closed 2026-09-13 (`bd8383d`); resolution recorded 2026-09-16. The canonical sta
 - **Form:** `w(k,T) = 1/2 (theta + rho psi k + sqrt((psi k + theta rho)^2 + theta^2 (1-rho^2)))`
   with `k = log(K/F(T))`, `theta` forward ATM total variance, `psi = theta phi`.
 - **`phi` family:** power law `phi(theta) = eta theta^(-lambda)`, `eta > 0`, `0 <= lambda <= 1/2`.
-- **`rho` family:** `rho = -0.98 + 1.96 sigmoid(a + b log(.))`, `a in [-5,5]`, `b in [-2,2]`, so
+- **`rho` family:** `rho = -0.98 + 1.96 sigmoid(a + b log T)`, `a in [-5,5]`, `b in [-2,2]`, so
   `|rho| < 0.98`. Constant rho (`b = 0`) recovers SSVI (D5).
 - **Sufficient conditions, enforced during calibration** (strict, margin `1e-8`):
   - `theta > 0`, `psi > 0`, `|rho| < 1`
@@ -53,6 +53,6 @@ Closed 2026-09-13 (`bd8383d`); resolution recorded 2026-09-16. The canonical sta
   variance non-decreasing at fixed `k`) scans in `python/score_outputs.py`, tails included. The
   necessary-and-sufficient butterfly infimum is deliberately not used.
 
-**Discrepancy found while recording:** the doc drives rho with `log(theta)`, but
-`cpp/calibrator.cpp` uses `log(time_to_expiry)`. Both increase with expiry in a calendar-safe fit,
-but the doc and code should agree.
+**Rho driver:** rho is a function of `log T`, not `log theta`. When this resolution was recorded,
+the doc said `log theta` while the code used `log T`. On 2026-09-16 the doc was corrected to match
+the code, which leaves results unchanged. Both drivers increase with expiry in a calendar-safe fit.
