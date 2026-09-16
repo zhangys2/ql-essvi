@@ -31,3 +31,14 @@ and D4's comparison requires both fitters to read and write a shared CSV.
 
 The platform is chosen and recorded here with its reason, and any follow-on setup work is stated as
 a dependency for T02.
+
+## Resolution
+
+Closed 2026-09-13 (`bd8383d`); resolution recorded 2026-09-16. Decided with the user and confirmed
+2026-09-12 (D9).
+
+- **Platform:** WSL Ubuntu with GCC, using the existing QuantLib build tree. Windows/MSVC was
+  rejected because it would need a full QuantLib MSVC build plus restored Boost and `Build.props`.
+- **Python** runs on the same WSL side (uv-managed `.venv`), so the fitter and scorer share one
+  environment; the data is read through `/mnt/c`.
+- **Follow-on for T02:** only pointing CMake at the build tree (`QUANTLIB_BUILD`), recorded there.
