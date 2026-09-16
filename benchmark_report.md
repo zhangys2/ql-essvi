@@ -6,18 +6,21 @@ CVI notebook commit and hashes/row counts of the generated artifacts.
 
 ## Results on the shared benchmark grid
 
-| model | normalized rows | fitted rows | common scored quotes | bid/ask containment | butterfly violations | calendar violations | common grid points | fit time (s) |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| eSSVI | 14,364 | 7,740 | 7,594 | 1.1370% | 0 | 0 | 5,050 | 4.042 |
-| CVI | 14,364 | 7,594 | 7,594 | 0.2370% | 1,780 | 3,963 | 5,050 | 26.936 |
+| model | normalized rows | fitted rows | scored quotes | bid/ask containment | containment on common 7,594 | butterfly violations | calendar violations | common grid points | fit time (s) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| eSSVI | 14,364 | 7,740 | 7,740 | 1.1370% | 1.1193% | 0 | 0 | 5,050 | 4.042 |
+| CVI | 14,364 | 7,594 | 7,594 | 0.2370% | 0.2370% | 1,780 | 3,963 | 5,050 | 26.936 |
 
 Both models are scored on the same 50-maturity intersection and identical 101-point
 `k=-0.5..0.5` grid at each maturity (5,050 points). The shared normalized input contains
 14,364 rows, of which 7,740 pass the deterministic filter. Both fitted-quote exports
 preserve all 14,364 quote IDs. eSSVI produces 7,740 fitted rows; the unchanged legacy CVI
-fit produces 7,594 fitted rows and leaves the remaining included rows as `not_fitted`. Quote
-containment is reported on the 7,594-row intersection. The dropped maturity and quote rows
-are explicit limitations of benchmarking the legacy fitter, not hidden filtering.
+fit produces 7,594 fitted rows and leaves the remaining included rows as `not_fitted`. The
+scorer measures each model's containment over its own fitted quotes, as recorded in
+`essvi_common_score.json` and `cvi_common_score.json`. Restricted to the 7,594 quote IDs both
+models fit, eSSVI contains 85 quotes (1.1193%) and CVI contains 18 (0.2370%). The dropped
+maturity and quote rows are explicit limitations of benchmarking the legacy fitter, not hidden
+filtering.
 
 The CVI notebook's additive export emits the exact shared 7-column fitted-quotes schema,
 dense grid values, per-tenor parameter summaries, and diagnostics. Its executed notebook and
