@@ -34,3 +34,27 @@ measures preprocessing differences rather than the models.
 
 Both schemas are written down with column names, types and units, and a tiny hand-made example file
 exists for each so T06 has an unambiguous target.
+
+## Resolution
+
+Closed 2026-09-13 (`bd8383d`); resolution recorded 2026-09-16. The canonical schemas are in
+[`docs/csv-contract.md`](../../docs/csv-contract.md) and are enforced by
+`python/validate_schema.py` (D15).
+
+- **Files:** input `normalized_quotes.csv`; outputs `fitted_quotes.csv`, `surface_grid.csv`,
+  `parameters.csv`, `diagnostics.csv`. Long-form, one row per quote or grid point.
+- **Conventions:** UTF-8, `YYYY-MM-DD` dates, year-fraction times, decimal IVs (not vol points).
+  Total variance is canonical and IV is a reporting field (D14). At least 12 significant digits;
+  no `NaN`/`inf` tokens.
+- **Missing values:** empty numeric fields, explained by `included=false` plus `filter_reason` on
+  inputs and by `status` on fitted rows.
+- **Dense grid:** `k = -0.5..0.5` in steps of 0.01 per expiry. `is_tail` marks points outside the
+  observed quote range, and all points enter the arbitrage checks.
+- **Diagnostics:** one row per fit. A failure gives `converged=false` with a non-empty `error`.
+  Runtime is indicative only (D4).
+- **CVI divergence:** the CVI notebook's `parameters.csv` has its own schema (ATM total variance and
+  observed range), because CVI has no eSSVI parameters.
+
+**Gap against "Done when":** only `schemas/normalized_quotes.example.csv` exists; the four output
+schemas have no example files. The input example also uses `filter_reason=zero_bid` and a
+blank-space `mid_iv`, neither of which `prepare_inputs.py` emits.

@@ -32,3 +32,20 @@ results cannot leave the notebook today.
 
 Running CVI on `option_chain.csv` produces output files that validate against the T04 schema, and
 the change is confined to an agreed location.
+
+## Resolution
+
+Closed 2026-09-13 (`bd8383d`); resolution recorded 2026-09-16 (D11, D16).
+
+- **Location:** an additive export cell in the existing `CVI Vol Surface Fitting.ipynb`. The user
+  authorised modifying, committing and pushing the public CVI repository. There is no module
+  extraction, and the fitting cells are unchanged.
+- **Output:** `benchmark_output/{fitted_quotes,surface_grid,parameters,diagnostics}.csv`, pinned to
+  CVI commit `f7da1b3829e8bb2bc00426605e15aaad20ddad09` in `evidence/benchmark_manifest.json`.
+- **Adapters on the ql-essvi side:**
+  - `python/adapt_cvi_output.py` and `python/adapt_cvi_grid.py` map CVI output onto all normalized
+    quote IDs and the shared grid.
+  - `python/make_common_grid.py` resamples both models onto one common grid.
+- **Residual gap:** CVI fits 7,594 of the 7,740 included quotes and leaves the rest `not_fitted`.
+  Containment is scored on that intersection, and the grid on a 50-maturity intersection (see
+  `benchmark_report.md`).
