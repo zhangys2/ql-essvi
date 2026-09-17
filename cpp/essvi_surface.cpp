@@ -47,7 +47,8 @@ bool calendarSafe(const Slice& a, const Slice& b, double safety) {
         b.psi > a.psi + safety && a.psi > safety && b.psi > safety)) return false;
   const double lower = a.psi * std::max((1+a.rho)/(1+b.rho),
                                          (1-a.rho)/(1-b.rho));
-  return b.psi > lower + safety;
+  const double upper = a.psi / a.theta * b.theta;
+  return b.psi > lower + safety && b.psi < upper - safety;
 }
 
 std::string validate(const Surface& surface) {

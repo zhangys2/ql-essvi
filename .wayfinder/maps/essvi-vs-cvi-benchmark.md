@@ -65,8 +65,9 @@ These decisions were confirmed by the user on 2026-09-12. Additional confirmed i
 - **D15** Use deterministic shared filtering, long-form CSV, a common dense grid with tail-only arbitrage checks, and empty fields plus status/reason columns for missing values.
 - **D16** Add the CVI export cell directly to the existing notebook; the user authorized modifying, committing, and pushing that repository.
 - **D17** Calibrate eSSVI against the bid/ask band in total variance rather than mid IV, starting each `theta_t` from its nearest-ATM quote (confirmed 2026-09-16; see [Choose the eSSVI calibration approach](../tickets/T05-calibration-approach.md)).
+- **D18** Calibrate eSSVI as free `(θ_t, ρ_t, ψ_t)` per expiry under the T01 constraints plus Mingone's sufficient calendar upper bound on `ψ`, sequentially (Corbetta). This supersedes D13's 4-global `φ`/`ρ` family (see [Decide whether the eSSVI family has enough capacity for this chain](../tickets/T08-essvi-model-capacity.md)).
 
-The exact sufficient conditions and schemas are documented in `docs/parameterization.md` and `docs/csv-contract.md`. The implementation is complete as a reproducible benchmark run, with the CVI/eSSVI included-quote count difference documented as a residual fairness gap.
+The exact sufficient conditions and schemas are documented in `docs/parameterization.md` (D18 form; T01 inequalities plus Mingone's calendar `ψ` upper bound) and `docs/csv-contract.md`. The CVI/eSSVI included-quote count difference remains a residual fairness gap.
 
 ## Not yet specified
 

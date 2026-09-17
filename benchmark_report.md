@@ -6,21 +6,17 @@ CVI notebook commit and hashes/row counts of the generated artifacts.
 
 ## Results on the shared benchmark grid
 
-| model | normalized rows | fitted rows | scored quotes | bid/ask containment | containment on common 7,594 | butterfly violations | calendar violations | common grid points | fit time (s) |
+| model | normalized rows | fitted rows | scored quotes | bid/ask containment | containment on common 7,594 | butterfly violations | calendar violations | grid points | fit time (s) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| eSSVI | 14,364 | 7,740 | 7,740 | 1.1370% | 1.1193% | 0 | 0 | 5,050 | 4.042 |
+| eSSVI (D18) | 14,364 | 7,740 | 7,740 | 1.8605% | 1.7777% | 0 | 0 | 5,151 | 0.072 |
 | CVI | 14,364 | 7,594 | 7,594 | 0.2370% | 0.2370% | 1,780 | 3,963 | 5,050 | 26.936 |
 
-Both models are scored on the same 50-maturity intersection and identical 101-point
-`k=-0.5..0.5` grid at each maturity (5,050 points). The shared normalized input contains
-14,364 rows, of which 7,740 pass the deterministic filter. Both fitted-quote exports
-preserve all 14,364 quote IDs. eSSVI produces 7,740 fitted rows; the unchanged legacy CVI
-fit produces 7,594 fitted rows and leaves the remaining included rows as `not_fitted`. The
-scorer measures each model's containment over its own fitted quotes, as recorded in
-`essvi_common_score.json` and `cvi_common_score.json`. Restricted to the 7,594 quote IDs both
-models fit, eSSVI contains 85 quotes (1.1193%) and CVI contains 18 (0.2370%). The dropped
-maturity and quote rows are explicit limitations of benchmarking the legacy fitter, not hidden
-filtering.
+Both models are scored on included quotes from the same 2024-11-11 snapshot. eSSVI (D18)
+fits all 51 expiries and is arbitrage-scored on its 51 × 101 dense grid (5,151 points).
+The shared normalized input contains 14,364 rows, of which 7,740 pass the deterministic filter.
+Restricted to the 7,594 quote IDs both models fit, eSSVI contains 135 quotes (1.7777%) and CVI
+contains 18 (0.2370%). D18 raised eSSVI containment from the D13 run's 1.14% to 1.86% with
+per-slice `rho` in about [-0.49, 0.32], still inside T08's low-single-digit ceiling at `1e-12`.
 
 The CVI notebook's additive export emits the exact shared 7-column fitted-quotes schema,
 dense grid values, per-tenor parameter summaries, and diagnostics. Its executed notebook and
@@ -32,10 +28,10 @@ cross-language metric.
 ## Reproduction and safety
 
 - Python owns normalization, adaptation, common-grid construction, schema validation, and scoring.
-- C++ consumes normalized total-variance inputs and enforces the eSSVI power-law and smooth
-  bounded-rho family with hard NLopt SLSQP constraints; no unconstrained fallback is used.
-  The objective penalises only fitted total variance outside each quote's bid/ask band, starting
-  each `theta_t` from its nearest-ATM quote. Hitting the evaluation limit is reported as a failure.
+- C++ consumes normalized total-variance inputs and fits free `(theta_t, rho_t, psi_t)` per
+  expiry under T01 plus Mingone's calendar `psi` upper bound (D18, Corbetta sequential). No
+  unconstrained fallback is used. The objective penalises only fitted total variance outside
+  each quote's bid/ask band, starting each `theta_t` from its nearest-ATM quote.
 - Dense-grid arbitrage checks include tail points; quote containment uses observed quotes only.
 - Raw/archive directories and QuantLib sources are not modified.
 - Re-run the commands in the manifest after checking out the recorded ql-essvi and CVI commits.
