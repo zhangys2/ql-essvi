@@ -87,17 +87,18 @@
       "rows": 5050
     },
     "essvi_common_score.json": {
-      "sha256": "0cc57d6fbad3e6e9818bc795b4049b6b231a7a43e4352e2e7a2bde5b36e23e28",
+      "sha256": "105e1c2d10fbb605439c819b4e94aa36437a60f1b736eab4fd8057ae95dd2167",
       "rows": 1
     },
     "cvi_common_score.json": {
-      "sha256": "ae2ed542d732f68688d2ee09646e2800fc5bf986b47faa6c9f1b2150c234d6d5",
+      "sha256": "cdf1e49706a9d20171109c3275f3de9c544b341f0d89bd98bcc59810798a9821",
       "rows": 1
     }
   },
   "notes": [
     "CVI fitting behavior remains in the notebook; export cell is additive and writes surface_grid, fitted_quotes, parameters, and diagnostics.",
     "The adapters preserve all 14,364 normalized quote IDs and explicitly mark excluded/not_fitted rows.",
-    "Timing is indicative and not a decisive cross-language metric."
+    "Timing is indicative and not a decisive cross-language metric.",
+    "D19: score JSON includes mean_iv_distance_to_band and median_iv_distance_to_band; exact bid_ask_containment is unchanged."
   ]
 }

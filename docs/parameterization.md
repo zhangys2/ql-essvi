@@ -32,8 +32,9 @@ For numerical safety, calibration enforces strict versions of the following suff
 The scorer independently checks the generated surface on a dense grid from `k=-0.5` to `k=0.5`
 at 0.01 increments per expiry. Points outside the observed included quote range are marked
 `is_tail=true`; all points are included in arbitrage checks, while quote containment uses only
-observed quotes. The MM necessary-and-sufficient butterfly infimum is not used; this is
-explicitly a conservative sufficient-condition benchmark.
+observed quotes. **D19:** exact in-band fraction uses a `1e-12` tolerance; models are ranked by
+mean/median IV distance to the nearer bid/ask edge (zero if inside). The MM necessary-and-sufficient
+butterfly infimum is not used; this is explicitly a conservative sufficient-condition benchmark.
 
 ## Enforcement and independent checks
 

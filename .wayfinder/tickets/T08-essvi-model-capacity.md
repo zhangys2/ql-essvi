@@ -166,6 +166,7 @@ D6 at `1e-12` on these listed bands will not look like a high score even with th
 - **Raw per-slice SVI.** Out of scope (D5 / map).
 - **Relaxing D6's `1e-12` to "near band" as the diagnosis.** That would hide a 5.8-vol-point
   residual; it is a possible *later* metric ticket, not an explanation of the current 1%.
+  Done as [T09](T09-d6-metric.md) / D19: exact containment is kept, ranking uses distance-to-band.
 
 ### Sources
 

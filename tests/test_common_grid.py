@@ -18,3 +18,5 @@ def test_committed_common_grids_are_identical_contracts():
     for name in ("essvi_common_score.json", "cvi_common_score.json"):
         score = json.loads((ROOT / name).read_text())
         assert score["grid_points"] == 5050
+        assert "mean_iv_distance_to_band" in score
+        assert "median_iv_distance_to_band" in score
