@@ -25,6 +25,8 @@ without saying so explicitly.
 - **D5** Target eSSVI, implemented so constant rho recovers plain SSVI.
 - **D6** Primary metric: fraction of quotes whose fitted IV lies inside the bid/ask IV band.
   Secondary: butterfly and calendar violations on a dense grid, including the tails.
+  **D19** (2026-09-17): exact `1e-12` containment stays the in-band count; models are ranked by
+  mean/median IV distance to the band. See [T09](../tickets/T09-d6-metric.md).
 - **D7** Code and this map live together in `~/source/repos/essvi-bench`.
 - **D8** Gate is decisions plus plan; no code.
 
@@ -66,6 +68,7 @@ These decisions were confirmed by the user on 2026-09-12. Additional confirmed i
 - **D16** Add the CVI export cell directly to the existing notebook; the user authorized modifying, committing, and pushing that repository.
 - **D17** Calibrate eSSVI against the bid/ask band in total variance rather than mid IV, starting each `theta_t` from its nearest-ATM quote (confirmed 2026-09-16; see [Choose the eSSVI calibration approach](../tickets/T05-calibration-approach.md)).
 - **D18** Calibrate eSSVI as free `(θ_t, ρ_t, ψ_t)` per expiry under the T01 constraints plus Mingone's sufficient calendar upper bound on `ψ`, sequentially (Corbetta). This supersedes D13's 4-global `φ`/`ρ` family (see [Decide whether the eSSVI family has enough capacity for this chain](../tickets/T08-essvi-model-capacity.md)).
+- **D19** Keep D6's exact `1e-12` in-band fraction; rank models by mean and median IV distance to the bid/ask band (see [Revisit D6 so the primary metric measures the model on this chain](../tickets/T09-d6-metric.md)).
 
 The exact sufficient conditions and schemas are documented in `docs/parameterization.md` (D18 form; T01 inequalities plus Mingone's calendar `ψ` upper bound) and `docs/csv-contract.md`. The CVI/eSSVI included-quote count difference remains a residual fairness gap.
 

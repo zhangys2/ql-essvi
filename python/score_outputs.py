@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Shared, dependency-free scorer for fitter CSV outputs."""
-import argparse,csv,json,math
+import argparse,csv,json,math,statistics
 from collections import defaultdict
 
 def f(row,key):
     try:
         x=float(row[key]); return x if math.isfinite(x) else None
     except (KeyError,TypeError,ValueError): return None
+
+def iv_distance_to_band(fitted, bid, ask, tol=1e-12):
+    if bid - tol <= fitted <= ask + tol:
+        return 0.0
+    return bid - fitted if fitted < bid else fitted - ask
 
 def black_normalized(f,k,t,w):
     if t <= 0 or w <= 0: return max(f-k, 0.0)
@@ -21,8 +26,9 @@ def main():
     for r in rows: r.update(fitted.get(r['quote_id'], {}))
     eligible=[r for r in rows if r.get('included','').lower()=='true' and f(r,'bid_iv') is not None and f(r,'ask_iv') is not None]
     scored=[r for r in eligible if f(r,'fitted_iv') is not None]
-    inside=sum(f(r,'bid_iv')-1e-12<=f(r,'fitted_iv')<=f(r,'ask_iv')+1e-12 for r in scored)
-    result={'quotes_total':len(rows),'quotes_included':len(eligible),'quotes_scored':len(scored),'bid_ask_containment':inside/len(scored) if scored else None,'butterfly_violations':None,'calendar_violations':None}
+    distances=[iv_distance_to_band(f(r,'fitted_iv'), f(r,'bid_iv'), f(r,'ask_iv')) for r in scored]
+    inside=sum(d == 0.0 for d in distances)
+    result={'quotes_total':len(rows),'quotes_included':len(eligible),'quotes_scored':len(scored),'bid_ask_containment':inside/len(scored) if scored else None,'mean_iv_distance_to_band':statistics.mean(distances) if distances else None,'median_iv_distance_to_band':statistics.median(distances) if distances else None,'butterfly_violations':None,'calendar_violations':None}
     if args.grid:
         grid=list(csv.DictReader(open(args.grid,newline='')))
         by_t=defaultdict(list)

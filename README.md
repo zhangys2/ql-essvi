@@ -4,7 +4,7 @@ Standalone C++ eSSVI surface evaluator and benchmark harness for comparison with
 
 ## Status
 
-The benchmark pipeline is implemented and reproducible on WSL. **D18** calibrates free `(theta, rho, psi)` per expiry under the T01 butterfly and calendar conditions, sequentially (Corbetta). Shared Python normalization/scoring and an explicit common-quote intersection remain, because the legacy CVI notebook fits only its selected OTM rows.
+The benchmark pipeline is implemented and reproducible on WSL. **D18** calibrates free `(theta, rho, psi)` per expiry under the T01 butterfly and calendar conditions, sequentially (Corbetta). **D19** ranks models by mean/median IV distance to the bid/ask band; exact `1e-12` containment remains the in-band count. Shared Python normalization/scoring and an explicit common-quote intersection remain, because the legacy CVI notebook fits only its selected OTM rows.
 
 ## Build on WSL
 

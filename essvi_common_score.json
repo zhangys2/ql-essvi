@@ -3,6 +3,8 @@
   "quotes_included": 7740,
   "quotes_scored": 7740,
   "bid_ask_containment": 0.018604651162790697,
+  "mean_iv_distance_to_band": 0.04866641796563844,
+  "median_iv_distance_to_band": 0.044621355278323546,
   "butterfly_violations": 0,
   "calendar_violations": 0,
   "grid_points": 5050
