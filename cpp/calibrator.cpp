@@ -1,5 +1,4 @@
 #include "calibrator.hpp"
-#include <nlopt.h>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -10,37 +9,233 @@
 
 namespace essvi {
 namespace {
-struct Context { std::vector<Quote> q; std::vector<double> expiries; };
-std::vector<std::string> split(const std::string& s) { std::vector<std::string> r; std::stringstream x(s); std::string v; while(std::getline(x,v,',')) r.push_back(v); return r; }
-double val(const std::string& s) { return s.empty()?NAN:std::stod(s); }
-double sigmoid(double x) { return 1.0/(1.0+std::exp(-std::clamp(x,-40.0,40.0))); }
-Slice slice(const std::vector<double>& x, size_t i, double t) {
-  const double eta=std::exp(x[0]), lambda=x[1], a=x[2], b=x[3], theta=x[4+i];
-  const double rho=-.98+1.96*sigmoid(a+b*std::log(std::max(t,1e-8)));
-  return {t,theta,theta*eta*std::pow(theta,-lambda),rho};
+constexpr double kEps = 1e-8;
+
+std::vector<std::string> split(const std::string& s) {
+  std::vector<std::string> r;
+  std::stringstream x(s);
+  std::string v;
+  while (std::getline(x, v, ',')) r.push_back(v);
+  return r;
 }
-double objective(unsigned n, const double* xp, double* grad, void* p) {
-  auto& c=*static_cast<Context*>(p);
-  auto value=[&](const double* y){ std::vector<double>x(y,y+n); double z=0; for(auto& q:c.q) if(q.included && std::isfinite(q.bid_iv) && std::isfinite(q.ask_iv)) { auto i=std::lower_bound(c.expiries.begin(),c.expiries.end(),q.expiry)-c.expiries.begin(); auto s=slice(x,i,q.expiry); const double w=sliceTotalVariance(s,std::log(q.strike/q.forward)); double d=w-std::clamp(w,q.expiry*q.bid_iv*q.bid_iv,q.expiry*q.ask_iv*q.ask_iv); z+=d*d; } return z; };
-  const double z=value(xp); if(grad) for(unsigned i=0;i<n;++i){ std::vector<double> y(xp,xp+n); double h=1e-5*std::max(1.0,std::abs(xp[i])); y[i]+=h; grad[i]=(value(y.data())-z)/h; } return z;
+double val(const std::string& s) { return s.empty() ? NAN : std::stod(s); }
+
+double bandLoss(const Slice& s, const std::vector<Quote>& qs) {
+  double z = 0;
+  for (const auto& q : qs) {
+    if (!q.included || !std::isfinite(q.bid_iv) || !std::isfinite(q.ask_iv)) continue;
+    const double w = sliceTotalVariance(s, std::log(q.strike / q.forward));
+    const double d = w - std::clamp(w, q.expiry * q.bid_iv * q.bid_iv,
+                                    q.expiry * q.ask_iv * q.ask_iv);
+    z += d * d;
+  }
+  return z;
 }
-void constraints(unsigned, double* r, unsigned, const double* xp, double*, void* p) {
-  auto& c=*static_cast<Context*>(p); std::vector<double>x(xp,xp+4+c.expiries.size()); unsigned j=0; constexpr double e=1e-8;
-  std::vector<Slice>s; for(size_t i=0;i<c.expiries.size();++i)s.push_back(slice(x,i,c.expiries[i]));
-  for(size_t i=0;i<s.size();++i){auto&v=s[i];r[j++]=e-v.theta;r[j++]=e-v.psi;r[j++]=v.psi*(1+std::abs(v.rho))-4+e;r[j++]=v.psi*v.psi*(1+std::abs(v.rho))-4*v.theta+e;}
-  for(size_t i=1;i<s.size();++i){auto&a=s[i-1];auto&b=s[i];r[j++]=a.theta-b.theta+e;r[j++]=a.psi-b.psi+e;r[j++]=a.psi*std::max((1+a.rho)/(1+b.rho),(1-a.rho)/(1-b.rho))-b.psi+e;}
+
+bool pairSafe(const Slice* prev, const Slice& s) {
+  if (!butterflySafe(s, kEps)) return false;
+  return !prev || calendarSafe(*prev, s, kEps);
 }
+
+struct Atm {
+  double theta_star{NAN};
+  double k_star{0};
+};
+
+Atm nearestAtm(const std::vector<Quote>& qs, double t) {
+  Atm a;
+  double best = INFINITY;
+  for (const auto& q : qs) {
+    if (!q.included || !std::isfinite(q.mid_iv)) continue;
+    const double k = std::log(q.strike / q.forward);
+    if (std::abs(k) < best) {
+      best = std::abs(k);
+      a.k_star = k;
+      a.theta_star = t * q.mid_iv * q.mid_iv;
+    }
+  }
+  return a;
 }
+
+Slice anchored(double t, const Atm& atm, double rho, double psi, const Slice* prev) {
+  double theta = atm.theta_star - rho * psi * atm.k_star;
+  if (prev) theta = std::max(theta, prev->theta + kEps);
+  if (prev && prev->psi > kEps)
+    theta = std::max(theta, psi * prev->theta / prev->psi + kEps);
+  theta = std::max(theta, psi * psi * (1.0 + std::abs(rho)) / 4.0 + 2 * kEps);
+  theta = std::max(theta, kEps);
+  return {t, theta, psi, rho};
+}
+
+double psiUpper(double rho) {
+  const double ar = std::abs(rho);
+  if (!(ar < 1.0 - kEps)) return 0;
+  return 4.0 / (1.0 + ar) - kEps;
+}
+
+double psiLower(const Slice* prev, double rho) {
+  if (!prev) return kEps;
+  const double ratio =
+      std::max((1 + prev->rho) / (1 + rho), (1 - prev->rho) / (1 - rho));
+  return std::max(prev->psi + kEps, prev->psi * ratio + kEps);
+}
+
+CalibrationResult fitSlice(const std::vector<Quote>& qs, double t, const Slice* prev) {
+  CalibrationResult out;
+  const auto atm = nearestAtm(qs, t);
+  if (!std::isfinite(atm.theta_star) || atm.theta_star <= 0) {
+    out.error = "no ATM quote";
+    return out;
+  }
+  int evals = 0;
+  Slice best{};
+  double bestz = INFINITY;
+  auto consider = [&](const Slice& s) {
+    if (!pairSafe(prev, s)) return;
+    ++evals;
+    const double z = bandLoss(s, qs);
+    if (z < bestz) {
+      bestz = z;
+      best = s;
+    }
+  };
+
+  const auto searchRhoWindow = [&](double rlo, double rhi, double rstep, int psi_steps) {
+    for (double rho = rlo; rho <= rhi + 1e-12; rho += rstep) {
+      if (std::abs(rho) >= 0.98) continue;
+      const double lo = psiLower(prev, rho);
+      const double hi = psiUpper(rho);
+      if (!(hi > lo)) continue;
+      consider(anchored(t, atm, rho, lo, prev));
+      consider(anchored(t, atm, rho, hi, prev));
+      double a = lo, b = hi;
+      const double g = 0.381966011250105;
+      double x1 = a + g * (b - a), x2 = b - g * (b - a);
+      auto f = [&](double psi) {
+        const auto s = anchored(t, atm, rho, psi, prev);
+        if (!pairSafe(prev, s)) return 1e300;
+        ++evals;
+        return bandLoss(s, qs);
+      };
+      double f1 = f(x1), f2 = f(x2);
+      for (int i = 0; i < psi_steps; ++i) {
+        if (f1 < f2) {
+          b = x2;
+          x2 = x1;
+          f2 = f1;
+          x1 = a + g * (b - a);
+          f1 = f(x1);
+        } else {
+          a = x1;
+          x1 = x2;
+          f1 = f2;
+          x2 = b - g * (b - a);
+          f2 = f(x2);
+        }
+      }
+      consider(anchored(t, atm, rho, f1 < f2 ? x1 : x2, prev));
+    }
+  };
+
+  searchRhoWindow(-0.95, 0.95, 0.05, 22);
+  if (bestz < INFINITY) searchRhoWindow(std::max(-0.95, best.rho - 0.06),
+                                       std::min(0.95, best.rho + 0.06), 0.01, 18);
+  if (bestz < INFINITY) {
+    const double tlo = prev ? prev->theta + kEps : kEps;
+    for (double m : {0.90, 0.95, 1.00, 1.05, 1.10, 1.20}) {
+      Slice s = best;
+      s.theta = std::clamp(best.theta * m, tlo, 5.0);
+      consider(s);
+    }
+  }
+
+  out.iterations = evals;
+  out.objective = bestz;
+  if (!(bestz < INFINITY)) {
+    out.error = "empty feasible set at t=" + std::to_string(t);
+    return out;
+  }
+  out.surface.slices.push_back(best);
+  Surface check{out.surface.slices};
+  if (prev) check.slices.insert(check.slices.begin(), *prev);
+  out.error = validate(check);
+  out.converged = out.error.empty();
+  return out;
+}
+}  // namespace
+
 std::vector<Quote> readQuotes(const std::string& path) {
- std::ifstream f(path); std::string line; std::getline(f,line); auto h=split(line); std::unordered_map<std::string,size_t> ix; for(size_t i=0;i<h.size();++i)ix[h[i]]=i;
- std::vector<Quote> out; while(std::getline(f,line)){auto v=split(line);if(v.size()<h.size())continue;try{out.push_back({v[ix["quote_id"]],val(v[ix["time_to_expiry"]]),val(v[ix["forward"]]),val(v[ix["discount_factor"]]),val(v[ix["strike"]]),val(v[ix["bid_iv"]]),val(v[ix["ask_iv"]]),val(v[ix["mid_iv"]]),v[ix["included"]]=="true"});}catch(...){}}
- return out;
+  std::ifstream f(path);
+  std::string line;
+  std::getline(f, line);
+  auto h = split(line);
+  std::unordered_map<std::string, size_t> ix;
+  for (size_t i = 0; i < h.size(); ++i) ix[h[i]] = i;
+  std::vector<Quote> out;
+  while (std::getline(f, line)) {
+    auto v = split(line);
+    if (v.size() < h.size()) continue;
+    try {
+      out.push_back({v[ix["quote_id"]], val(v[ix["time_to_expiry"]]), val(v[ix["forward"]]),
+                     val(v[ix["discount_factor"]]), val(v[ix["strike"]]), val(v[ix["bid_iv"]]),
+                     val(v[ix["ask_iv"]]), val(v[ix["mid_iv"]]), v[ix["included"]] == "true"});
+    } catch (...) {
+    }
+  }
+  return out;
 }
+
 CalibrationResult calibrate(const std::vector<Quote>& quotes) {
- Context c{quotes,{}};for(auto&q:quotes)if(q.included&&std::isfinite(q.expiry))c.expiries.push_back(q.expiry);std::sort(c.expiries.begin(),c.expiries.end());c.expiries.erase(std::unique(c.expiries.begin(),c.expiries.end()),c.expiries.end());CalibrationResult out;if(c.expiries.empty()){out.error="no included quotes";return out;}
- const unsigned n=4+c.expiries.size(),m=4*c.expiries.size()+3*(c.expiries.size()-1);std::vector<double>x(n),lo(n),hi(n);x[0]=std::log(.3);x[1]=.25;x[2]=0;x[3]=0;lo[0]=std::log(1e-4);hi[0]=std::log(10);lo[1]=0;hi[1]=.5;lo[2]=-5;hi[2]=5;lo[3]=-2;hi[3]=2;for(size_t i=0;i<c.expiries.size();++i){double atm=INFINITY;for(auto&q:quotes)if(q.included&&q.expiry==c.expiries[i]&&std::abs(std::log(q.strike/q.forward))<atm){atm=std::abs(std::log(q.strike/q.forward));x[4+i]=q.expiry*q.mid_iv*q.mid_iv;}if(i)x[4+i]=std::max(x[4+i],1.01*x[3+i]);lo[4+i]=1e-6;hi[4+i]=5;}
- auto started=std::chrono::steady_clock::now(); nlopt_opt opt=nlopt_create(NLOPT_LD_SLSQP,n);nlopt_set_lower_bounds(opt,lo.data());nlopt_set_upper_bounds(opt,hi.data());nlopt_set_min_objective(opt,objective,&c);std::vector<double>tol(m,1e-8);nlopt_add_inequality_mconstraint(opt,m,constraints,&c,tol.data());nlopt_set_maxeval(opt,3000);nlopt_set_ftol_rel(opt,1e-10);double minf=0;auto rc=nlopt_optimize(opt,x.data(),&minf);out.iterations=nlopt_get_numevals(opt);nlopt_destroy(opt);out.objective=minf;out.runtime_seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count();for(size_t i=0;i<c.expiries.size();++i)out.surface.slices.push_back(slice(x,i,c.expiries[i]));out.error=validate(out.surface);out.converged=out.error.empty()&&((rc>0&&rc!=NLOPT_MAXEVAL_REACHED&&rc!=NLOPT_MAXTIME_REACHED)||rc==NLOPT_ROUNDOFF_LIMITED);if(!out.converged&&out.error.empty())out.error=nlopt_result_to_string(rc);return out;
+  std::vector<double> expiries;
+  for (const auto& q : quotes)
+    if (q.included && std::isfinite(q.expiry)) expiries.push_back(q.expiry);
+  std::sort(expiries.begin(), expiries.end());
+  expiries.erase(std::unique(expiries.begin(), expiries.end()), expiries.end());
+  CalibrationResult out;
+  if (expiries.empty()) {
+    out.error = "no included quotes";
+    return out;
+  }
+  auto started = std::chrono::steady_clock::now();
+  for (double t : expiries) {
+    std::vector<Quote> slice_q;
+    for (const auto& q : quotes)
+      if (q.included && q.expiry == t) slice_q.push_back(q);
+    const Slice* prev = out.surface.slices.empty() ? nullptr : &out.surface.slices.back();
+    auto part = fitSlice(slice_q, t, prev);
+    out.iterations += part.iterations;
+    out.objective += part.objective < INFINITY ? part.objective : 0;
+    if (!part.converged) {
+      out.error = part.error.empty() ? "slice fit failed" : part.error;
+      out.runtime_seconds =
+          std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+      return out;
+    }
+    out.surface.slices.push_back(part.surface.slices.front());
+  }
+  out.runtime_seconds =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+  out.error = validate(out.surface);
+  out.converged = out.error.empty();
+  return out;
 }
-void writeParameters(const CalibrationResult&r,const std::string&p){std::ofstream f(p);f<<std::fixed<<std::setprecision(17);f<<"time_to_expiry,theta,psi,rho,phi,butterfly_safe,calendar_safe\n";for(size_t i=0;i<r.surface.slices.size();++i){auto&s=r.surface.slices[i];f<<s.expiry<<','<<s.theta<<','<<s.psi<<','<<s.rho<<','<<s.psi/s.theta<<','<<(butterflySafe(s)?"true":"false")<<','<<(!i||calendarSafe(r.surface.slices[i-1],s)?"true":"false")<<'\n';}}
-void writeDiagnostics(const CalibrationResult&r,const std::string&p){std::ofstream f(p);f<<std::fixed<<std::setprecision(17);f<<"model,converged,objective,iterations,runtime_seconds,error\n";f<<"eSSVI,"<<(r.converged?"true":"false")<<','<<r.objective<<','<<r.iterations<<','<<r.runtime_seconds<<','<<r.error<<'\n';}
+
+void writeParameters(const CalibrationResult& r, const std::string& p) {
+  std::ofstream f(p);
+  f << std::fixed << std::setprecision(17);
+  f << "time_to_expiry,theta,psi,rho,phi,butterfly_safe,calendar_safe\n";
+  for (size_t i = 0; i < r.surface.slices.size(); ++i) {
+    const auto& s = r.surface.slices[i];
+    f << s.expiry << ',' << s.theta << ',' << s.psi << ',' << s.rho << ',' << s.psi / s.theta
+      << ',' << (butterflySafe(s) ? "true" : "false") << ','
+      << (!i || calendarSafe(r.surface.slices[i - 1], s) ? "true" : "false") << '\n';
+  }
 }
+void writeDiagnostics(const CalibrationResult& r, const std::string& p) {
+  std::ofstream f(p);
+  f << std::fixed << std::setprecision(17);
+  f << "model,converged,objective,iterations,runtime_seconds,error\n";
+  f << "eSSVI," << (r.converged ? "true" : "false") << ',' << r.objective << ',' << r.iterations
+    << ',' << r.runtime_seconds << ',' << r.error << '\n';
+}
+}  // namespace essvi

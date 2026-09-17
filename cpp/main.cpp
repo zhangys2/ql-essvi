@@ -12,12 +12,12 @@ int main(int argc, char** argv) {
   }
   auto quotes = essvi::readQuotes(argv[1]);
   auto result = essvi::calibrate(quotes);
+  essvi::writeDiagnostics(result, argv[5]);
   if (!result.converged) {
     std::cerr << "calibration failed: " << result.error << "\n";
     return 1;
   }
   essvi::writeParameters(result, argv[2]);
-  essvi::writeDiagnostics(result, argv[5]);
   std::ofstream qout(argv[3]);
   qout << "quote_id,time_to_expiry,strike,log_moneyness,fitted_total_variance,fitted_iv,status\n";
   qout << std::fixed << std::setprecision(17);

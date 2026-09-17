@@ -4,7 +4,7 @@ Standalone C++ eSSVI surface evaluator and benchmark harness for comparison with
 
 ## Status
 
-The benchmark pipeline is implemented and reproducible on WSL. It uses a global power-law eSSVI shape with bounded smooth maturity-dependent correlation, hard SLSQP constraints, and a shared Python normalization/scoring contract. Results retain an explicit common-quote intersection because the legacy CVI notebook fits only its selected OTM rows.
+The benchmark pipeline is implemented and reproducible on WSL. **D18** calibrates free `(theta, rho, psi)` per expiry under the T01 butterfly and calendar conditions, sequentially (Corbetta). Shared Python normalization/scoring and an explicit common-quote intersection remain, because the legacy CVI notebook fits only its selected OTM rows.
 
 ## Build on WSL
 

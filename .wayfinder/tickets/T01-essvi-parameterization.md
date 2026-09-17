@@ -37,7 +37,10 @@ its no-arbitrage conditions as explicit inequalities, each traced to a named sou
 ## Resolution
 
 Closed 2026-09-13 (`bd8383d`); resolution recorded 2026-09-16. The canonical statement is
-[`docs/parameterization.md`](../../docs/parameterization.md); this is its decision record (D13).
+[`docs/parameterization.md`](../../docs/parameterization.md); this was the D13 record. **D18**
+(2026-09-16) supersedes the power-law `phi` and smooth `rho(T)` families with free
+`(theta_t, rho_t, psi_t)` per expiry; the slice formula and T01 sufficient conditions below are
+unchanged. See [T08](T08-essvi-model-capacity.md).
 
 - **Form:** `w(k,T) = 1/2 (theta + rho psi k + sqrt((psi k + theta rho)^2 + theta^2 (1-rho^2)))`
   with `k = log(K/F(T))`, `theta` forward ATM total variance, `psi = theta phi`.
