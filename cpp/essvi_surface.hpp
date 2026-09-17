@@ -17,6 +17,9 @@ struct Slice {
 struct Surface {
   std::vector<Slice> slices;
 
+  // Corbetta interpolation of (theta, psi, rho*psi) onto expiry, clamped to the
+  // first and last listed slices.
+  Slice sliceAt(double expiry) const;
   // Evaluates total variance at expiry and forward log-moneyness k.
   double totalVariance(double expiry, double k) const;
   double impliedVolatility(double expiry, double k) const;

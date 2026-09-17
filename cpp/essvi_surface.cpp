@@ -11,22 +11,24 @@ double sliceTotalVariance(const Slice& s, double k) {
                 std::sqrt(x * x + s.theta * s.theta * (1.0 - s.rho * s.rho)));
 }
 
-double Surface::totalVariance(double expiry, double k) const {
-  if (slices.empty()) return NAN;
-  if (slices.size() == 1) return sliceTotalVariance(slices.front(), k);
-  if (expiry <= slices.front().expiry) return sliceTotalVariance(slices.front(), k);
-  if (expiry >= slices.back().expiry) return sliceTotalVariance(slices.back(), k);
+Slice Surface::sliceAt(double expiry) const {
+  if (slices.empty()) return {};
+  if (slices.size() == 1 || expiry <= slices.front().expiry) return slices.front();
+  if (expiry >= slices.back().expiry) return slices.back();
   auto hi = std::lower_bound(slices.begin(), slices.end(), expiry,
                              [](const Slice& s, double t) { return s.expiry < t; });
   const auto& b = *hi;
   const auto& a = *(hi - 1);
   const double u = (expiry - a.expiry) / (b.expiry - a.expiry);
   // Corbetta et al.: interpolate (theta, psi, rho*psi), not rho directly.
-  Slice x{expiry, a.theta + u * (b.theta - a.theta),
-          a.psi + u * (b.psi - a.psi),
-          ((1-u)*a.rho*a.psi + u*b.rho*b.psi) /
-              (a.psi + u * (b.psi - a.psi))};
-  return sliceTotalVariance(x, k);
+  const double psi = a.psi + u * (b.psi - a.psi);
+  return {expiry, a.theta + u * (b.theta - a.theta), psi,
+          ((1 - u) * a.rho * a.psi + u * b.rho * b.psi) / psi};
+}
+
+double Surface::totalVariance(double expiry, double k) const {
+  if (slices.empty()) return NAN;
+  return sliceTotalVariance(sliceAt(expiry), k);
 }
 
 double Surface::impliedVolatility(double expiry, double k) const {

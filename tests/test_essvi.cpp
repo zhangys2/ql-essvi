@@ -92,6 +92,8 @@ int main() {
   essvi::Surface surface{{{0.5, 0.04, 0.20, -0.4},
                           {1.0, 0.07, 0.30, -0.35}}};
   assert(essvi::validate(surface).empty());
+  assert(std::abs(surface.sliceAt(0.5).theta - 0.04) < 1e-12);
+  assert(surface.sliceAt(0.75).theta > 0.04);
   assert(surface.totalVariance(0.75, 0.0) > 0.04);
   essvi::Slice rising_phi{1.0, 0.05, 0.30, -0.4};
   assert(!essvi::calendarSafe({0.5, 0.04, 0.20, -0.4}, rising_phi));
