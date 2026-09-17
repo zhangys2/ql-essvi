@@ -56,7 +56,7 @@ Execution exception: **none**. This map plans decisions only.
 - **D9** Build and run the C++ project on WSL Ubuntu/GCC, using the existing QuantLib build tree.
 - **D10** Python owns the canonical preprocessing and scoring pipeline; C++ consumes the normalized CSV contract.
 - **D11** Add a minimal, additive CVI export adapter without changing CVI fitting behavior.
-- **D12** Implement a plain eSSVI evaluator first; add a QuantLib surface adapter after calibration and scoring are validated.
+- **D12** Implement a plain eSSVI evaluator first; add a QuantLib surface adapter after calibration and scoring are validated. Adapter implemented 2026-09-17: `essvi::EssviBlackVarianceSurface` and `essvi::EssviSmileSection` (see [T02](../tickets/T02-quantlib-consumption.md)).
 
 These decisions were confirmed by the user on 2026-09-12. Additional confirmed implementation decisions:
 

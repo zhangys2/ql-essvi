@@ -8,7 +8,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(QuantLib CONFIG REQUIRED
   PATHS "$ENV{QUANTLIB_BUILD}/cmake" "$ENV{HOME}/QuantLib/build/release/cmake")
 
-add_library(essvi cpp/essvi_surface.cpp cpp/calibrator.cpp)
+add_library(essvi cpp/essvi_surface.cpp cpp/calibrator.cpp cpp/essvi_ql.cpp)
 target_include_directories(essvi PUBLIC cpp)
 target_link_libraries(essvi PUBLIC QuantLib::QuantLib)
 target_compile_options(essvi PRIVATE -Wall -Wextra -Wpedantic)
@@ -25,4 +25,8 @@ if(BUILD_TESTING)
   add_executable(quantlib_smoke tests/test_quantlib.cpp)
   target_link_libraries(quantlib_smoke PRIVATE QuantLib::QuantLib)
   add_test(NAME quantlib_smoke COMMAND quantlib_smoke)
+
+  add_executable(essvi_ql_tests tests/test_essvi_ql.cpp)
+  target_link_libraries(essvi_ql_tests PRIVATE essvi)
+  add_test(NAME essvi_ql_tests COMMAND essvi_ql_tests)
 endif()

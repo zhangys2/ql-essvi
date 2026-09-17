@@ -26,9 +26,11 @@ ctest --test-dir build --output-on-failure
 ```
 
 CTest includes `quantlib_smoke`, which compiles and exercises the existing QuantLib CMake
-package by constructing a TARGET calendar/date object. No QuantLib source is modified.
+package by constructing a TARGET calendar/date object, and `essvi_ql_tests`, which checks the
+D12 adapter (`EssviBlackVarianceSurface` / `EssviSmileSection`) against the plain evaluator.
+No QuantLib source is modified.
 
-The existing QuantLib build is consumed through its CMake package; no QuantLib source is modified.
+The existing QuantLib build is consumed through its CMake package; no QuantLib source is modified. The D12 adapter lives in `cpp/essvi_ql.*` and does not change calibration or scoring.
 
 Prepare and fit the real dataset:
 
