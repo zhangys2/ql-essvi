@@ -37,45 +37,37 @@ rejected alternatives are recorded with reasons, and the expected failure modes 
 
 ## Resolution
 
-Closed 2026-09-13 (`bd8383d`); resolution recorded 2026-09-16 (D13, D14). Implemented in
-`cpp/calibrator.cpp`.
+Closed 2026-09-13 (`bd8383d`); resolution recorded 2026-09-16 (D13, D14) and updated
+2026-09-17 for **D18** as implemented in `cpp/calibrator.cpp`.
 
-- **Strategy:** one joint surface fit. The variables are the global `log eta`, `lambda`, `a`, `b`
-  plus a free `theta_t` per expiry.
+- **Strategy:** sequential per-expiry fits going forward (Corbetta et al.). Each listed
+  expiry has free `(theta_t, rho_t, psi_t)` under the T01/T10 butterfly bounds and the
+  adjacent-slice calendar inequalities, including Mingone's sufficient `psi` upper bound.
+  This supersedes the D13 joint surface fit of global `(log eta, lambda, a, b)` plus `theta_t`.
 - **Objective:** bid/ask band loss in total variance. A quote costs nothing while the fitted `w`
   lies in `[T bid_iv^2, T ask_iv^2]`; outside the band it costs the squared distance to the nearer
   edge. This matches D6's containment metric. Adopted 2026-09-16, replacing unweighted least squares
   against `T * mid_iv^2`. The planned tiny mid-IV tie-break term was dropped: overlapping bands
   with different mids would pull the fit onto a band edge and just past it.
 - **Starting point:** each `theta_t` starts at `T * mid_iv^2` of that expiry's included quote
-  nearest ATM (smallest `|k|`), raised where needed to at least 1.01 times the previous expiry's
-  start. Adopted 2026-09-16, replacing `0.002 + 0.04 T`, which could not reach a feasible band fit
-  within `maxeval` on the synthetic test. The increasing floor is needed on the real chain: without
-  it, the 7-day expiry's ~116% near-ATM IV starts above the next expiry, and SLSQP stops at an
-  infeasible point.
-- **Constraints:** every T01 condition as a hard inequality, per slice and per adjacent slice pair,
-  with a `1e-8` margin. Parameter domains are box bounds.
-- **Optimizer:** NLopt `LD_SLSQP` with forward-difference gradients, `maxeval 3000`,
-  `ftol_rel 1e-10`. There is no unconstrained fallback: a failure emits `converged=false` and an
+  nearest ATM (smallest `|k|`), then is raised to honour calendar floors and the butterfly bound.
+- **Constraints:** hard inequalities with a `1e-8` margin. `rho` is sampled; `psi` is searched
+  inside the feasible interval given the previous slice (Mingone product-of-intervals, applied
+  sequentially rather than as a joint 3N solve).
+- **Optimizer:** no joint NLopt SLSQP. Per slice: coarse-then-fine `rho` grid and golden-section
+  search on `psi`. There is no unconstrained fallback: a failure emits `converged=false` and an
   error.
 
-**Rejected alternatives.** No record from the time exists; these reasons are reconstructed from
-D13/D14.
+**Rejected alternatives.**
 - QuantLib `LBFGSB`: box bounds only, so it cannot express the butterfly or calendar inequalities.
 - QuantLib Levenberg–Marquardt: unconstrained.
 - Penalty methods: soft constraints conflict with D14's hard-constraint requirement.
-- Sequential per-slice fits: the calendar conditions couple adjacent slices, and D13 chose global
-  smooth `rho`/`phi` families.
-- Reparameterization that is arbitrage-free by construction (Mingone et al.): not adopted; the
-  reason is unrecorded.
+- D13 joint 55-dimensional SLSQP on `(eta, lambda, a, b, theta_t)`: the four globals never left
+  their start (T08).
+- Mingone *global* joint reparameterization as the primary solver: sequential Corbetta never
+  produced an empty feasible set or dense-grid calendar violations on this snapshot (T11).
 
 **Failure modes:**
-- SLSQP is a local method on a non-convex problem, so the result depends on the starting point.
-- Running out of `maxeval` or `maxtime` reports `converged=false`. Before 2026-09-16 it counted as
-  converged, because `rc > 0` includes `NLOPT_MAXEVAL_REACHED`.
-- `NLOPT_ROUNDOFF_LIMITED` counts as converged if the post-fit `validate` passes.
-- Finite-difference gradients dominate the runtime.
-
-**Discrepancies found while recording, fixed 2026-09-16:** the code did not start `theta_t` from
-ATM data as D13 says, and it fitted mid IV rather than the band D6 scores. Both are fixed as
-described above and covered by the `essvi::calibrate` test in `tests/test_essvi.cpp`.
+- The per-slice search is local in `rho`; a coarse grid can miss a better smile.
+- Empty feasible interval at a tenor reports `converged=false`.
+- Calendar coupling can still force `theta_t` above the local ATM band (T08).

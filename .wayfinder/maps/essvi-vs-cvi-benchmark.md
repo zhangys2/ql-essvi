@@ -69,8 +69,11 @@ These decisions were confirmed by the user on 2026-09-12. Additional confirmed i
 - **D17** Calibrate eSSVI against the bid/ask band in total variance rather than mid IV, starting each `theta_t` from its nearest-ATM quote (confirmed 2026-09-16; see [Choose the eSSVI calibration approach](../tickets/T05-calibration-approach.md)).
 - **D18** Calibrate eSSVI as free `(θ_t, ρ_t, ψ_t)` per expiry under the T01 constraints plus Mingone's sufficient calendar upper bound on `ψ`, sequentially (Corbetta). This supersedes D13's 4-global `φ`/`ρ` family (see [Decide whether the eSSVI family has enough capacity for this chain](../tickets/T08-essvi-model-capacity.md)).
 - **D19** Keep D6's exact `1e-12` in-band fraction; rank models by mean and median IV distance to the bid/ask band (see [Revisit D6 so the primary metric measures the model on this chain](../tickets/T09-d6-metric.md)).
+- **D20** Retire the Mingone joint global solver; sequential Corbetta did not calendar-lock (see [T11](../tickets/T11-mingone-global.md)).
+- **D21** Butterfly uses the Martini–Mingone N&S infimum instead of Gatheral–Jacquier sufficiency (see [T10](../tickets/T10-mm-butterfly.md)).
+- **D22** Fill CVI IVs at missing strikes by interpolating the existing CVI smile; do not change CVI fitting (see [T12](../tickets/T12-cvi-quote-gap.md)).
 
-The exact sufficient conditions and schemas are documented in `docs/parameterization.md` (D18 form; T01 inequalities plus Mingone's calendar `ψ` upper bound) and `docs/csv-contract.md`. The CVI/eSSVI included-quote count difference remains a residual fairness gap.
+The exact sufficient conditions and schemas are documented in `docs/parameterization.md` (D18 form; T10 MM butterfly plus Mingone's calendar `ψ` upper bound) and `docs/csv-contract.md`.
 
 ## Not yet specified
 

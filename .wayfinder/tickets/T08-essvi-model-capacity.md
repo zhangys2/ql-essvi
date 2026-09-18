@@ -146,8 +146,8 @@ D6 at `1e-12` on these listed bands will not look like a high score even with th
 - At least 12 ATM quotes are pairwise calendar-infeasible. `supported`
 - GJ sufficient butterfly caps short-dated `ψ` at `√(4θ/(1+|ρ|))` ≈ 0.022 at 7 days with
   `ρ = −0.8`, which cannot reach the included 60% put wing. The Martini–Mingone necessary-and-sufficient
-  butterfly infimum is larger, but T01 deliberately uses GJ; opening MM is a separate constraint
-  ticket, not a form change. `inferred`
+  butterfly infimum is larger, but T01 originally used GJ; that constraint ticket is
+  [T10](T10-mm-butterfly.md) / D21. `inferred`
 - A well-fitted 3N eSSVI should beat 1.14% and should beat CVI on the common 7,594 by a meaningful
   margin if the model has capacity worth measuring. A plausible range at `1e-12` is **low single
   digits to low tens of percent**, not 80%+. Treat anything still near 1% after a real Corbetta

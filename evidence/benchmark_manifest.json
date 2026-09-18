@@ -87,11 +87,11 @@
       "rows": 5050
     },
     "essvi_common_score.json": {
-      "sha256": "105e1c2d10fbb605439c819b4e94aa36437a60f1b736eab4fd8057ae95dd2167",
+      "sha256": "a184eab27c94764cb7506b14a78800321d6b5b757f87218ef1cdda6921ba64a9",
       "rows": 1
     },
     "cvi_common_score.json": {
-      "sha256": "cdf1e49706a9d20171109c3275f3de9c544b341f0d89bd98bcc59810798a9821",
+      "sha256": "aed17d33aa447fe6da368293d82ed5e8990aa99eedcb0d05761f52c5fd8c0003",
       "rows": 1
     }
   },
@@ -99,6 +99,6 @@
     "CVI fitting behavior remains in the notebook; export cell is additive and writes surface_grid, fitted_quotes, parameters, and diagnostics.",
     "The adapters preserve all 14,364 normalized quote IDs and explicitly mark excluded/not_fitted rows.",
     "Timing is indicative and not a decisive cross-language metric.",
-    "D19: score JSON includes mean_iv_distance_to_band and median_iv_distance_to_band; exact bid_ask_containment is unchanged."
+    "D22: adapt_cvi_output.py interpolates CVI total variance in log-moneyness when the exact strike is missing on a CVI tenor."
   ]
 }

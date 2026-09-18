@@ -27,7 +27,10 @@ struct Surface {
 
 double sliceTotalVariance(const Slice& slice, double k);
 
-// Fast, explicit sufficient butterfly constraints from Gatheral-Jacquier.
+// Martini--Mingone necessary-and-sufficient bound on psi^2 (arXiv:2106.02418 / 2204.00312).
+double mmPsi2Bound(double theta, double abs_rho, double safety = 1e-10);
+
+// Butterfly: Roger-Lee psi*(1+|rho|)<4 plus the MM infimum (replaces GJ's psi^2 (1+|rho|)<4 theta).
 bool butterflySafe(const Slice& slice, double safety = 1e-10);
 
 // Hendriks-Martini / Corbetta adjacent-slice calendar sufficient test.

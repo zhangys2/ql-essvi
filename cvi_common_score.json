@@ -1,10 +1,10 @@
 {
   "quotes_total": 14364,
   "quotes_included": 7740,
-  "quotes_scored": 7594,
-  "bid_ask_containment": 0.00237029233605478,
-  "mean_iv_distance_to_band": 0.4279053751265256,
-  "median_iv_distance_to_band": 0.29939223107417123,
+  "quotes_scored": 7714,
+  "bid_ask_containment": 0.0027223230490018148,
+  "mean_iv_distance_to_band": 0.42796752374928765,
+  "median_iv_distance_to_band": 0.29818254239532954,
   "butterfly_violations": 1780,
   "calendar_violations": 3963,
   "grid_points": 5050
