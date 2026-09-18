@@ -62,22 +62,28 @@ Slice anchored(double t, const Atm& atm, double rho, double psi, const Slice* pr
   if (prev) theta = std::max(theta, prev->theta + kEps);
   if (prev && prev->psi > kEps)
     theta = std::max(theta, psi * prev->theta / prev->psi + kEps);
-  theta = std::max(theta, psi * psi * (1.0 + std::abs(rho)) / 4.0 + 2 * kEps);
   theta = std::max(theta, kEps);
+  for (int i = 0; i < 48; ++i) {
+    if (psi * psi <= mmPsi2Bound(theta, std::abs(rho)) - 2 * kEps) break;
+    theta *= 1.08;
+  }
   return {t, theta, psi, rho};
 }
 
-double psiUpper(double rho) {
+double psiUpper(double theta, double rho) {
   const double ar = std::abs(rho);
-  if (!(ar < 1.0 - kEps)) return 0;
-  return 4.0 / (1.0 + ar) - kEps;
+  if (!(ar < 1.0 - kEps) || !(theta > kEps)) return 0;
+  const double rl = 4.0 / (1.0 + ar) - kEps;
+  const double mm = std::sqrt(std::max(0.0, mmPsi2Bound(theta, ar))) - kEps;
+  return std::min(rl, mm);
 }
 
 double psiLower(const Slice* prev, double rho) {
-  if (!prev) return kEps;
+  double lo = 2 * kEps;
+  if (!prev) return lo;
   const double ratio =
       std::max((1 + prev->rho) / (1 + rho), (1 - prev->rho) / (1 - rho));
-  return std::max(prev->psi + kEps, prev->psi * ratio + kEps);
+  return std::max(lo, std::max(prev->psi + kEps, prev->psi * ratio + kEps));
 }
 
 CalibrationResult fitSlice(const std::vector<Quote>& qs, double t, const Slice* prev) {
@@ -100,11 +106,12 @@ CalibrationResult fitSlice(const std::vector<Quote>& qs, double t, const Slice* 
     }
   };
 
+  const double theta0 = prev ? std::max(atm.theta_star, prev->theta + kEps) : atm.theta_star;
   const auto searchRhoWindow = [&](double rlo, double rhi, double rstep, int psi_steps) {
     for (double rho = rlo; rho <= rhi + 1e-12; rho += rstep) {
       if (std::abs(rho) >= 0.98) continue;
       const double lo = psiLower(prev, rho);
-      const double hi = psiUpper(rho);
+      const double hi = psiUpper(theta0, rho);
       if (!(hi > lo)) continue;
       consider(anchored(t, atm, rho, lo, prev));
       consider(anchored(t, atm, rho, hi, prev));

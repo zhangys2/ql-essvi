@@ -46,6 +46,5 @@ Closed 2026-09-13 (`bd8383d`); resolution recorded 2026-09-16 (D11, D16).
   - `python/adapt_cvi_output.py` and `python/adapt_cvi_grid.py` map CVI output onto all normalized
     quote IDs and the shared grid.
   - `python/make_common_grid.py` resamples both models onto one common grid.
-- **Residual gap:** CVI fits 7,594 of the 7,740 included quotes and leaves the rest `not_fitted`.
-  Containment is scored on that intersection, and the grid on a 50-maturity intersection (see
-  `benchmark_report.md`).
+- **Residual gap (closed D22 / T12):** missing CVI strikes on a fitted tenor are filled by
+  interpolating the existing CVI smile. Quotes on tenors CVI never fitted stay `not_fitted`.

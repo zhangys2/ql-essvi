@@ -87,7 +87,14 @@ int main() {
   essvi::Slice s{1.0, 0.04, 0.20, -0.4};
   assert(std::abs(essvi::sliceTotalVariance(s, 0.0) - s.theta) < 1e-12);
   assert(essvi::butterflySafe(s));
-  assert(essvi::sliceTotalVariance(s, 1.0) > 0.0);
+  const double gj2 = s.psi * s.psi * (1.0 + std::abs(s.rho));
+  assert(gj2 < 4.0 * s.theta);  // existing ATM slice is inside GJ, hence inside MM
+  essvi::Slice mm_only{1.0, 0.04, 0.40, -0.4};
+  assert(mm_only.psi * mm_only.psi * (1.0 + std::abs(mm_only.rho)) >= 4.0 * mm_only.theta);
+  assert(mm_only.psi * (1.0 + std::abs(mm_only.rho)) < 4.0);
+  essvi::Slice short_dated{0.019178, 0.000213385774644, 0.02, 0.0};
+  assert(essvi::mmPsi2Bound(short_dated.theta, 0.0) > short_dated.psi * short_dated.psi);
+  assert(essvi::butterflySafe(short_dated, 1e-8));
 
   essvi::Surface surface{{{0.5, 0.04, 0.20, -0.4},
                           {1.0, 0.07, 0.30, -0.35}}};

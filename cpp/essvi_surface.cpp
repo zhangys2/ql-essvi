@@ -1,6 +1,7 @@
 #include "essvi_surface.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <sstream>
 
 namespace essvi {
@@ -37,11 +38,39 @@ double Surface::impliedVolatility(double expiry, double k) const {
   return w >= 0 ? std::sqrt(w / expiry) : NAN;
 }
 
+double mmPsi2Bound(double theta, double abs_rho, double safety) {
+  const double ar = abs_rho;
+  if (!(theta > safety) || !(ar >= 0.0) || !(ar < 1.0 - safety)) return 0.0;
+  const double s = std::sqrt(std::max(0.0, 1.0 - ar * ar));
+  if (!(s > safety)) return 0.0;
+  const double l2 = 1.0 / std::tan(std::acos(-ar) / 3.0);
+  auto ratio = [&](double l) {
+    const double n = s + ar * l + std::sqrt(l * l + 1.0);
+    const double np = ar + l / std::sqrt(l * l + 1.0);
+    const double npp = std::pow(l * l + 1.0, -1.5);
+    const double g = np / 4.0;
+    const double h = 1.0 - (l - ar / s) * np / (2.0 * n);
+    const double g2 = npp - np * np / (2.0 * n);
+    const double den = theta * s * g * g - g2;
+    if (!(den > 0.0) || !(h * h >= 0.0)) return HUGE_VAL;
+    return 4.0 * theta * s * h * h / den;
+  };
+  double best = HUGE_VAL;
+  const double lo = l2 + 1e-8;
+  const double hi = std::max(50.0, lo + 1.0);
+  for (int i = 0; i <= 256; ++i) {
+    const double u = static_cast<double>(i) / 256.0;
+    const double l = lo * std::pow(hi / lo, u);
+    best = std::min(best, ratio(l));
+  }
+  return std::isfinite(best) ? best : 0.0;
+}
+
 bool butterflySafe(const Slice& s, double safety) {
   const double ar = std::abs(s.rho);
-  return s.theta > safety && s.psi > safety && std::abs(s.rho) < 1.0 - safety &&
+  return s.theta > safety && s.psi > safety && ar < 1.0 - safety &&
          s.psi * (1.0 + ar) < 4.0 - safety &&
-         s.psi * s.psi * (1.0 + ar) < 4.0 * s.theta - safety;
+         s.psi * s.psi <= mmPsi2Bound(s.theta, ar, safety) - safety;
 }
 
 bool calendarSafe(const Slice& a, const Slice& b, double safety) {

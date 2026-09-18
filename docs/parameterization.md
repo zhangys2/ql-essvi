@@ -14,15 +14,16 @@ power-law `phi(theta)=eta*theta^(-lambda)` and `rho(T)=-0.98+1.96*sigmoid(a+b lo
 
 The checked-in calibrator implements D18: slices are fitted sequentially going forward
 (Corbetta et al.), anchoring `theta` near ATM, sampling `rho`, and searching `psi` inside the
-T01 bounds. Mingone's product-of-intervals reparameterization is the same 3N family and remains
-the D14 fallback if sequential calendar locking appears. D17's bid/ask band objective in total
-variance is unchanged.
+adjacent Mingone interval. **D20** (2026-09-17; [T11](../.wayfinder/tickets/T11-mingone-global.md)):
+the joint product-of-intervals solver is retired; sequential never calendar-locked on this
+snapshot. D17's bid/ask band objective in total variance is unchanged.
 
-For numerical safety, calibration enforces strict versions of the following sufficient conditions:
+For numerical safety, calibration enforces strict versions of the following conditions:
 
 - `theta > 0`, `psi > 0`, `abs(rho) < 1`
-- butterfly (Gatheral--Jacquier sufficient bound):
-  `psi*(1+abs(rho)) < 4` and `psi^2*(1+abs(rho)) < 4*theta`
+- butterfly (Martini--Mingone N&S, **D21**; [T10](../.wayfinder/tickets/T10-mm-butterfly.md)):
+  `psi*(1+abs(rho)) < 4` (Roger-Lee) and `psi^2 <= f_MM(theta, |rho|)`, which replaces
+  Gatheral--Jacquier `psi^2*(1+abs(rho)) < 4*theta`
 - adjacent calendar slices, ordered by expiry:
   `theta_2 > theta_1`, `psi_2 > psi_1`,
   `psi_2 > psi_1*max((1+rho_1)/(1+rho_2), (1-rho_1)/(1-rho_2))`,
@@ -33,16 +34,16 @@ The scorer independently checks the generated surface on a dense grid from `k=-0
 at 0.01 increments per expiry. Points outside the observed included quote range are marked
 `is_tail=true`; all points are included in arbitrage checks, while quote containment uses only
 observed quotes. **D19:** exact in-band fraction uses a `1e-12` tolerance; models are ranked by
-mean/median IV distance to the nearer bid/ask edge (zero if inside). The MM necessary-and-sufficient
-butterfly infimum is not used; this is explicitly a conservative sufficient-condition benchmark.
+mean/median IV distance to the nearer bid/ask edge (zero if inside). Butterfly constraints use
+the Martini--Mingone infimum (D21), independently checked by the dense-grid scan.
 
 ## Enforcement and independent checks
 
 | Property | Calibration enforcement (D18) | Post-fit check |
 |---|---|---|
 | `theta > 0`, `psi > 0`, `abs(rho) < 1` | per-slice domain | parameter CSV and diagnostics |
-| GJ butterfly sufficient bounds | hard inequalities with strict epsilon margin, per slice | dense-grid butterfly scan |
-| HM/Corbetta calendar sufficient conditions | hard adjacent-slice inequalities with strict epsilon margin (sequential lower bounds, or Mingone interval encoding) | dense-grid calendar scan |
+| MM butterfly N&S infimum (D21) | hard Roger-Lee plus `psi^2 <= f_MM`, per slice | dense-grid butterfly scan |
+| HM/Corbetta calendar sufficient conditions | hard adjacent-slice inequalities with strict epsilon margin (sequential Mingone interval) | dense-grid calendar scan |
 | solver failure | no unconstrained fallback; `converged=false` and error are emitted | diagnostics CSV |
 | tail safety | dense grid extends to `k in [-0.5,0.5]`; tail points are retained | all grid points included in arbitrage checks |
 
