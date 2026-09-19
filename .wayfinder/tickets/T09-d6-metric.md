@@ -46,7 +46,7 @@ IV distance to the bid/ask band** (0 if the fitted IV is inside, otherwise the d
 the nearer edge). Arbitrage-violation counts stay secondary (D6).
 
 **Evidence, D18 vs CVI on the 2024-11-11 snapshot** (`normalized_quotes.csv` with
-`fitted_quotes.csv` / `cvi_fitted_quotes.csv`):
+`fitted_quotes.csv` / `cvi_fitted_quotes.csv`), the numbers that closed this ticket:
 
 | | n | exact in-band | 10 vol-bp | 1 vol point | mean dist | median dist |
 |---|---:|---:|---:|---:|---:|---:|
@@ -54,9 +54,22 @@ the nearer edge). Arbitrage-violation counts stay secondary (D6).
 | CVI | 7,594 | 0.2370% | 0.6452% | 5.4912% | 42.79 vol pts | 29.94 vol pts |
 | eSSVI on common 7,594 | 7,594 | 1.7777% | | | 4.85 vol pts | 4.45 vol pts |
 
-10 vol-bp containment barely moves (1.86% → 2.74%), so this is still not a `1e-12` artefact.
-Mean distance does move: eSSVI is about nine times closer to the bands than CVI. Most misses
-on both models sit above ask (eSSVI 6,860 / 7,740; CVI 7,133 / 7,594).
+10 vol-bp containment barely moved (1.86% → 2.74%), so this was not a `1e-12` artefact.
+Mean distance did move: eSSVI was about nine times closer to the bands than CVI. Most misses
+on both models sat above ask (eSSVI 6,860 / 7,740; CVI 7,133 / 7,594).
+
+**Later evidence, D21/D22** on the same snapshot (Martini–Mingone butterfly; CVI smile
+interpolation). Ranking is unchanged.
+
+| | n | exact in-band | 10 vol-bp | 1 vol point | mean dist | median dist |
+|---|---:|---:|---:|---:|---:|---:|
+| eSSVI (D21) | 7,740 | 2.1318% | 3.0749% | 12.1835% | 4.71 vol pts | 4.37 vol pts |
+| CVI (D22) | 7,714 | 0.2722% | 0.6741% | 5.4576% | 42.80 vol pts | 29.82 vol pts |
+| eSSVI on common 7,714 | 7,714 | 2.0871% | 3.0334% | 12.0949% | 4.72 vol pts | 4.37 vol pts |
+
+D21 raised exact containment from 1.86% to 2.13% and cut the mean miss from 4.87 to 4.71 vol
+points. D22 scores 7,714 CVI quotes; 26 remain `not_fitted` on 2028-12-15. Most misses still
+sit above ask (eSSVI 6,708 / 7,740; CVI 7,228 / 7,714).
 
 **Load-bearing assumption.** D6's object of study remains "is the fitted IV inside the quoted
 band?", not mid-IV RMSE. Distance-to-band is that same quantity with a magnitude.

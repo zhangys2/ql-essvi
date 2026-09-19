@@ -63,22 +63,23 @@ T01 butterfly and Hendriks–Martini / Corbetta calendar inequalities, not D13's
 calendar `ψ` upper bound was added during D18 implementation. **D19** /
 [T09](T09-d6-metric.md) kept exact containment and ranks by IV distance to the band.
 
-**Cheapest disconfirming observation.** Run a Corbetta sequential (or Mingone global) fit of that
-3N family on this snapshot with the D17 band objective; if 1e-12 containment stays near 1%, the
-form change was not the bottleneck and D6 itself needs revisiting.
+**Cheapest disconfirming observation.** The D18 Corbetta sequential fit of that 3N family with
+the D17 band objective reached 1.86% exact containment, not ~1%. D21's Martini–Mingone infimum
+then 2.13%. That triggered [T09](T09-d6-metric.md) / D19 rather than another parameterization
+change. Mingone's joint global solver was not needed (D20 / T11).
 
 **Load-bearing assumption.** D5's object of study is the eSSVI *slice* `(θ, ρ, ψ)`, with constant
 `ρ` recovering SSVI — not a particular low-dimensional curve for `ρ(T)` and `φ(θ)`.
 
-### Diagnosis (current D13/D17 fit)
+### Diagnosis (D13/D17 fit that opened this ticket)
 
 Evidence from `parameters.csv`, `diagnostics.csv`, `fitted_quotes.csv`, `normalized_quotes.csv`,
 and `python/score_outputs.py` on the 2024-11-11 snapshot (7,740 included quotes, 51 expiries).
 
 1. **The four globals never left the SLSQP start.** Recovered `η = 0.3`, `λ = 0.25`, `ρ(T) ≡ 0`
-   (because `a = 0`, `b = 0`). That is exactly `x[0]=log(0.3)`, `x[1]=0.25`, `x[2]=0`, `x[3]=0`
-   in `cpp/calibrator.cpp`. Only the 51 `θ_t` moved. The published surface is symmetric SSVI with
-   a frozen power-law `φ`, not a fitted eSSVI skew. `supported`
+   (because `a = 0`, `b = 0`). That was exactly `x[0]=log(0.3)`, `x[1]=0.25`, `x[2]=0`, `x[3]=0`
+   in the D13 joint calibrator. Only the 51 `θ_t` moved. The published surface was symmetric SSVI
+   with a frozen power-law `φ`, not a fitted eSSVI skew. `supported`
 
 2. **This is not a `1e-12` scoring artefact.** Median half-band is 8.1 vol-bps; mean half-band is
    19 vol-bps. Median distance from the fitted IV to the nearer band edge is 5.8 vol points.
@@ -148,14 +149,14 @@ D6 at `1e-12` on these listed bands will not look like a high score even with th
   quality is *price* error of a few bps of spot, not IV-band containment. `verified-source`
   (Corbetta §4; this chain's band widths).
 - At least 12 ATM quotes are pairwise calendar-infeasible. `supported`
-- GJ sufficient butterfly caps short-dated `ψ` at `√(4θ/(1+|ρ|))` ≈ 0.022 at 7 days with
-  `ρ = −0.8`, which cannot reach the included 60% put wing. The Martini–Mingone necessary-and-sufficient
-  butterfly infimum is larger, but T01 originally used GJ; that constraint ticket is
-  [T10](T10-mm-butterfly.md) / D21. `inferred`
-- A well-fitted 3N eSSVI should beat 1.14% and should beat CVI on the common 7,594 by a meaningful
-  margin if the model has capacity worth measuring. A plausible range at `1e-12` is **low single
-  digits to low tens of percent**, not 80%+. Treat anything still near 1% after a real Corbetta
-  fit as a D6-metric problem, not another parameterization problem. `inferred`
+- GJ sufficient butterfly capped short-dated `ψ` at `√(4θ/(1+|ρ|))` ≈ 0.022 at 7 days with
+  `ρ = −0.8`, which cannot reach the included 60% put wing. D21 / [T10](T10-mm-butterfly.md)
+  replaced that cap with the Martini–Mingone N&S infimum. `inferred` at ticket close; `supported`
+  after D21.
+- After D18 the 3N family reached 1.86% exact containment (mean miss 4.87 vol pts) versus CVI's
+  0.24% on 7,594 quotes. After D21/D22: eSSVI 2.13% / 4.71 vol pts versus CVI 0.27% / 42.80 on
+  7,714. Containment stayed low-single-digit as predicted; distance-to-band is the ranking
+  metric (D19). `supported`
 
 ### Rejected alternatives
 
@@ -164,13 +165,13 @@ D6 at `1e-12` on these listed bands will not look like a high score even with th
   because constant/`T`-smooth `ρ` underfits. The independent-slice ρ's already span roughly
   −0.98 to +0.32.
 - **Richer global `φ` or `ρ` families (still low-dimensional).** Same objection at higher
-  parameter count; does not give per-slice smile freedom and does not relax GJ or calendar.
+  parameter count; does not give per-slice smile freedom and does not relax butterfly or calendar.
 - **Mingone as a different model.** It is a constraint reparameterization of the recommended
   3N form, not extra capacity. It was listed as the D14 fallback and later retired (D20 / T11).
 - **Raw per-slice SVI.** Out of scope (D5 / map).
-- **Relaxing D6's `1e-12` to "near band" as the diagnosis.** That would hide a 5.8-vol-point
-  residual; it is a possible *later* metric ticket, not an explanation of the current 1%.
-  Done as [T09](T09-d6-metric.md) / D19: exact containment is kept, ranking uses distance-to-band.
+- **Relaxing D6's `1e-12` to "near band" as the diagnosis.** That would have hidden a 5.8-vol-point
+  residual; it was not an explanation of the D13/D17 1%. Done as [T09](T09-d6-metric.md) / D19:
+  exact containment is kept, ranking uses distance-to-band.
 
 ### Sources
 
