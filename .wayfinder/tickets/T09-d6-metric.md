@@ -19,9 +19,9 @@ structurally caps at low single digits?
 
 D6's in-band fraction is the comparison the project was built to make. On this listed-index
 chain the bands are O(8–19) vol-bps, at least 12 adjacent ATM bands are calendar-infeasible,
-and T01 uses Gatheral–Jacquier sufficient butterfly bounds. Exact containment then stays near
-zero for *any* arbitrage-free surface, so "eSSVI 1.86% vs CVI 0.24%" does not show how far
-each fit sits from the market.
+and T01 originally used Gatheral–Jacquier sufficient butterfly bounds (later D21 / T10).
+Exact containment then stays near zero for *any* arbitrage-free surface, so
+"eSSVI 1.86% vs CVI 0.24%" does not show how far each fit sits from the market.
 
 ## Scope
 

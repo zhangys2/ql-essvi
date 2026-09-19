@@ -13,10 +13,8 @@ diagnostics.csv
 essvi_score.json
 cvi_score.json
 common_quotes.csv
-cvi_common_score.json
 cvi_fitted_quotes.csv
 cvi_surface_grid.csv
-essvi_common_score.json
 .pi-subagents/
 
 .pi/

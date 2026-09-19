@@ -37,25 +37,24 @@ its no-arbitrage conditions as explicit inequalities, each traced to a named sou
 ## Resolution
 
 Closed 2026-09-13 (`bd8383d`); resolution recorded 2026-09-16. The canonical statement is
-[`docs/parameterization.md`](../../docs/parameterization.md); this was the D13 record. **D18**
-(2026-09-16) supersedes the power-law `phi` and smooth `rho(T)` families with free
-`(theta_t, rho_t, psi_t)` per expiry; the slice formula and T01 sufficient conditions below are
-unchanged. See [T08](T08-essvi-model-capacity.md).
+[`docs/parameterization.md`](../../docs/parameterization.md). **D18** (2026-09-16,
+[T08](T08-essvi-model-capacity.md)) superseded D13's power-law `phi` and sigmoid `rho(T)` with
+free `(theta_t, rho_t, psi_t)` per expiry. **D21** (2026-09-17, [T10](T10-mm-butterfly.md))
+replaced Gatheral–Jacquier butterfly sufficiency with the Martini–Mingone infimum.
 
 - **Form:** `w(k,T) = 1/2 (theta + rho psi k + sqrt((psi k + theta rho)^2 + theta^2 (1-rho^2)))`
   with `k = log(K/F(T))`, `theta` forward ATM total variance, `psi = theta phi`.
-- **`phi` family:** power law `phi(theta) = eta theta^(-lambda)`, `eta > 0`, `0 <= lambda <= 1/2`.
-- **`rho` family:** `rho = -0.98 + 1.96 sigmoid(a + b log T)`, `a in [-5,5]`, `b in [-2,2]`, so
-  `|rho| < 0.98`. Constant rho (`b = 0`) recovers SSVI (D5).
+  Each listed expiry has free `(theta_t, rho_t, psi_t)`. Constant rho recovers SSVI (D5).
+- **Superseded D13 families:** power law `phi(theta) = eta theta^(-lambda)` and
+  `rho = -0.98 + 1.96 sigmoid(a + b log T)` are not calibrated.
 - **Sufficient conditions, enforced during calibration** (strict, margin `1e-8`):
   - `theta > 0`, `psi > 0`, `|rho| < 1`
-  - butterfly (Gatheral–Jacquier 2014): `psi (1+|rho|) < 4`, `psi^2 (1+|rho|) < 4 theta`
-  - calendar, adjacent slices (Hendriks–Martini; Corbetta et al.): `theta_2 > theta_1`,
-    `psi_2 > psi_1`, `psi_2 > psi_1 max((1+rho_1)/(1+rho_2), (1-rho_1)/(1-rho_2))`
+  - butterfly (Martini–Mingone N&S, D21): `psi (1+|rho|) < 4` (Roger-Lee) and
+    `psi^2 <= f_MM(theta, |rho|)` as in [T10](T10-mm-butterfly.md). This replaces
+    Gatheral–Jacquier `psi^2 (1+|rho|) < 4 theta`.
+  - calendar, adjacent slices (Hendriks–Martini; Corbetta et al.), plus Mingone's sufficient
+    `psi` upper bound (added with D18): `theta_2 > theta_1`, `psi_2 > psi_1`,
+    `psi_2 > psi_1 max((1+rho_1)/(1+rho_2), (1-rho_1)/(1-rho_2))`, and
+    `psi_2 < (psi_1 / theta_1) * theta_2`.
 - **Checked afterwards only:** dense-grid butterfly (call-price convexity) and calendar (total
-  variance non-decreasing at fixed `k`) scans in `python/score_outputs.py`, tails included. The
-  necessary-and-sufficient butterfly infimum is deliberately not used.
-
-**Rho driver:** rho is a function of `log T`, not `log theta`. When this resolution was recorded,
-the doc said `log theta` while the code used `log T`. On 2026-09-16 the doc was corrected to match
-the code, which leaves results unchanged. Both drivers increase with expiry in a calendar-safe fit.
+  variance non-decreasing at fixed `k`) scans in `python/score_outputs.py`, tails included.

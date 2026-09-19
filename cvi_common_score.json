@@ -3,7 +3,7 @@
   "quotes_included": 7740,
   "quotes_scored": 7714,
   "bid_ask_containment": 0.0027223230490018148,
-  "mean_iv_distance_to_band": 0.42796752374928765,
+  "mean_iv_distance_to_band": 0.42795677140178234,
   "median_iv_distance_to_band": 0.29818254239532954,
   "butterfly_violations": 1780,
   "calendar_violations": 3963,
