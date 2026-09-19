@@ -40,7 +40,8 @@ Environment facts verified 2026-09-12:
 - CVI source of truth is `~/source/repos/CVI-Vol-Surface-Fitting` (public GitHub repo,
   `zhangys2/CVI-Vol-Surface-Fitting`). The fitter lives in the **notebook**, not in a module;
   `vol_surface_cuosqp.py` is only a cvxpy/cuOSQP solver harness.
-- The notebook has **no export calls**, but does contain reusable scaffolding: `EstimateForwards`,
+- As of D16 the notebook has an additive export cell. On 2026-09-12 it had **no export calls**,
+  but it did contain reusable scaffolding: `EstimateForwards`,
   `filterData`, `black_model`, `CalculatePDF`, `NoButterflyArbitrageCDF`/`PDF`,
   `NoCalendarSpreadArbitrage`, `PositiveVariance`, `UpwardSlopingWings`, `RogerLeeMoment`,
   `LinearWingExtrapolation`.

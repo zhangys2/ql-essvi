@@ -90,8 +90,8 @@
     ],
     "status_counts": {
       "excluded": 6624,
-      "ok": 7365,
-      "not_fitted": 375
+      "ok": 7714,
+      "not_fitted": 26
     }
   },
   "cvi_surface_grid.csv": {
