@@ -5,8 +5,8 @@
 - Current: blocked
 - Last transition: `changes-requested` → `blocked`
 - At: 2026-10-16T12:55:26Z
-- Reason/evidence: round 3 was the third and final permitted review round. Its verification axis passed the configured full command (CTest 5/5, pytest 6/6) but found two unresolved P2 coverage findings: the production CLI all-pass exit-0 mapping and complete no-mutation assertions for the zero-expected-count branch. A fourth review is not permitted; do not mark the ticket approved without fresh review.
-- Blocker: Independent review cap reached with round-3 verification findings unresolved.
+- Reason/evidence: Round-3 coverage findings were corrected in `a556889611a276a6cb75f47bb0e5a626b819f026`; the configured full command passes (CTest 5/5, pytest 6/6). The review cap remains reached, so these follow-up corrections have no permitted independent review and the ticket cannot be approved or finished.
+- Blocker: Independent review cap reached; follow-up fixes require an allowed review path before approval.
 
 ## Claim
 
@@ -43,7 +43,7 @@ Extend the market-like benchmark to report the Addendum B quality metrics for wa
 
 ## Blocked by
 
-Independent review cap reached with two unresolved P2 verification findings from round 3. The implementation has not been approved for handoff.
+Fresh independent review of the post-round-3 corrections is required, but the review procedure allows no fourth round.
 
 ## Expected seam
 
@@ -77,7 +77,9 @@ Independent review cap reached with two unresolved P2 verification findings from
 | 2026-10-16T12:41:46Z | Final verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `439327d` | passed | Release build succeeded; CTest 5/5 passed; pytest 6/6 passed. |
 | 2026-10-16T12:42:32Z | Review round 3 start | Final review range `af7f0e4bf883dec67e26dc6c94e5d665a8fb5536..c15ef8e48e0bac5a1ff2c13c7e1bb7327165756c`; three independent axes | `/home/zhangy/git/ql-essvi` | `c15ef8e` | reviewing | Round-2 findings resolved; fresh spec, standards, and verification review pending. |
 | 2026-10-16T12:54:40Z | Review round 3 | Base-to-HEAD review `af7f0e4bf883dec67e26dc6c94e5d665a8fb5536..c15ef8e48e0bac5a1ff2c13c7e1bb7327165756c`; three independent axes | `/home/zhangy/git/ql-essvi` | `c15ef8e` | changes required | Spec and standards approved. The configured full command passed CTest 5/5 and pytest 6/6. Verification identified two P2 test gaps: the production CLI all-pass exit-0 mapping and all aggregate fields on the zero-expected-count no-mutation branch. |
-| 2026-10-16T12:55:26Z | Review cap | Round 3 completed | `/home/zhangy/git/ql-essvi` | `c15ef8e` | blocked | The review procedure allows at most three rounds. The round-3 P2 findings remain unreviewed; no approval or handoff recorded. |
+| 2026-10-16T12:55:26Z | Review cap | Round 3 completed | `/home/zhangy/git/ql-essvi` | `c15ef8e` | blocked | The review procedure allows at most three rounds. The round-3 P2 findings remained unreviewed; no approval or handoff recorded. |
+| 2026-10-16T13:32:22Z | Post-review remediation (unreviewed) | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `a556889` | passed | Added `qualityCheckExitCode`, used by `main` and tested for all-pass 0 and target-miss 2; zero-count test now uses nonzero sentinels and asserts every aggregate field unchanged. Release build succeeded; CTest 5/5 and pytest 6/6 passed. |
+| 2026-10-16T13:32:22Z | Passing CLI smoke after remediation | `./build/essvi_bench --scenario quiet --scenario-updates 1 --seed 1 --expiries 1 --quotes-per-expiry 1 --check` | `/home/zhangy/git/ql-essvi` | `a556889` | passed | Real CLI returned exit 0; all reported target and hard-limit statuses were `PASS`. The permanent regression covers the production exit-code helper deterministically. |
 
 ## Review dispositions
 
@@ -89,9 +91,9 @@ Independent review cap reached with two unresolved P2 verification findings from
 | 1 — Verification P2 | Successful `--check` CLI path and exit 0 were untested. | Resolved | The permanent test covers the deterministic shared target-miss decision helper for passing, missed, and unavailable checks; real CLI exit 0 was exercised as a smoke, and a separate fast case asserts exit 2 on a target miss. Machine-dependent timing is not asserted. |
 | 2 — Standards P2 (judgment) | Successful CLI test asserts measured one-sample quiet timing remains under the performance target; host scheduling can cause false failures unrelated to exit-status behavior. | Resolved | Removed the timing-pinned CLI success test; `hasTargetMiss` is tested for all-pass, target-miss, and unavailable check lists. A one-off real CLI smoke returned 0 with all statuses passing. |
 | 2 — Verification P2 (UNTESTED) | `mergePairedQuoteMetrics` has an `expected_quote_count == 0` rejection branch with no test; existing empty-metric tests do not call the helper with zero expected count. | Resolved | CTest now calls the helper with zero expected quote count and asserts false return, zero `paired_updates`, and unchanged warm/cold aggregate quote counts. |
-| 3 — Verification P2 (UNTESTED) | No deterministic test exercises the production `--check` all-pass decision that returns exit 0. The unit test covers `hasTargetMiss(false)` but not `main`'s mapping from target status to process exit code; the CLI regression only asserts exit 2 on a miss. | Unresolved | Add a deterministic production exit-code helper used by `main`, and assert all-pass produces 0 and a target miss produces 2 without timing-dependent benchmark inputs. |
-| 3 — Verification P2 (UNTESTED) | The zero-expected-count test checks `paired_updates` and warm/cold quote counts only; it cannot detect partial mutation of other aggregate fields. | Unresolved | Seed aggregate metric fields and input metrics with non-zero sentinels, invoke the zero-count guard, and assert every field remains unchanged. |
-| 3 — Review cap | A fourth independent review would exceed the configured maximum of three rounds. | Blocked | Preserve the round-3 findings and do not approve or finish without an allowed fresh review. |
+| 3 — Verification P2 (UNTESTED) | No deterministic test exercises the production `--check` all-pass decision that returns exit 0. The unit test covers `hasTargetMiss(false)` but not `main`'s mapping from target status to process exit code; the CLI regression only asserts exit 2 on a miss. | Corrected, not independently re-reviewed | Commit `a556889` adds and tests `qualityCheckExitCode`; `main` calls this helper and the C++ regression verifies all-pass returns 0, target miss returns 2, and unavailable remains a nonzero miss. No fourth review allowed. |
+| 3 — Verification P2 (UNTESTED) | The zero-expected-count test checks `paired_updates` and warm/cold quote counts only; it cannot detect partial mutation of other aggregate fields. | Corrected, not independently re-reviewed | Commit `a556889` seeds every aggregate field and nonzero input metrics, then asserts `checks`, `paired_updates`, and every warm/cold metric field are unchanged. No fourth review allowed. |
+| 3 — Review cap | A fourth independent review would exceed the configured maximum of three rounds. | Blocked | Post-review corrections pass configured verification, but cannot receive the fresh independent review required for approval under the current cap. |
 
 ## Delivery record
 
@@ -104,7 +106,7 @@ Independent review cap reached with two unresolved P2 verification findings from
 - Unconfirmed commands: none (typecheck/lint not applicable)
 - Branch: `delivery/calibrator-speedup-addendum-b/CAL-B1`
 - Worktree: primary checkout, `/home/zhangy/git/ql-essvi` (configured checkout form)
-- Commits: `3fd4fe3` (implementation), `c3849a5` (review round-1 corrections), `439327d` (review round-2 corrections), `c15ef8e` (verification record)
+- Commits: `3fd4fe3` (implementation), `c3849a5` (review round-1 corrections), `439327d` (review round-2 corrections), `c15ef8e` (review record), `46a46da` (review blocker record), `a556889` (post-review test-gap corrections, not independently reviewed)
 - GitHub Issue: none (local tracker)
-- Tests: configured CTest 5/5 and pytest 6/6 pass; scenario matrix target/coverage misses are documented. Review round 3 found unresolved verification-coverage gaps.
+- Tests: configured CTest 5/5 and pytest 6/6 pass; scenario matrix target/coverage misses are documented. Post-review fixes remain unreviewed.
 - Diff review: blocked after round 3; no review approval or finished handoff.
