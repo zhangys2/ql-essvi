@@ -130,6 +130,30 @@ def main() -> int:
             f"{metric_range([run['loss_tol_compatibility_value'] for run in runs])}"
         )
 
+    print("Fallback/rejection reason histograms (five-seed totals):")
+    print(
+        "scenario | infeasible local result | loss above gate | "
+        "calendar repair failed | bound check failed"
+    )
+    reason_names = (
+        "infeasible_local_result",
+        "loss_above_gate",
+        "calendar_repair_failed",
+        "bound_check_failed",
+    )
+    for scenario in SCENARIOS:
+        runs = [reports[(scenario, seed)] for seed in SEEDS]
+        totals = {
+            reason: sum(run["fallback_reason_counts"][reason] for run in runs)
+            for reason in reason_names
+        }
+        print(
+            f"{scenario} | {totals['infeasible_local_result']} | "
+            f"{totals['loss_above_gate']} | "
+            f"{totals['calendar_repair_failed']} | "
+            f"{totals['bound_check_failed']}"
+        )
+
     print("Load averages by scenario and seed (1/5/15-minute, before -> after):")
     for scenario in SCENARIOS:
         for seed in SEEDS:

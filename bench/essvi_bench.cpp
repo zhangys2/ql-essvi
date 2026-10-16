@@ -59,8 +59,10 @@ struct Summary {
   std::uint64_t objective_evaluations{};
   std::uint64_t mm_bound_calls{};
   std::size_t local_solver_slices{};
+  std::uint64_t local_solver_starts{};
   std::uint64_t local_objective_evaluations{};
   std::uint64_t local_mm_bound_calls{};
+  essvi::WarmFallbackReasonCounts fallback_reason_counts;
   double warm_loss{};
   double cold_loss{};
   double quality_warm_loss{};
@@ -236,8 +238,17 @@ void record(Summary& summary, const essvi::CalibrationResult& warm,
   summary.objective_evaluations += warm.objective_evaluations;
   summary.mm_bound_calls += warm.mm_bound_calls;
   summary.local_solver_slices += warm.local_solver_slices;
+  summary.local_solver_starts += warm.local_solver_starts;
   summary.local_objective_evaluations += warm.local_objective_evaluations;
   summary.local_mm_bound_calls += warm.local_mm_bound_calls;
+  summary.fallback_reason_counts.infeasible_local_result +=
+      warm.fallback_reason_counts.infeasible_local_result;
+  summary.fallback_reason_counts.loss_above_gate +=
+      warm.fallback_reason_counts.loss_above_gate;
+  summary.fallback_reason_counts.calendar_repair_failed +=
+      warm.fallback_reason_counts.calendar_repair_failed;
+  summary.fallback_reason_counts.bound_check_failed +=
+      warm.fallback_reason_counts.bound_check_failed;
   summary.quality.checks += warm.quality_checks;
   summary.quality_warm_loss += warm.quality_warm_loss;
   summary.quality_reference_loss += warm.quality_reference_loss;
@@ -293,6 +304,15 @@ void printSummary(const Summary& summary) {
             << "fallback_updates=" << summary.path_counts[2] << '\n'
             << "fallback_slices=" << summary.fallback_slices << '\n'
             << "warm_local_solver_slices=" << summary.local_solver_slices << '\n'
+            << "warm_local_solver_starts=" << summary.local_solver_starts << '\n'
+            << "fallback_reason_infeasible_local_result="
+            << summary.fallback_reason_counts.infeasible_local_result << '\n'
+            << "fallback_reason_loss_above_gate="
+            << summary.fallback_reason_counts.loss_above_gate << '\n'
+            << "fallback_reason_calendar_repair_failed="
+            << summary.fallback_reason_counts.calendar_repair_failed << '\n'
+            << "fallback_reason_bound_check_failed="
+            << summary.fallback_reason_counts.bound_check_failed << '\n'
             << "warm_failures=" << summary.warm_failures << '\n'
             << "cold_failures=" << summary.cold_failures << '\n'
             << "warm_invalid_surfaces="
@@ -425,6 +445,15 @@ void writeJsonSummary(std::ostream& output, const Summary& summary) {
          << ",\"fallback\":" << summary.path_counts[2] << "}"
          << ",\"fallback_slices\":" << summary.fallback_slices
          << ",\"local_solver_slices\":" << summary.local_solver_slices
+         << ",\"local_solver_starts\":" << summary.local_solver_starts
+         << ",\"fallback_reason_counts\":{\"infeasible_local_result\":"
+         << summary.fallback_reason_counts.infeasible_local_result
+         << ",\"loss_above_gate\":"
+         << summary.fallback_reason_counts.loss_above_gate
+         << ",\"calendar_repair_failed\":"
+         << summary.fallback_reason_counts.calendar_repair_failed
+         << ",\"bound_check_failed\":"
+         << summary.fallback_reason_counts.bound_check_failed << "}"
          << ",\"warm_failures\":" << summary.warm_failures
          << ",\"cold_failures\":" << summary.cold_failures
          << ",\"warm_invalid_surfaces\":"

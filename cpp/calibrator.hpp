@@ -16,6 +16,13 @@ struct CalibrationTimings {
   double validation_seconds{};
 };
 
+struct WarmFallbackReasonCounts {
+  std::uint64_t infeasible_local_result{};
+  std::uint64_t loss_above_gate{};
+  std::uint64_t calendar_repair_failed{};
+  std::uint64_t bound_check_failed{};
+};
+
 struct CalibrationResult {
   Surface surface;
   // Consecutive unchanged-parameter reuses, aligned with surface.slices.
@@ -25,6 +32,8 @@ struct CalibrationResult {
   int iterations{};
   std::uint64_t objective_evaluations{};
   std::size_t local_solver_slices{};
+  std::size_t local_solver_starts{};
+  WarmFallbackReasonCounts fallback_reason_counts;
   std::uint64_t local_objective_evaluations{};
   std::uint64_t local_mm_bound_calls{};
   std::uint64_t mm_bound_calls{};

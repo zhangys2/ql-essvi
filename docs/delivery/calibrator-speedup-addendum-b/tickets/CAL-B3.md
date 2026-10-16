@@ -47,6 +47,10 @@ Improve changed-slice local fitting with deterministic multi-start in the bounde
 - Run focused warm CTest and configured full CTest/Python suites.
 - Re-run the four-scenario/five-seed benchmark to show reason histograms and quality/latency after the local solver change.
 
+## Named test expectation adjustments
+
+- `localWarmRefitHonorsBudgetAndQuality` replaces its former `<=15` local-evaluation assertion with exact 2 for this zero-loss fixture: one feasible incumbent objective plus one ATM-anchored start, then the required early stop. The separate noisy multi-start test requires all three starts and enforces the 25-evaluation cap; the existing quality comparison remains unchanged.
+
 ## Blocked by
 
 - CAL-B2 — per-quote gate and reuse semantics (completed at `00f4db21e1f778ce90b54bb12514cb9ba5dc8cb1`).
@@ -66,11 +70,15 @@ Improve changed-slice local fitting with deterministic multi-start in the bounde
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-10-16 | Baseline | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `00f4db21e1f778ce90b54bb12514cb9ba5dc8cb1` | passed | Release build succeeded; CTest 5/5 passed and pytest 10/10 passed. |
 | 2026-10-16 | Red | `export PATH="$PWD/.venv/bin:$PATH"; cmake --build build --target essvi_warm_calibrator_tests -j2` | `/home/zhangy/git/ql-essvi` | `00f4db21e1f778ce90b54bb12514cb9ba5dc8cb1` | expected failure | Compilation failed because the public result lacks the requested local-start and fallback-reason diagnostics; focused assertions express the CAL-B3 contract. |
+| 2026-10-16 | Green | `export PATH="$PWD/.venv/bin:$PATH"; cmake --build build --target essvi_warm_calibrator_tests essvi_bench -j2 && ctest --test-dir build -R essvi_warm_calibrator_tests --output-on-failure` | `/home/zhangy/git/ql-essvi` | working tree | passed | Focused tests passed for three bounded starts, 25-evaluation budget, ATM zero-loss stop, repeatability, feasibility rejection, all four reason categories, and existing CAL-B2 quality checks. |
+| 2026-10-16 | Scenario benchmark | `scripts/verify_scenarios.sh` | `/home/zhangy/git/ql-essvi` | working tree | target misses (exit 1) | Completed all 20 runs (four scenarios × five seeds × 200 updates); all `--check` calls returned 2 for target misses, not execution failures. The result table and reason histograms are in `docs/perf-results.md`; fast seeds 2–5 had warm failures and unpaired updates. |
+| 2026-10-16 | Configured verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | working tree | passed | Release build succeeded; CTest 5/5 passed; pytest 10/10 passed. |
 
 ## Review dispositions
 
 | Round | Finding | Disposition | Evidence |
 | --- | --- | --- | --- |
+| Waived | Independent review | User requested no further reviews | No independent review performed; the user said ‘no more reviews, just implement’. |
 
 ## Delivery record
 
@@ -84,5 +92,5 @@ Improve changed-slice local fitting with deterministic multi-start in the bounde
 - Worktree: primary checkout, `/home/zhangy/git/ql-essvi` (configured checkout form)
 - Commit: pending
 - GitHub Issue: none (local tracker)
-- Tests: pending
-- Diff review: pending
+- Tests: focused warm test passed; configured CTest 5/5 and pytest 10/10 passed; scenario script completed all 20 runs but returned 1 for target misses (documented in `docs/perf-results.md`).
+- Diff review: waived at user request; no independent review performed.

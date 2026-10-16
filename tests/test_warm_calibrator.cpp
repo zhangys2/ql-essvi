@@ -394,6 +394,56 @@ void failedJacobiPrefitFallsBackWithoutRetry() {
   assert(warm.slices_reused == 0);
 }
 
+void rejectedInfeasiblePriorIsCountedAndRefit() {
+  const auto previous_quotes = essvi::bench::realisticChain(1, 100, 3);
+  auto previous = essvi::calibrate(previous_quotes);
+  assert(previous.converged);
+  previous.surface.slices.front().psi = 4.0;
+  assert(!essvi::validate(previous.surface).empty());
+
+  essvi::WarmOptions options;
+  options.quote_tol = 0.0;
+  const auto warm = essvi::calibrateWarm(
+      previous_quotes, &previous, previous_quotes, options);
+  assert(warm.converged);
+  assert(essvi::validate(warm.surface).empty());
+  assert(warm.fallback_reason_counts.bound_check_failed > 0);
+}
+
+void failedCalendarRepairIsCounted() {
+  const auto previous_quotes = essvi::bench::realisticChain(3, 100, 1);
+  const auto previous = essvi::calibrate(previous_quotes);
+  assert(previous.converged);
+
+  auto current_quotes = previous_quotes;
+  const auto& old_front = previous.surface.slices[0];
+  const auto& old_next = previous.surface.slices[1];
+  essvi::Slice new_front{old_front.expiry, old_next.theta + 0.001,
+                         old_front.psi, old_front.rho};
+  assert(essvi::validate(essvi::Surface{{new_front}}).empty());
+  for (auto& quote : current_quotes) {
+    if (quote.expiry == old_front.expiry) {
+      const double k = std::log(quote.strike / quote.forward);
+      const double iv = std::sqrt(
+          essvi::sliceTotalVariance(new_front, k) / quote.expiry);
+      quote.bid_iv = std::max(0.001, iv - 1e-5);
+      quote.ask_iv = iv + 1e-5;
+      quote.mid_iv = iv;
+    } else if (quote.expiry == old_next.expiry) {
+      quote.mid_iv = std::nan("");
+    }
+  }
+
+  essvi::WarmOptions options;
+  options.quote_tol = 0.0;
+  options.quote_cap = 1.0;
+  const auto warm = essvi::calibrateWarm(
+      current_quotes, &previous, previous_quotes, options);
+  assert(!warm.converged);
+  assert(warm.error == "no ATM quote");
+  assert(warm.fallback_reason_counts.calendar_repair_failed == 1);
+}
+
 void localSolverUsesThreeBoundedStarts() {
   const auto previous_quotes = essvi::bench::realisticChain(1, 100, 7);
   const auto previous = essvi::calibrate(previous_quotes);
@@ -466,7 +516,7 @@ void localWarmRefitHonorsBudgetAndQuality() {
   assert(warm.slices_reused == 2);
   assert(warm.local_solver_slices == 1);
   assert(warm.local_solver_starts == 1);
-  assert(warm.local_objective_evaluations == 1);
+  assert(warm.local_objective_evaluations == 2);
   assert(warm.local_objective_evaluations <= 25);
   assert(std::abs(warm.surface.slices.back().rho -
                   previous.surface.slices.back().rho) <= 0.05 + 1e-12);
@@ -484,6 +534,8 @@ int main() {
   perQuoteGateFallsBackToColdSearch();
   sequentialCalendarRepairRetriesRejectedCandidates();
   failedJacobiPrefitFallsBackWithoutRetry();
+  rejectedInfeasiblePriorIsCountedAndRefit();
+  failedCalendarRepairIsCounted();
   localWarmRefitHonorsBudgetAndQuality();
   localSolverUsesThreeBoundedStarts();
   return 0;

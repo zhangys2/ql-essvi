@@ -1,5 +1,6 @@
 #include "calibrator.hpp"
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
@@ -375,13 +376,16 @@ bool calendarSafe(const Slice& s, const CalendarBounds& bounds) {
   return s.psi > bounds.ratio_lower && s.psi < upper - kEps;
 }
 
-bool pairSafe(const Slice& s, BoundMemo& bound,
-              const CalendarBounds& calendar) {
+bool boundSafe(const Slice& s, BoundMemo& bound) {
   const double ar = std::abs(s.rho);
   if (!(s.theta > kEps && s.psi > kEps && ar < 1.0 - kEps &&
         s.psi * (1.0 + ar) < 4.0 - kEps)) return false;
-  if (!(s.psi * s.psi <= bound.get(s.theta, ar) - kEps)) return false;
-  return calendarSafe(s, calendar);
+  return s.psi * s.psi <= bound.get(s.theta, ar) - kEps;
+}
+
+bool pairSafe(const Slice& s, BoundMemo& bound,
+              const CalendarBounds& calendar) {
+  return boundSafe(s, bound) && calendarSafe(s, calendar);
 }
 
 struct Atm {
@@ -555,7 +559,6 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
           normal[row][column] = 0.0;
       }
 
-      // Relative coordinates keep the three normal-equation columns balanced.
       const double parameter_scale[3] = {
           std::max(slice.theta * 0.1, 1e-3), 0.1,
           std::max(slice.psi * 0.1, 1e-3)};
@@ -592,157 +595,183 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
       return loss;
     };
 
-    Slice current = *warm_start;
-    current.expiry = t;
-    double normal[3][3];
-    double gradient[3];
-    double current_loss = lossAndNormal(current, normal, gradient);
-    ++evals;
+    Slice incumbent = *warm_start;
+    incumbent.expiry = t;
+    BoundMemo incumbent_bound(false);
+    const auto incumbent_calendar =
+        calendarBounds(prev, t, incumbent.rho);
+    if (pairSafe(incumbent, incumbent_bound, incumbent_calendar)) {
+      bestz = bandLoss(incumbent, qs);
+      best = incumbent;
+      ++evals;
+    }
 
-    // Use the cold path's ATM anchor only as a start; band loss stays the objective.
-    Slice atm_seed = current;
-    atm_seed.theta = atm.theta_star - atm_seed.rho * atm_seed.psi * atm.k_star;
-    if (prev) {
-      atm_seed.theta = std::max(atm_seed.theta, prev->theta + kEps);
-      if (prev->psi > kEps)
-        atm_seed.theta = std::max(
-            atm_seed.theta, atm_seed.psi * prev->theta / prev->psi + kEps);
-    }
-    atm_seed.theta = std::max(atm_seed.theta, kEps);
-    double atm_normal[3][3];
-    double atm_gradient[3];
-    const double atm_loss = lossAndNormal(atm_seed, atm_normal, atm_gradient);
-    ++evals;
-    bool current_is_safe = false;
-    if (atm_loss <= current_loss &&
-        pairSafe(atm_seed, safe_bound, calendarBounds(prev, t, atm_seed.rho))) {
-      current = atm_seed;
-      current_loss = atm_loss;
-      for (int row = 0; row < 3; ++row) {
-        gradient[row] = atm_gradient[row];
-        for (int column = 0; column < 3; ++column)
-          normal[row][column] = atm_normal[row][column];
-      }
-      current_is_safe = true;
-    } else {
-      current_is_safe =
-          pairSafe(current, safe_bound, calendarBounds(prev, t, current.rho));
-    }
+    constexpr std::array<double, 3> rho_offsets{0.0, -0.05, 0.05};
+    constexpr std::array<double, 5> alphas{1.0, 0.5, 0.25, 0.125, 0.0625};
+    constexpr int local_evaluation_budget = 25;
+    const double rho_lower = std::max(-0.979999, warm_start->rho - 0.05);
+    const double rho_upper = std::min(0.979999, warm_start->rho + 0.05);
     const double theta_min = prev ? prev->theta + kEps : kEps;
 
-    for (int iteration = 0; iteration < 9 && evals < 15; ++iteration) {
-      double matrix[3][4]{};
-      for (int row = 0; row < 3; ++row) {
-        for (int column = 0; column < 3; ++column)
-          matrix[row][column] = normal[row][column];
-        matrix[row][row] += 1e-6 * std::max(normal[row][row], 1e-12);
-        matrix[row][3] = -gradient[row];
+    for (std::size_t start_index = 0; start_index < rho_offsets.size();
+         ++start_index) {
+      if (evals >= local_evaluation_budget) break;
+      const double rho = std::clamp(warm_start->rho + rho_offsets[start_index],
+                                    rho_lower, rho_upper);
+      BoundMemo candidate_bound(true);
+      const auto calendar = calendarBounds(prev, t, rho);
+      const double psi_min = psiLower(prev, rho);
+      const double theta_seed =
+          prev ? std::max(atm.theta_star, prev->theta + kEps)
+               : atm.theta_star;
+      const double psi_max = psiUpper(theta_seed, rho, candidate_bound);
+      if (!(psi_max > psi_min)) {
+        ++out.fallback_reason_counts.bound_check_failed;
+        continue;
       }
 
-      bool solvable = true;
-      for (int column = 0; column < 3; ++column) {
-        int pivot = column;
-        for (int row = column + 1; row < 3; ++row) {
-          if (std::abs(matrix[row][column]) >
-              std::abs(matrix[pivot][column]))
-            pivot = row;
-        }
-        if (std::abs(matrix[pivot][column]) < 1e-24) {
-          solvable = false;
-          break;
-        }
-        for (int index = column; index < 4; ++index)
-          std::swap(matrix[column][index], matrix[pivot][index]);
-        const double diagonal = matrix[column][column];
-        for (int index = column; index < 4; ++index)
-          matrix[column][index] /= diagonal;
+      const double psi_fraction =
+          start_index == 1 ? 0.25 : (start_index == 2 ? 0.75 : 0.0);
+      const double psi_seed = start_index == 0
+                                  ? warm_start->psi
+                                  : psi_min + psi_fraction * (psi_max - psi_min);
+      const double psi = std::clamp(psi_seed, psi_min, psi_max);
+      Slice current = anchored(t, atm, rho, psi, prev, candidate_bound);
+      if (!boundSafe(current, safe_bound)) {
+        ++out.fallback_reason_counts.bound_check_failed;
+        continue;
+      }
+      if (!calendarSafe(current, calendar)) continue;
+
+      ++out.local_solver_starts;
+      double normal[3][3];
+      double gradient[3];
+      double current_loss = lossAndNormal(current, normal, gradient);
+      ++evals;
+      if (current_loss < bestz) {
+        bestz = current_loss;
+        best = current;
+      }
+      if (current_loss == 0.0) break;
+
+      const int starts_remaining =
+          static_cast<int>(rho_offsets.size() - start_index);
+      const int start_evaluation_limit =
+          evals + (local_evaluation_budget - evals) / starts_remaining;
+      double damping = 1e-6;
+      for (int iteration = 0;
+           iteration < 12 && evals < start_evaluation_limit &&
+           theta_min < 5.0 && current_loss > 0.0;
+           ++iteration) {
+        double matrix[3][4]{};
         for (int row = 0; row < 3; ++row) {
-          if (row == column) continue;
-          const double factor = matrix[row][column];
-          for (int index = column; index < 4; ++index)
-            matrix[row][index] -= factor * matrix[column][index];
+          for (int column = 0; column < 3; ++column)
+            matrix[row][column] = normal[row][column];
+          matrix[row][row] += damping * std::max(normal[row][row], 1e-12);
+          matrix[row][3] = -gradient[row];
         }
-      }
-      if (!solvable || !(theta_min < 5.0)) break;
 
-      const double parameter_scale[3] = {
-          std::max(current.theta * 0.1, 1e-3), 0.1,
-          std::max(current.psi * 0.1, 1e-3)};
-      Slice selected = current;
-      double selected_loss = current_loss;
-      double selected_normal[3][3];
-      double selected_gradient[3];
-      bool found_improvement = false;
-      for (double alpha : {1.0, 0.5, 0.25, 0.125, 0.0625}) {
-        if (evals >= 15) break;
-        Slice trial = current;
-        trial.theta = std::clamp(
-            current.theta + alpha * parameter_scale[0] * matrix[0][3],
-            theta_min, 5.0);
-        trial.rho = std::clamp(
-            current.rho + alpha * parameter_scale[1] * matrix[1][3],
-            -0.979999, 0.979999);
-        const double psi_min = psiLower(prev, trial.rho);
-        const double psi_max =
-            4.0 / (1.0 + std::abs(trial.rho)) - 2.0 * kEps;
-        if (!(psi_max > psi_min)) continue;
-        trial.psi = std::clamp(
-            current.psi + alpha * parameter_scale[2] * matrix[2][3],
-            psi_min, psi_max);
-        const auto calendar = calendarBounds(prev, t, trial.rho);
-        if (!(trial.theta > theta_min - kEps &&
-              trial.psi * (1.0 + std::abs(trial.rho)) < 4.0 - kEps &&
-              calendarSafe(trial, calendar)))
-          continue;
-
-        double trial_normal[3][3];
-        double trial_gradient[3];
-        const double trial_loss =
-            lossAndNormal(trial, trial_normal, trial_gradient);
-        ++evals;
-        if (trial_loss < current_loss) {
-          selected = trial;
-          selected_loss = trial_loss;
-          for (int row = 0; row < 3; ++row) {
-            selected_gradient[row] = trial_gradient[row];
-            for (int column = 0; column < 3; ++column)
-              selected_normal[row][column] = trial_normal[row][column];
+        bool solvable = true;
+        for (int column = 0; column < 3; ++column) {
+          int pivot = column;
+          for (int row = column + 1; row < 3; ++row) {
+            if (std::abs(matrix[row][column]) >
+                std::abs(matrix[pivot][column]))
+              pivot = row;
           }
-          found_improvement = true;
-          break;
+          if (std::abs(matrix[pivot][column]) < 1e-24) {
+            solvable = false;
+            break;
+          }
+          for (int index = column; index < 4; ++index)
+            std::swap(matrix[column][index], matrix[pivot][index]);
+          const double diagonal = matrix[column][column];
+          for (int index = column; index < 4; ++index)
+            matrix[column][index] /= diagonal;
+          for (int row = 0; row < 3; ++row) {
+            if (row == column) continue;
+            const double factor = matrix[row][column];
+            for (int index = column; index < 4; ++index)
+              matrix[row][index] -= factor * matrix[column][index];
+          }
+        }
+        if (!solvable) {
+          damping *= 10.0;
+          if (damping > 1e12) break;
+          continue;
+        }
+
+        const double parameter_scale[3] = {
+            std::max(current.theta * 0.1, 1e-3), 0.1,
+            std::max(current.psi * 0.1, 1e-3)};
+        Slice selected = current;
+        double selected_loss = current_loss;
+        double selected_normal[3][3];
+        double selected_gradient[3];
+        bool found_improvement = false;
+        for (const double alpha : alphas) {
+          if (evals >= start_evaluation_limit) break;
+          Slice trial = current;
+          trial.theta = std::clamp(
+              current.theta + alpha * parameter_scale[0] * matrix[0][3],
+              theta_min, 5.0);
+          trial.rho = std::clamp(
+              current.rho + alpha * parameter_scale[1] * matrix[1][3],
+              rho_lower, rho_upper);
+          const double trial_psi_min = psiLower(prev, trial.rho);
+          const double trial_psi_max =
+              psiUpper(trial.theta, trial.rho, candidate_bound);
+          if (!(trial_psi_max > trial_psi_min)) {
+            ++out.fallback_reason_counts.bound_check_failed;
+            continue;
+          }
+          trial.psi = std::clamp(
+              current.psi + alpha * parameter_scale[2] * matrix[2][3],
+              trial_psi_min, trial_psi_max);
+          const auto trial_calendar = calendarBounds(prev, t, trial.rho);
+          if (!boundSafe(trial, safe_bound)) {
+            ++out.fallback_reason_counts.bound_check_failed;
+            continue;
+          }
+          if (!calendarSafe(trial, trial_calendar)) continue;
+
+          double trial_normal[3][3];
+          double trial_gradient[3];
+          const double trial_loss =
+              lossAndNormal(trial, trial_normal, trial_gradient);
+          ++evals;
+          if (trial_loss < current_loss) {
+            selected = trial;
+            selected_loss = trial_loss;
+            for (int row = 0; row < 3; ++row) {
+              selected_gradient[row] = trial_gradient[row];
+              for (int column = 0; column < 3; ++column)
+                selected_normal[row][column] = trial_normal[row][column];
+            }
+            found_improvement = true;
+            break;
+          }
+        }
+        if (!found_improvement) {
+          damping *= 10.0;
+          if (damping > 1e12) break;
+          continue;
+        }
+
+        current = selected;
+        current_loss = selected_loss;
+        for (int row = 0; row < 3; ++row) {
+          gradient[row] = selected_gradient[row];
+          for (int column = 0; column < 3; ++column)
+            normal[row][column] = selected_normal[row][column];
+        }
+        damping = std::max(damping * 0.3, 1e-12);
+        if (current_loss < bestz) {
+          bestz = current_loss;
+          best = current;
         }
       }
-      if (!found_improvement) break;
-
-      const auto calendar = calendarBounds(prev, t, selected.rho);
-      if (!pairSafe(selected, safe_bound, calendar)) {
-        const double mm_bound =
-            safe_bound.get(selected.theta, std::abs(selected.rho));
-        const double safe_psi = std::sqrt(std::max(0.0, mm_bound - kEps));
-        selected.psi = std::min(selected.psi, safe_psi);
-        if (!(selected.psi > psiLower(prev, selected.rho))) break;
-        if (evals >= 15) break;
-        selected_loss = lossAndNormal(selected, selected_normal,
-                                      selected_gradient);
-        ++evals;
-        if (!(selected_loss < current_loss) ||
-            !pairSafe(selected, safe_bound, calendar))
-          break;
-      }
-
-      current = selected;
-      current_loss = selected_loss;
-      current_is_safe = true;
-      for (int row = 0; row < 3; ++row) {
-        gradient[row] = selected_gradient[row];
-        for (int column = 0; column < 3; ++column)
-          normal[row][column] = selected_normal[row][column];
-      }
-    }
-
-    if (current_is_safe && current_loss < bestz) {
-      best = current;
-      bestz = current_loss;
+      if (bestz == 0.0) break;
     }
   } else if (restricted_center) {
     // Keep the cold fallback near the prior slice; psi still spans its feasible interval.
@@ -991,13 +1020,19 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
           prior.expiry = expiry;
           const auto calendar = calendarBounds(plan.old_previous, expiry,
                                                prior.rho);
-          if (pairSafe(prior, safe_bound, calendar) &&
-              passesQuoteCap(prior, plan.prepared, options.quote_cap)) {
-            plan.candidate = prior;
-            plan.candidate_loss = bandLoss(prior, plan.prepared);
-            plan.have_candidate = std::isfinite(plan.candidate_loss);
-            plan.candidate_reused = plan.have_candidate;
-            plan.candidate_from_warm = plan.have_candidate;
+          const bool prior_bound_safe = boundSafe(prior, safe_bound);
+          if (!prior_bound_safe) {
+            ++out.fallback_reason_counts.bound_check_failed;
+          } else if (calendarSafe(prior, calendar)) {
+            if (passesQuoteCap(prior, plan.prepared, options.quote_cap)) {
+              plan.candidate = prior;
+              plan.candidate_loss = bandLoss(prior, plan.prepared);
+              plan.have_candidate = std::isfinite(plan.candidate_loss);
+              plan.candidate_reused = plan.have_candidate;
+              plan.candidate_from_warm = plan.have_candidate;
+            } else {
+              ++out.fallback_reason_counts.loss_above_gate;
+            }
           }
         }
       }
@@ -1041,8 +1076,13 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
       for (const auto& plan : candidates) {
         if (!plan.local_attempted) continue;
         ++out.local_solver_slices;
+        out.local_solver_starts += plan.local.local_solver_starts;
         out.local_objective_evaluations += plan.local.objective_evaluations;
         out.local_mm_bound_calls += plan.local_bound_calls;
+        out.fallback_reason_counts.bound_check_failed +=
+            plan.local.fallback_reason_counts.bound_check_failed;
+        if (!plan.local.converged)
+          ++out.fallback_reason_counts.infeasible_local_result;
         bound_calls += plan.local_bound_calls;
         out.iterations += plan.local.iterations;
       }
@@ -1076,17 +1116,24 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
             local = fitSlice(plan.prepared, expiry, previous_slice, rho_workers,
                              warm_start);
           }
+          out.local_solver_starts += local.local_solver_starts;
           out.local_objective_evaluations += local.objective_evaluations;
           out.local_mm_bound_calls += local_bound_calls;
+          out.fallback_reason_counts.bound_check_failed +=
+              local.fallback_reason_counts.bound_check_failed;
           bound_calls += local_bound_calls;
           out.iterations += local.iterations;
-          if (local.converged) {
+          if (local.converged &&
+              calendarSafe(local.surface.slices.front(),
+                           calendarBounds(previous_slice, expiry,
+                                          local.surface.slices.front().rho))) {
             candidate = local.surface.slices.front();
             candidate_loss = local.objective;
             have_candidate = true;
             candidate_reused = false;
             candidate_from_warm = true;
           } else {
+            ++out.fallback_reason_counts.calendar_repair_failed;
             have_candidate = false;
           }
         }
@@ -1094,6 +1141,8 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
         const bool candidate_fails_cap =
             candidate_from_warm && have_candidate &&
             !passesQuoteCap(candidate, plan.prepared, options.quote_cap);
+        if (candidate_fails_cap)
+          ++out.fallback_reason_counts.loss_above_gate;
         const bool needs_restricted = warm_start &&
                                      (!have_candidate || candidate_fails_cap);
         if (needs_restricted) {
@@ -1112,6 +1161,7 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
               used_fallback = true;
               ++out.fallback_slices;
             } else {
+              ++out.fallback_reason_counts.loss_above_gate;
               ++out.quality_checks;
               out.quality_warm_loss += bandLoss(restricted_slice, plan.prepared);
               out.quality_loss_scale += plan.loss_scale;

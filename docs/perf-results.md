@@ -287,6 +287,51 @@ The current pre-B2 gate misses Addendum B quality/latency targets in all four sc
 All real-data IVs are European Black-Scholes calibration-path stand-ins. The source quote bands are not verified consolidated NBBO, and the replay makes no American-pricing accuracy claim. The generated outputs are `build/snapshot-replay/move_measurements.json`, `replay_manifest.tsv`, `daily_replay_results.json`, and `daily_replay_quality.csv`.
 
 
+## WP-B3 — Local solver and fallback reason diagnostics
+
+The changed-slice solver now uses three deterministic starts within prior rho ±0.05, with feasible-psi clamping and an ATM-anchored theta start. It keeps a feasible warm incumbent, applies adaptive Levenberg–Marquardt damping, stops on exact zero loss, and shares a 25-objective-evaluation cap across incumbent and starts. Result and benchmark diagnostics expose local starts and four reason counters: infeasible local result, loss above gate, calendar repair failed, and bound check failed. Reason totals count rejected-candidate/fallback events, not distinct updates; a single update can contribute multiple events.
+
+The focused warm test verifies all three starts, the evaluation cap, repeatable search diagnostics, bound-rejection behavior, all four reason categories, and a zero-loss fixture that stops after the incumbent plus one ATM start (2 evaluations). `scripts/verify_scenarios.sh` then completed all four scenarios × five seeds × 200 updates at 40 expiries × 100 quotes. Every invocation ran to completion; all 20 `--check` results were 2 for target misses and the script returned 1 after reporting the full matrix. That is a target failure, not an execution failure. Values below are median [minimum, maximum] over seeds; load averages are 1/5/15-minute values before → after each sequential run.
+
+| Scenario | Warm p50 (ms) | Warm p99 (ms) | Fallback updates (%) | Cap-share delta (pp) | Maximum excess ratio warm / cold | RMS excess ratio warm / cold | Summed band loss warm / cold | RMS excess-IV delta (vol pt) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| quiet | 1.43041 [1.14823, 1.70749] | 69.5995 [58.7284, 115.405] | 25 [13, 30] | 0 [0, 0] | 0.0998562 [0.0993879, 0.0999863] / 0.0121983 [0, 0.0325625] | 0.00504428 [0.00401056, 0.00632181] / 1.79078e-05 [0, 4.4845e-05] | unavailable (zero cold loss in some seeds) | 0.00499885 [0.00393728, 0.00629424] |
+| normal | 159.869 [150.107, 207.614] | 415.887 [233.892, 524.616] | 100 [100, 100] | 0.00275 [-0.016375, 0.014875] | 83.4903 [5.005, 24478.9] / 83.4915 [4.24346, 24478.9] | 2.34593 [0.422471, 1601.62] / 2.34549 [0.421754, 1601.57] | 1.00005 [0.99776, 1.00558] | 0.000132492 [-0.00158258, 0.00050315] |
+| fast | 86.5161 [32.5042, 103.138] | 208.346 [130.766, 383.778] | 64.5 [37.5, 91] | 0 [0, 0] | 6.44294e+06 [3.91312e+06, 8.77257e+06] / 6.44294e+06 [3.91312e+06, 8.77257e+06] | 387276 [238316, 598838] / 387276 [238316, 598838] | 1 [1, 1] | 4.87485e-07 [0, 2.12791e-05] |
+| front | 165.985 [139.775, 178.087] | 464.729 [240.038, 845.667] | 100 [100, 100] | -0.020375 [-0.024125, 0.01825] | 420.467 [4.19631, 25239] / 420.478 [4.19519, 25239.1] | 2.45865 [0.430232, 1568.86] / 2.45847 [0.430492, 1568.86] | 1.00016 [0.997374, 1.00027] | 8.89794e-05 [-0.000235588, 0.000511336] |
+
+| Scenario | Infeasible local result | Loss above gate | Calendar repair failed | Bound check failed |
+|---|---:|---:|---:|---:|
+| quiet | 0 | 3,865 | 0 | 0 |
+| normal | 0 | 118,177 | 0 | 330 |
+| fast | 0 | 66,439 | 6,560 | 2,145,106 |
+| front | 0 | 118,199 | 0 | 371 |
+
+| Scenario | Seed | Load average before → after |
+|---|---:|---|
+| quiet | 1 | 1.26 1.86 1.76 → 1.94 1.98 1.81 |
+| quiet | 2 | 1.94 1.98 1.81 → 3.06 2.24 1.90 |
+| quiet | 3 | 3.06 2.24 1.90 → 2.87 2.24 1.90 |
+| quiet | 4 | 2.87 2.24 1.90 → 3.12 2.33 1.94 |
+| quiet | 5 | 3.12 2.33 1.94 → 2.79 2.31 1.94 |
+| normal | 1 | 2.79 2.31 1.94 → 4.20 2.84 2.15 |
+| normal | 2 | 4.20 2.84 2.15 → 5.25 3.43 2.40 |
+| normal | 3 | 5.25 3.43 2.40 → 4.47 3.47 2.46 |
+| normal | 4 | 4.47 3.47 2.46 → 3.17 3.28 2.45 |
+| normal | 5 | 3.17 3.28 2.45 → 3.12 3.25 2.48 |
+| fast | 1 | 3.12 3.25 2.48 → 2.92 3.19 2.48 |
+| fast | 2 | 2.92 3.19 2.48 → 2.84 3.16 2.49 |
+| fast | 3 | 2.84 3.16 2.49 → 2.72 3.11 2.49 |
+| fast | 4 | 2.72 3.11 2.49 → 3.32 3.23 2.56 |
+| fast | 5 | 3.32 3.23 2.56 → 3.55 3.29 2.59 |
+| front | 1 | 3.55 3.29 2.59 → 3.96 3.47 2.69 |
+| front | 2 | 3.96 3.47 2.69 → 3.21 3.34 2.70 |
+| front | 3 | 3.21 3.34 2.70 → 3.46 3.37 2.73 |
+| front | 4 | 3.46 3.37 2.73 → 2.93 3.25 2.72 |
+| front | 5 | 2.93 3.25 2.72 → 4.17 3.57 2.87 |
+
+The warm p99 target and fallback target are missed in every scenario; normal and front fallback on every update. Quiet misses the 0.47 ms median and 7.6 ms p99 non-regression reference, and its loss ratio is unavailable because some cold reference losses are zero. Fast seeds 2–5 reported 71, 126, 86, and 59 warm failures respectively; these runs also had unpaired/unscored updates. The benchmark reported zero invalid surfaces and zero dense-grid butterfly/calendar violations across the 20 runs. The 25-evaluation local-solver cap and quality gate remain covered by focused tests; the market-like scenario results show substantial latency/fallback and fast-path failure residuals for CAL-B4/B5 to address.
+
 ## WP-B2 — Per-quote gate and reuse drift
 
 The warm gate now evaluates each included two-sided quote independently in total variance: `ratio = max(0, bid_var - fit_var, fit_var - ask_var) / max(ask_var - bid_var, 1e-6)`. A candidate passes the base gate only when every ratio is at most `WarmOptions::quote_cap` (default 0.1). A failed reuse falls through to local fitting; a local candidate that fails the base gate is followed by a cold search restricted to prior rho ±0.15 over the feasible psi interval. If that restricted result passes the base cap, it is used. Otherwise one same-snapshot full-cold reference is cached per slice, and the restricted candidate is retained only when every quote is within `max(quote_cap, cold_ratio + 0.01)`; otherwise the full-cold result is selected. Reuse also requires the per-quote cap and calendar check; `CalibrationResult::reuse_ages` tracks unchanged-parameter reuse and forces refit after 12 consecutive updates. `calibrateWarm` now takes the prior `CalibrationResult` (nullable) so the surface and reuse state travel together. `loss_tol` remains a deprecated compatibility/reporting value; it no longer gates reuse or acceptance. Scheduled `cold_check_interval` was removed. The benchmark accepts `--quote-cap`; its reported share-above-cap metric remains fixed at 0.1 for the approved target.
