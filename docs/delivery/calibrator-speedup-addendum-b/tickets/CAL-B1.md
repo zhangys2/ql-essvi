@@ -3,9 +3,9 @@
 ## State
 
 - Current: implemented
-- Last transition: `implementing` → `implemented`
-- At: 2026-10-16T12:10:48Z
-- Reason/evidence: acceptance criteria implemented; paired-population correction applied; focused CLI smoke, full 20-case matrix, full CTest, and pytest results recorded below and in `docs/perf-results.md`
+- Last transition: `changes-requested` → `implemented`
+- At: 2026-10-16T12:26:34Z
+- Reason/evidence: all three review-round-1 findings corrected; focused C++ aggregation and ratio tests, both CLI exit-path regressions, full CTest, and pytest pass.
 - Blocker: None
 
 ## Claim
@@ -67,14 +67,18 @@ None
 | 2026-10-16 | Green | `export PATH="$PWD/.venv/bin:$PATH"; cmake --build build --target essvi_bench essvi_benchmark_quality_tests -j2 && ctest --test-dir build -R essvi_benchmark_quality_tests --output-on-failure` | `/home/zhangy/git/ql-essvi` | working tree | passed | Benchmark and focused metrics test built; CTest 1/1 passed, including exact variance-ratio, IV-point, width-floor, quote-validity, paired-count, target/hard-limit, and zero-reference cases. |
 | 2026-10-16 | Pairing correction | Reviewer noted aggregate equal counts do not prove same-update/same-quote populations and empty comparisons were not guarded. | `/home/zhangy/git/ql-essvi` | working tree | resolved | Metrics now merge only when both valid surfaces cover the full valid two-sided quote set for that update; `paired_updates` is tracked, empty comparisons are unavailable, and `--check` fails unpaired or unscored updates. Reviewer recheck found no remaining population mismatch. |
 | 2026-10-16 | Scenario matrix | `./scripts/verify_scenarios.sh` | `/home/zhangy/git/ql-essvi` | working tree | completed with expected target/coverage misses | All 20 cases completed; each individual `--check` returned 2, with no execution failures. 3,993/4,000 updates had full paired quote coverage; fast seeds 2 and 3 had 197/200 and 196/200. The script returned 1 after printing all metrics and load averages; exact results are in `docs/perf-results.md`. |
-| 2026-10-16 | Refactor and CLI smoke | `export PATH="$PWD/.venv/bin:$PATH"; cmake --build build --target essvi_bench essvi_benchmark_quality_tests -j2 && ctest --test-dir build -R essvi_benchmark_quality_tests --output-on-failure; ./build/essvi_bench --scenario quiet --scenario-updates 1 --seed 1 --check` | `/home/zhangy/git/ql-essvi` | working tree | passed with expected CLI exit 2 | Post-format focused CTest passed 1/1. CLI emitted 4,000 warm/cold quote observations for one paired update, marked the zero-cold-loss ratio unavailable, printed target/hard statuses, and returned 2 for the measured quiet median-baseline miss. |
-| 2026-10-16 | Final verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | working tree | passed | Release build succeeded; CTest 5/5 passed; pytest 5/5 passed. |
+| 2026-10-16 | Review round 1 | Base-to-HEAD review `af7f0e4bf883dec67e26dc6c94e5d665a8fb5536..3fd4fe3`; three independent axes | `/home/zhangy/git/ql-essvi` | `3fd4fe3` | changes requested | Spec flagged positive-over-zero as an unavailable ratio instead of a definite breach; standards flagged missing aggregation-seam coverage; verification flagged no passing `--check` CLI case. Its configured full command passed CTest 5/5 and pytest 5/5. |
+| 2026-10-16 | Review corrections | `export PATH="$PWD/.venv/bin:$PATH"; cmake --build build --target essvi_bench essvi_benchmark_quality_tests -j2 && ctest --test-dir build -R essvi_benchmark_quality_tests --output-on-failure && .venv/bin/python -m pytest -q tests/test_benchmark_cli.py` | `/home/zhangy/git/ql-essvi` | working tree | passed | Focused CTest 1/1 and CLI pytest 2/2 passed. Tests cover incomplete/asymmetric paired counts, zero/zero ratio 1, positive/zero `inf` as `MISS | BREACH` with JSON `null`, `--check` exit 0 for a passing one-quote quiet case, and exit 2 for a fast target miss. |
+| 2026-10-16 | Final verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | working tree | passed | Release build succeeded; CTest 5/5 passed; pytest 7/7 passed. |
 
 ## Review dispositions
 
 | Round | Finding | Disposition | Evidence |
 | --- | --- | --- | --- |
 | Pre-review | P2: equal aggregate warm/cold quote counts could still compare different updates or populations; empty-pair comparisons were not consistently unavailable. | Resolved | Per-update full-quote-set pairing, paired-update coverage enforcement, and empty-comparison guards added; reviewer recheck confirmed the same-update/same-quote mismatch is closed. |
+| 1 — Spec P2 | Positive warm loss over zero cold loss was marked unavailable, hiding a definite breach. | Resolved | `checkRatioAtMost` now returns available `+inf` for positive/zero; check table reports target miss and hard breach. The CLI regression verifies `inf | MISS | BREACH`; JSON preserves valid syntax using `null`; zero/zero remains 1. |
+| 1 — Standards P2 | Pairing guard and benchmark aggregation lacked automated test coverage. | Resolved | `mergePairedQuoteMetrics`, called by `record()`, rejects equal-but-incomplete and asymmetric update counts without mutating aggregates; CTest regression verifies coverage, paired-update count, and no partial merge. |
+| 1 — Verification P2 | Successful `--check` CLI path and exit 0 were untested. | Resolved | Pytest invokes the built CLI for a deterministic passing one-quote quiet scenario and asserts exit 0/all PASS; a separate fast case asserts exit 2 on a target miss. |
 
 ## Delivery record
 
@@ -87,7 +91,7 @@ None
 - Unconfirmed commands: none (typecheck/lint not applicable)
 - Branch: `delivery/calibrator-speedup-addendum-b/CAL-B1`
 - Worktree: primary checkout, `/home/zhangy/git/ql-essvi` (configured checkout form)
-- Commit: pending
+- Commit: pending review corrections
 - GitHub Issue: none (local tracker)
-- Tests: final CTest 5/5 and pytest 5/5 passed; 20-scenario matrix completed with target misses and 7 unpaired updates recorded.
-- Diff review: final three-axis review pending.
+- Tests: final CTest 5/5 and pytest 7/7 passed; scenario matrix target/coverage misses are documented.
+- Diff review: review round 1 changes all addressed; round 2 pending.

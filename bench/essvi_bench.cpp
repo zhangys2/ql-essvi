@@ -221,13 +221,8 @@ void record(Summary& summary, const essvi::CalibrationResult& warm,
         essvi::bench::measureExcessMetrics(quotes, warm.surface, 0.1);
     const auto cold_metrics =
         essvi::bench::measureExcessMetrics(quotes, cold.surface, 0.1);
-    if (eligible_quotes > 0 &&
-        warm_metrics.quote_count == eligible_quotes &&
-        cold_metrics.quote_count == eligible_quotes) {
-      summary.quality.warm.merge(warm_metrics);
-      summary.quality.cold.merge(cold_metrics);
-      ++summary.quality.paired_updates;
-    }
+    essvi::bench::mergePairedQuoteMetrics(
+        summary.quality, warm_metrics, cold_metrics, eligible_quotes);
   }
 
   summary.objective_evaluations += warm.objective_evaluations;
@@ -435,8 +430,10 @@ void writeJsonSummary(std::ostream& output, const Summary& summary) {
     const auto loss_ratio = essvi::bench::checkRatioAtMost(
         "summed_band_loss_ratio", summary.quality.warm.summed_band_loss,
         summary.quality.cold.summed_band_loss, 1.05, 1.20);
-    if (loss_ratio.available) output << loss_ratio.value;
-    else output << "null";
+    if (loss_ratio.available && std::isfinite(loss_ratio.value))
+      output << loss_ratio.value;
+    else
+      output << "null";
   } else {
     output << "null";
   }

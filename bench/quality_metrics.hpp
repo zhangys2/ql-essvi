@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -63,6 +64,21 @@ struct BenchmarkQuality {
   QuoteExcessMetrics cold;
 };
 
+inline bool mergePairedQuoteMetrics(BenchmarkQuality& quality,
+                                    const QuoteExcessMetrics& warm,
+                                    const QuoteExcessMetrics& cold,
+                                    std::size_t expected_quote_count) {
+  if (expected_quote_count == 0 ||
+      warm.quote_count != expected_quote_count ||
+      cold.quote_count != expected_quote_count)
+    return false;
+
+  quality.warm.merge(warm);
+  quality.cold.merge(cold);
+  ++quality.paired_updates;
+  return true;
+}
+
 struct SurfaceQualityCounts {
   std::size_t invalid_surfaces{};
   std::size_t dense_grid_violations{};
@@ -92,6 +108,9 @@ inline QualityCheck checkRatioAtMost(std::string name, double numerator,
   if (denominator == 0.0) {
     if (numerator == 0.0)
       return checkAtMost(std::move(name), 1.0, target, hard_limit);
+    if (numerator > 0.0)
+      return {std::move(name), std::numeric_limits<double>::infinity(),
+              target, hard_limit, true};
     auto check = checkAtMost(std::move(name), 0.0, target, hard_limit);
     check.available = false;
     return check;

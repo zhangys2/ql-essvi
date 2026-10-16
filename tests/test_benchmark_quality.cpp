@@ -53,6 +53,41 @@ void requiresMatchedWarmAndColdQuoteCounts() {
   assert(!essvi::bench::hasPairedQuoteObservations(warm, cold));
 }
 
+void mergesOnlyCompletePerUpdateQuotePopulations() {
+  essvi::bench::BenchmarkQuality quality;
+  essvi::bench::QuoteExcessMetrics warm;
+  essvi::bench::QuoteExcessMetrics cold;
+  warm.quote_count = 2;
+  warm.summed_band_loss = 0.2;
+  cold.quote_count = 2;
+  cold.summed_band_loss = 0.1;
+
+  assert(!essvi::bench::mergePairedQuoteMetrics(quality, warm, cold, 3));
+  assert(quality.paired_updates == 0);
+  assert(quality.warm.quote_count == 0);
+  assert(quality.cold.quote_count == 0);
+
+  warm.quote_count = 3;
+  assert(!essvi::bench::mergePairedQuoteMetrics(quality, warm, cold, 3));
+  assert(quality.paired_updates == 0);
+  assert(quality.warm.quote_count == 0);
+  assert(quality.cold.quote_count == 0);
+
+  cold.quote_count = 3;
+  assert(essvi::bench::mergePairedQuoteMetrics(quality, warm, cold, 3));
+  assert(quality.paired_updates == 1);
+  assert(quality.warm.quote_count == 3);
+  assert(quality.cold.quote_count == 3);
+  assert(std::abs(quality.warm.summed_band_loss - 0.2) < 1e-12);
+  assert(std::abs(quality.cold.summed_band_loss - 0.1) < 1e-12);
+
+  warm.quote_count = 2;
+  assert(!essvi::bench::mergePairedQuoteMetrics(quality, warm, cold, 3));
+  assert(quality.paired_updates == 1);
+  assert(quality.warm.quote_count == 3);
+  assert(quality.cold.quote_count == 3);
+}
+
 void separatesTargetAndHardLimitAndHandlesZeroReference() {
   const auto target_pass = essvi::bench::checkAtMost("boundary", 1.0, 1.0, 2.0);
   assert(target_pass.targetPassed());
@@ -74,7 +109,8 @@ void separatesTargetAndHardLimitAndHandlesZeroReference() {
 
   const auto positive_over_zero =
       essvi::bench::checkRatioAtMost("loss", 0.1, 0.0, 1.05, 1.2);
-  assert(!positive_over_zero.available);
+  assert(positive_over_zero.available);
+  assert(std::isinf(positive_over_zero.value));
   assert(!positive_over_zero.targetPassed());
   assert(!positive_over_zero.hardLimitPassed());
 }
@@ -84,6 +120,7 @@ int main() {
   measuresPerQuoteVarianceAndVolPointExcess();
   appliesWidthFloorAndExcludesInvalidRows();
   requiresMatchedWarmAndColdQuoteCounts();
+  mergesOnlyCompletePerUpdateQuotePopulations();
   separatesTargetAndHardLimitAndHandlesZeroReference();
   return 0;
 }
