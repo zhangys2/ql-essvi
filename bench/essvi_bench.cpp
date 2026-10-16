@@ -986,7 +986,7 @@ int main(int argc, char** argv) {
     const Options options = parseOptions(argc, argv);
     if (!options.scenario.empty() || !options.replay_dir.empty()) {
       const bool target_missed = runNewBenchmarks(options);
-      return target_missed ? 2 : 0;
+      return essvi::bench::qualityCheckExitCode(target_missed);
     }
     runLegacy(options);
   } catch (const std::exception& error) {

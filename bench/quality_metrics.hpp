@@ -125,6 +125,10 @@ inline bool hasTargetMiss(const std::vector<QualityCheck>& checks) {
   });
 }
 
+inline int qualityCheckExitCode(bool target_missed) {
+  return target_missed ? 2 : 0;
+}
+
 inline bool hasValidTwoSidedBand(const Quote& quote) {
   if (!quote.included || !std::isfinite(quote.expiry) || quote.expiry <= 0.0 ||
       !std::isfinite(quote.forward) || quote.forward <= 0.0 ||

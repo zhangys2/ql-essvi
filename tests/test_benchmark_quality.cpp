@@ -6,6 +6,19 @@
 #include <vector>
 
 namespace {
+void assertSameQuoteMetrics(const essvi::bench::QuoteExcessMetrics& actual,
+                            const essvi::bench::QuoteExcessMetrics& expected) {
+  assert(actual.quote_count == expected.quote_count);
+  assert(actual.above_cap_count == expected.above_cap_count);
+  assert(actual.maximum_ratio == expected.maximum_ratio);
+  assert(actual.squared_ratio_sum == expected.squared_ratio_sum);
+  assert(actual.summed_band_loss == expected.summed_band_loss);
+  assert(actual.squared_excess_vol_points_sum ==
+         expected.squared_excess_vol_points_sum);
+  assert(actual.maximum_excess_vol_points ==
+         expected.maximum_excess_vol_points);
+}
+
 void measuresPerQuoteVarianceAndVolPointExcess() {
   const std::vector<essvi::Quote> quotes{
       {"q", 1.0, 100.0, 1.0, 100.0, 0.2, 0.3, 0.25, true}};
@@ -54,14 +67,27 @@ void requiresMatchedWarmAndColdQuoteCounts() {
 }
 
 void mergesOnlyCompletePerUpdateQuotePopulations() {
+  essvi::bench::BenchmarkQuality empty_quality;
+  empty_quality.checks = 19;
+  empty_quality.paired_updates = 23;
+  empty_quality.warm = {7, 2, 0.7, 1.4, 2.1, 3.2, 4.3};
+  empty_quality.cold = {8, 3, 0.8, 1.5, 2.2, 3.3, 4.4};
+  const auto original_quality = empty_quality;
+  const essvi::bench::QuoteExcessMetrics zero_expected_warm{
+      1, 1, 0.9, 1.6, 2.3, 3.4, 4.5};
+  const essvi::bench::QuoteExcessMetrics zero_expected_cold{
+      2, 1, 1.0, 1.7, 2.4, 3.5, 4.6};
+
+  assert(!essvi::bench::mergePairedQuoteMetrics(
+      empty_quality, zero_expected_warm, zero_expected_cold, 0));
+  assert(empty_quality.checks == original_quality.checks);
+  assert(empty_quality.paired_updates == original_quality.paired_updates);
+  assertSameQuoteMetrics(empty_quality.warm, original_quality.warm);
+  assertSameQuoteMetrics(empty_quality.cold, original_quality.cold);
+
   essvi::bench::BenchmarkQuality quality;
   essvi::bench::QuoteExcessMetrics warm;
   essvi::bench::QuoteExcessMetrics cold;
-
-  assert(!essvi::bench::mergePairedQuoteMetrics(quality, warm, cold, 0));
-  assert(quality.paired_updates == 0);
-  assert(quality.warm.quote_count == 0);
-  assert(quality.cold.quote_count == 0);
 
   warm.quote_count = 2;
   warm.summed_band_loss = 0.2;
@@ -126,14 +152,20 @@ void reportsTargetMissAcrossChecks() {
       essvi::bench::checkAtMost("pass", 0.5, 1.0, 2.0),
       essvi::bench::checkAtMost("boundary", 1.0, 1.0, 2.0)};
   assert(!essvi::bench::hasTargetMiss(passing));
+  assert(essvi::bench::qualityCheckExitCode(
+             essvi::bench::hasTargetMiss(passing)) == 0);
 
   const std::vector<essvi::bench::QualityCheck> target_miss{
       essvi::bench::checkAtMost("miss", 1.5, 1.0, 2.0)};
   assert(essvi::bench::hasTargetMiss(target_miss));
+  assert(essvi::bench::qualityCheckExitCode(
+             essvi::bench::hasTargetMiss(target_miss)) == 2);
 
   const std::vector<essvi::bench::QualityCheck> unavailable{
       {"unavailable", 0.0, 1.0, 2.0, false}};
   assert(essvi::bench::hasTargetMiss(unavailable));
+  assert(essvi::bench::qualityCheckExitCode(
+             essvi::bench::hasTargetMiss(unavailable)) == 2);
 }
 }  // namespace
 
