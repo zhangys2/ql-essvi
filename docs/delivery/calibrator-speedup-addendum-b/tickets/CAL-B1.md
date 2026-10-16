@@ -2,11 +2,11 @@
 
 ## State
 
-- Current: implemented
-- Last transition: `changes-requested` → `implemented`
-- At: 2026-10-16T12:41:46Z
-- Reason/evidence: review-round-2 findings corrected in `439327de13f5d2cdfcde180ac72984ba0f6546ed`; zero expected quote count now has a no-mutation test, and exit decision logic is covered deterministically without pinning host timings.
-- Blocker: None
+- Current: blocked
+- Last transition: `changes-requested` → `blocked`
+- At: 2026-10-16T12:55:26Z
+- Reason/evidence: round 3 was the third and final permitted review round. Its verification axis passed the configured full command (CTest 5/5, pytest 6/6) but found two unresolved P2 coverage findings: the production CLI all-pass exit-0 mapping and complete no-mutation assertions for the zero-expected-count branch. A fourth review is not permitted; do not mark the ticket approved without fresh review.
+- Blocker: Independent review cap reached with round-3 verification findings unresolved.
 
 ## Claim
 
@@ -43,7 +43,7 @@ Extend the market-like benchmark to report the Addendum B quality metrics for wa
 
 ## Blocked by
 
-None
+Independent review cap reached with two unresolved P2 verification findings from round 3. The implementation has not been approved for handoff.
 
 ## Expected seam
 
@@ -75,6 +75,9 @@ None
 | 2026-10-16T12:41:46Z | Review round 2 corrections | `export PATH="$PWD/.venv/bin:$PATH"; cmake --build build --target essvi_bench essvi_benchmark_quality_tests -j2 && ctest --test-dir build -R essvi_benchmark_quality_tests --output-on-failure && .venv/bin/python -m pytest -q tests/test_benchmark_cli.py` | `/home/zhangy/git/ql-essvi` | `439327d` | passed | Build succeeded; focused CTest 1/1 and CLI pytest 1/1 passed. The C++ test covers zero expected quote count with no aggregate mutation and deterministic pass/miss/unavailable exit-decision cases. |
 | 2026-10-16T12:41:46Z | Passing CLI smoke | `./build/essvi_bench --scenario quiet --scenario-updates 1 --seed 1 --expiries 1 --quotes-per-expiry 1 --check` | `/home/zhangy/git/ql-essvi` | `439327d` | passed | Real CLI returned exit 0; all printed target and hard-limit statuses were `PASS`. Timing is recorded only as smoke evidence, not pinned by a permanent test. |
 | 2026-10-16T12:41:46Z | Final verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `439327d` | passed | Release build succeeded; CTest 5/5 passed; pytest 6/6 passed. |
+| 2026-10-16T12:42:32Z | Review round 3 start | Final review range `af7f0e4bf883dec67e26dc6c94e5d665a8fb5536..c15ef8e48e0bac5a1ff2c13c7e1bb7327165756c`; three independent axes | `/home/zhangy/git/ql-essvi` | `c15ef8e` | reviewing | Round-2 findings resolved; fresh spec, standards, and verification review pending. |
+| 2026-10-16T12:54:40Z | Review round 3 | Base-to-HEAD review `af7f0e4bf883dec67e26dc6c94e5d665a8fb5536..c15ef8e48e0bac5a1ff2c13c7e1bb7327165756c`; three independent axes | `/home/zhangy/git/ql-essvi` | `c15ef8e` | changes required | Spec and standards approved. The configured full command passed CTest 5/5 and pytest 6/6. Verification identified two P2 test gaps: the production CLI all-pass exit-0 mapping and all aggregate fields on the zero-expected-count no-mutation branch. |
+| 2026-10-16T12:55:26Z | Review cap | Round 3 completed | `/home/zhangy/git/ql-essvi` | `c15ef8e` | blocked | The review procedure allows at most three rounds. The round-3 P2 findings remain unreviewed; no approval or handoff recorded. |
 
 ## Review dispositions
 
@@ -83,9 +86,12 @@ None
 | Pre-review | P2: equal aggregate warm/cold quote counts could still compare different updates or populations; empty-pair comparisons were not consistently unavailable. | Resolved | Per-update full-quote-set pairing, paired-update coverage enforcement, and empty-comparison guards added; reviewer recheck confirmed the same-update/same-quote mismatch is closed. |
 | 1 — Spec P2 | Positive warm loss over zero cold loss was marked unavailable, hiding a definite breach. | Resolved | `checkRatioAtMost` now returns available `+inf` for positive/zero; check table reports target miss and hard breach. The CLI regression verifies `inf | MISS | BREACH`; JSON preserves valid syntax using `null`; zero/zero remains 1. |
 | 1 — Standards P2 | Pairing guard and benchmark aggregation lacked automated test coverage. | Resolved | `mergePairedQuoteMetrics`, called by `record()`, rejects equal-but-incomplete and asymmetric update counts without mutating aggregates; CTest regression verifies coverage, paired-update count, and no partial merge. |
-| 1 — Verification P2 | Successful `--check` CLI path and exit 0 were untested. | Resolved | The permanent test now covers the deterministic shared target-miss decision helper for passing, missed, and unavailable checks; real CLI exit 0 was exercised as a smoke, and a separate fast case asserts exit 2 on a target miss. Machine-dependent timing is not asserted. |
+| 1 — Verification P2 | Successful `--check` CLI path and exit 0 were untested. | Resolved | The permanent test covers the deterministic shared target-miss decision helper for passing, missed, and unavailable checks; real CLI exit 0 was exercised as a smoke, and a separate fast case asserts exit 2 on a target miss. Machine-dependent timing is not asserted. |
 | 2 — Standards P2 (judgment) | Successful CLI test asserts measured one-sample quiet timing remains under the performance target; host scheduling can cause false failures unrelated to exit-status behavior. | Resolved | Removed the timing-pinned CLI success test; `hasTargetMiss` is tested for all-pass, target-miss, and unavailable check lists. A one-off real CLI smoke returned 0 with all statuses passing. |
 | 2 — Verification P2 (UNTESTED) | `mergePairedQuoteMetrics` has an `expected_quote_count == 0` rejection branch with no test; existing empty-metric tests do not call the helper with zero expected count. | Resolved | CTest now calls the helper with zero expected quote count and asserts false return, zero `paired_updates`, and unchanged warm/cold aggregate quote counts. |
+| 3 — Verification P2 (UNTESTED) | No deterministic test exercises the production `--check` all-pass decision that returns exit 0. The unit test covers `hasTargetMiss(false)` but not `main`'s mapping from target status to process exit code; the CLI regression only asserts exit 2 on a miss. | Unresolved | Add a deterministic production exit-code helper used by `main`, and assert all-pass produces 0 and a target miss produces 2 without timing-dependent benchmark inputs. |
+| 3 — Verification P2 (UNTESTED) | The zero-expected-count test checks `paired_updates` and warm/cold quote counts only; it cannot detect partial mutation of other aggregate fields. | Unresolved | Seed aggregate metric fields and input metrics with non-zero sentinels, invoke the zero-count guard, and assert every field remains unchanged. |
+| 3 — Review cap | A fourth independent review would exceed the configured maximum of three rounds. | Blocked | Preserve the round-3 findings and do not approve or finish without an allowed fresh review. |
 
 ## Delivery record
 
@@ -98,7 +104,7 @@ None
 - Unconfirmed commands: none (typecheck/lint not applicable)
 - Branch: `delivery/calibrator-speedup-addendum-b/CAL-B1`
 - Worktree: primary checkout, `/home/zhangy/git/ql-essvi` (configured checkout form)
-- Commits: `3fd4fe3` (implementation), `c3849a5` (review round-1 corrections), `439327d` (review round-2 corrections)
+- Commits: `3fd4fe3` (implementation), `c3849a5` (review round-1 corrections), `439327d` (review round-2 corrections), `c15ef8e` (verification record)
 - GitHub Issue: none (local tracker)
-- Tests: final CTest 5/5 and pytest 6/6 passed; scenario matrix target/coverage misses are documented.
-- Diff review: round 2 corrections implemented; round 3 review pending.
+- Tests: configured CTest 5/5 and pytest 6/6 pass; scenario matrix target/coverage misses are documented. Review round 3 found unresolved verification-coverage gaps.
+- Diff review: blocked after round 3; no review approval or finished handoff.
