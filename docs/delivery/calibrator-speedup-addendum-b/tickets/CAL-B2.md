@@ -66,6 +66,7 @@ Replace the `loss_tol * bandLossScale` acceptance and reuse tests with the appro
 | At | Phase | Command | CWD | Commit | Result | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-10-16 | Baseline | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `21e531b` | passed | Release build succeeded; CTest 5/5 passed and pytest 10/10 passed. Configured full command is proven able to fail. |
+| 2026-10-16 | Red | `export PATH="$PWD/.venv/bin:$PATH"; cmake --build build --target essvi_warm_calibrator_tests -j2` | `/home/zhangy/git/ql-essvi` | working tree | expected failure | The new `perQuoteGateRejectsReusedSlice` test fails to compile because `WarmOptions::quote_cap` is absent; the missing public cap is the behavior seam fixed by DEC-002/DEC-011. |
 
 ## Review dispositions
 
