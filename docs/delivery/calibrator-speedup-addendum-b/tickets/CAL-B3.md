@@ -2,10 +2,10 @@
 
 ## State
 
-- Current: implementing
-- Last transition: `baseline-passed` → `implementing`
+- Current: implemented
+- Last transition: `implementing` → `implemented`
 - At: 2026-10-16
-- Reason/evidence: CAL-B2 completed at `00f4db21e1f778ce90b54bb12514cb9ba5dc8cb1`; configured baseline passed at that commit; the user waived independent reviews.
+- Reason/evidence: implementation committed at `c5a7aca2bf565bd78aa0e81baa1231fa923b2aed`; configured verification passed (CTest 5/5, pytest 10/10); scenario target misses are documented; the user waived further independent reviews.
 - Blocker: None
 
 ## State history
@@ -15,6 +15,7 @@
 | 2026-10-16 | `ready` → `baseline-checking` | Claimed by omp coding assistant; primary-checkout branch `delivery/calibrator-speedup-addendum-b/CAL-B3` at the CAL-B2 commit. |
 | 2026-10-16 | `baseline-checking` → `baseline-passed` | Configured full verification passed at base `00f4db21e1f778ce90b54bb12514cb9ba5dc8cb1`; CTest 5/5 and pytest 10/10. |
 | 2026-10-16 | `baseline-passed` → `implementing` | Baseline evidence recorded; B3 seam confirmed; user waived independent reviews. |
+| 2026-10-16 | `implementing` → `implemented` | CAL-B3 committed at `c5a7aca2bf565bd78aa0e81baa1231fa923b2aed`; configured CTest and pytest suites passed; benchmark completed with explicit target misses; independent review waived by user. |
 
 ## Claim
 
@@ -70,9 +71,9 @@ Improve changed-slice local fitting with deterministic multi-start in the bounde
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-10-16 | Baseline | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `00f4db21e1f778ce90b54bb12514cb9ba5dc8cb1` | passed | Release build succeeded; CTest 5/5 passed and pytest 10/10 passed. |
 | 2026-10-16 | Red | `export PATH="$PWD/.venv/bin:$PATH"; cmake --build build --target essvi_warm_calibrator_tests -j2` | `/home/zhangy/git/ql-essvi` | `00f4db21e1f778ce90b54bb12514cb9ba5dc8cb1` | expected failure | Compilation failed because the public result lacks the requested local-start and fallback-reason diagnostics; focused assertions express the CAL-B3 contract. |
-| 2026-10-16 | Green | `export PATH="$PWD/.venv/bin:$PATH"; cmake --build build --target essvi_warm_calibrator_tests essvi_bench -j2 && ctest --test-dir build -R essvi_warm_calibrator_tests --output-on-failure` | `/home/zhangy/git/ql-essvi` | working tree | passed | Focused tests passed for three bounded starts, 25-evaluation budget, ATM zero-loss stop, repeatability, feasibility rejection, all four reason categories, and existing CAL-B2 quality checks. |
-| 2026-10-16 | Scenario benchmark | `scripts/verify_scenarios.sh` | `/home/zhangy/git/ql-essvi` | working tree | target misses (exit 1) | Completed all 20 runs (four scenarios × five seeds × 200 updates); all `--check` calls returned 2 for target misses, not execution failures. The result table and reason histograms are in `docs/perf-results.md`; fast seeds 2–5 had warm failures and unpaired updates. |
-| 2026-10-16 | Configured verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | working tree | passed | Release build succeeded; CTest 5/5 passed; pytest 10/10 passed. |
+| 2026-10-16 | Green | `export PATH="$PWD/.venv/bin:$PATH"; cmake --build build --target essvi_warm_calibrator_tests essvi_bench -j2 && ctest --test-dir build -R essvi_warm_calibrator_tests --output-on-failure` | `/home/zhangy/git/ql-essvi` | `c5a7aca2bf565bd78aa0e81baa1231fa923b2aed` | passed | Focused tests passed for three bounded starts, 25-evaluation budget, ATM zero-loss stop, repeatability, feasibility rejection, all four reason categories, and existing CAL-B2 quality checks. |
+| 2026-10-16 | Scenario benchmark | `scripts/verify_scenarios.sh` | `/home/zhangy/git/ql-essvi` | `c5a7aca2bf565bd78aa0e81baa1231fa923b2aed` | target misses (exit 1) | Completed all 20 runs (four scenarios × five seeds × 200 updates); all `--check` calls returned 2 for target misses, not execution failures. The result table and reason histograms are in `docs/perf-results.md`; fast seeds 2–5 had warm failures and unpaired updates. |
+| 2026-10-16 | Configured verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `c5a7aca2bf565bd78aa0e81baa1231fa923b2aed` | passed | Release build succeeded; CTest 5/5 passed; pytest 10/10 passed. |
 
 ## Review dispositions
 
@@ -90,7 +91,7 @@ Improve changed-slice local fitting with deterministic multi-start in the bounde
 - Unconfirmed commands: typecheck/lint not applicable; no configured linter
 - Branch: `delivery/calibrator-speedup-addendum-b/CAL-B3`
 - Worktree: primary checkout, `/home/zhangy/git/ql-essvi` (configured checkout form)
-- Commit: pending
+- Commit: `c5a7aca2bf565bd78aa0e81baa1231fa923b2aed`
 - GitHub Issue: none (local tracker)
 - Tests: focused warm test passed; configured CTest 5/5 and pytest 10/10 passed; scenario script completed all 20 runs but returned 1 for target misses (documented in `docs/perf-results.md`).
 - Diff review: waived at user request; no independent review performed.
