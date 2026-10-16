@@ -564,6 +564,12 @@ void stagedFallbackBudgetReturnsValidDegradedResults() {
   assert(result.fallback_reason_counts.budget_exhausted > 0);
   assert(result.degraded_slices > 0);
   assert(result.degraded_ages.size() == result.surface.slices.size());
+  assert(static_cast<std::size_t>(std::count_if(
+             result.degraded_ages.begin(), result.degraded_ages.end(),
+             [](std::size_t age) { return age != 0; })) ==
+         result.degraded_slices);
+  assert(result.full_cold_searches <=
+         8 + result.forced_full_cold_searches);
   assert(result.quality_quote_count == current.size());
   assert(std::isfinite(result.quality_rms_excess_ratio));
   assert(std::isfinite(result.worst_slice_rms_excess_ratio));
@@ -576,6 +582,12 @@ void stagedFallbackBudgetReturnsValidDegradedResults() {
     assert(result.converged);
     assert(result.path == essvi::CalibrationPath::degraded);
     assert(result.degraded_slices > 0);
+    assert(static_cast<std::size_t>(std::count_if(
+               result.degraded_ages.begin(), result.degraded_ages.end(),
+               [](std::size_t age) { return age != 0; })) ==
+           result.degraded_slices);
+    assert(result.full_cold_searches <=
+           8 + result.forced_full_cold_searches);
     checkDenseGrid(result.surface);
   }
 

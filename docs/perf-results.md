@@ -358,6 +358,21 @@ Small output smoke (not the 40 × 100 / 200-update acceptance run): `build/essvi
 
 This short run confirms bounded stage accounting and valid degraded-path reporting, not Addendum B performance acceptance. It reports 100% combined fallback updates and large per-quote excess ratios; the quality and latency gaps remain visible for CAL-B5's regression sequence.
 
+## WP-B5 — Deterministic 4 × 50 hard-limit regression
+
+The standalone `essvi_warm_scenario_regression` target runs quiet, normal, fast, and front for 50 updates each at 40 expiries × 100 quotes, fixed seed 1. It aggregates quality over paired quote-update observations (the same population semantics as the scenario benchmark), checks Addendum B hard limits, validates every warm result and dense-grid surface, and exits nonzero on a breach. Each first breach reports scenario, seed, update, metric, observed value, and hard limit. It is built with the configured CMake build but is intentionally invoked separately from CTest: the hard-limit run currently returns nonzero and its measured latency limit is host-dependent.
+
+Command: `build/essvi_warm_scenario_regression`. Every scenario breached at least one hard limit; no warm invalid surfaces or dense-grid violations were reported. Timing is one run and remains load-sensitive.
+
+| Scenario | p99 (ms) / hard limit | Fallback updates (%) / hard limit | Warm RMS excess ratio / hard limit | Other reported hard-limit breaches |
+|---|---:|---:|---:|---|
+| quiet | 78.431 / 10 | 14 / 5 | 0.00687 / 0.05 | Median 1.434 / 0.47 ms and p99 78.431 / 7.6 ms also breach quiet non-regression; warm/cold summed-loss ratio unavailable because cold reference loss was zero while warm loss was positive. |
+| normal | 116.936 / 10 | 100 / 5 | 0.23966 / 0.05 | None in paired cap-share, maximum-ratio, summed-loss, or RMS-IV-delta checks. |
+| fast | 113.424 / 20 | 96 / 25 | 255,248.641 / 0.05 | One unpaired update and one warm plus cold-reference failure; RMS excess-IV delta 0.16032 / 0.05. |
+| front | 196.840 / 10 | 100 / 5 | 0.24640 / 0.05 | None in paired cap-share, maximum-ratio, summed-loss, or RMS-IV-delta checks. |
+
+The regression is intentionally not described as a performance pass: current 4 × 50 hard-limit misses remain visible for downstream work. The direct degraded-result tests in `tests/test_warm_calibrator.cpp` assert age/count agreement and the ordinary full-cold budget in addition to valid surfaces and forced-refit behavior.
+
 ## WP-B2 — Per-quote gate and reuse drift
 
 The warm gate now evaluates each included two-sided quote independently in total variance: `ratio = max(0, bid_var - fit_var, fit_var - ask_var) / max(ask_var - bid_var, 1e-6)`. A candidate passes the base gate only when every ratio is at most `WarmOptions::quote_cap` (default 0.1). A failed reuse falls through to local fitting; a local candidate that fails the base gate is followed by a cold search restricted to prior rho ±0.15 over the feasible psi interval. If that restricted result passes the base cap, it is used. Otherwise one same-snapshot full-cold reference is cached per slice, and the restricted candidate is retained only when every quote is within `max(quote_cap, cold_ratio + 0.01)`; otherwise the full-cold result is selected. Reuse also requires the per-quote cap and calendar check; `CalibrationResult::reuse_ages` tracks unchanged-parameter reuse and forces refit after 12 consecutive updates. `calibrateWarm` now takes the prior `CalibrationResult` (nullable) so the surface and reuse state travel together. `loss_tol` remains a deprecated compatibility/reporting value; it no longer gates reuse or acceptance. Scheduled `cold_check_interval` was removed. The benchmark accepts `--quote-cap`; its reported share-above-cap metric remains fixed at 0.1 for the approved target.

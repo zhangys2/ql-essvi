@@ -2,11 +2,11 @@
 
 ## State
 
-- Current: ready
-- Last transition: `draft` → `ready`
-- At: 2026-10-16T11:24:10Z
-- Reason/evidence: parent implementation spec approved by user; `docs/delivery/calibrator-speedup-addendum-b/implementation-spec.md`
-- Blocker: CAL-B4
+- Current: implementing
+- Last transition: `ready` → `baseline-passed` → `implementing`
+- At: 2026-10-16
+- Reason/evidence: configured baseline passed at B4 completion commit `186d03f63dcf0d495052742a81c5648fdfbe36ec`; CAL-B4 dependency complete.
+- Blocker: None
 
 ## Claim
 
@@ -55,6 +55,11 @@ Add a deterministic four-scenario sequence of 50 updates per scenario that fails
 
 | At | Phase | Command | CWD | Commit | Result | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-16 | Baseline | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `186d03f63dcf0d495052742a81c5648fdfbe36ec` | passed | Release build succeeded; CTest 5/5 passed; pytest 10/10 passed. |
+| 2026-10-16 | Red baseline sequence | `build/essvi_bench --scenario all --scenario-updates 50 --seed 1 --check` | `/home/zhangy/git/ql-essvi` | `186d03f63dcf0d495052742a81c5648fdfbe36ec` | expected nonzero; hard misses observed | All four 50-update scenarios completed; the checker returned 2 on target/hard-limit misses. This established the existing quality gaps before adding the regression runner. |
+| 2026-10-16 | Focused degraded checks | `export PATH="$PWD/.venv/bin:$PATH"; cmake --build build --target essvi_warm_calibrator_tests essvi_warm_scenario_regression -j2 && ctest --test-dir build -R essvi_warm_calibrator_tests --output-on-failure` | `/home/zhangy/git/ql-essvi` | pending | passed | Warm tests assert `path=degraded`, valid dense-grid surfaces, exact nonzero-age/degraded-count agreement, and `full_cold_searches <= 8 + forced_full_cold_searches`; focused CTest 1/1 passed. |
+| 2026-10-16 | 4 × 50 hard-limit regression | `build/essvi_warm_scenario_regression` | `/home/zhangy/git/ql-essvi` | pending | completed; hard misses reported (exit 1) | Four scenarios × 50 updates, 40 × 100 quotes, seed 1. Each first violation reports scenario, seed, update, metric, observed value, and hard limit. All four scenarios currently breach one or more Addendum B limits; details and measured misses are in `docs/perf-results.md` WP-B5. No warm invalid surface or dense-grid violation was reported. |
+| 2026-10-16 | Configured verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | pending | passed | Release build succeeded; CTest 5/5 passed; pytest 10/10 passed. The opt-in hard-limit runner is not part of default CTest. |
 
 ## Review dispositions
 
@@ -63,14 +68,14 @@ Add a deterministic four-scenario sequence of 50 updates per scenario that fails
 
 ## Delivery record
 
-- Base commit: `af7f0e4bf883dec67e26dc6c94e5d665a8fb5536`
-- Baseline status: not started
-- Baseline verification: pending
+- Base commit: `186d03f63dcf0d495052742a81c5648fdfbe36ec`
+- Baseline status: passed
+- Baseline verification: configured CMake build, CTest 5/5, pytest 10/10 passed at base commit `186d03f63dcf0d495052742a81c5648fdfbe36ec`.
 - Baseline failure evidence: None
 - Unconfirmed commands: typecheck/lint not applicable; no configured linter
-- Branch: pending claim
+- Branch: `delivery/calibrator-speedup-addendum-b/CAL-B5`
 - Worktree: primary checkout, `/home/zhangy/git/ql-essvi` (configured checkout form)
 - Commit: pending
 - GitHub Issue: none (local tracker)
-- Tests: pending
-- Diff review: pending
+- Tests: focused warm CTest 1/1, configured CTest 5/5, pytest 10/10 passed. The opt-in 4 × 50 hard-limit runner completed and returned 1 because measured Addendum B hard limits are still exceeded; see `docs/perf-results.md` WP-B5.
+- Diff review: waived at user request; no independent review performed.

@@ -66,6 +66,13 @@ if(BUILD_TESTING)
   target_link_libraries(essvi_warm_calibrator_tests PRIVATE essvi_core)
   add_test(NAME essvi_warm_calibrator_tests COMMAND essvi_warm_calibrator_tests)
 
+  # Opt-in market acceptance probe: long-running and threshold-gated, so it is
+  # invoked separately from the default CTest suite.
+  add_executable(essvi_warm_scenario_regression
+    tests/test_warm_scenario_regression.cpp)
+  target_include_directories(essvi_warm_scenario_regression PRIVATE bench)
+  target_link_libraries(essvi_warm_scenario_regression PRIVATE essvi_core)
+
   add_executable(essvi_benchmark_quality_tests tests/test_benchmark_quality.cpp)
   target_include_directories(essvi_benchmark_quality_tests PRIVATE bench)
   target_link_libraries(essvi_benchmark_quality_tests PRIVATE essvi_core)
