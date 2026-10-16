@@ -2,15 +2,24 @@
 
 ## State
 
-- Current: ready
-- Last transition: `draft` → `ready`
-- At: 2026-10-16T11:24:10Z
-- Reason/evidence: parent implementation spec approved by user; `docs/delivery/calibrator-speedup-addendum-b/implementation-spec.md`
-- Blocker: CAL-B7
+- Current: implementing
+- Last transition: `baseline-passed` → `implementing`
+- At: 2026-10-16
+- Reason/evidence: exact B2 base `21e531b` passed configured verification; the per-quote gate/reuse seam is confirmed. The user explicitly waived independent reviews; no review approval is claimed.
+- Blocker: None under the user's review waiver.
+
+## State history
+
+| At | Transition | Evidence |
+| --- | --- | --- |
+| 2026-10-16T11:24:10Z | `draft` → `ready` | Approved implementation spec and ticket acceptance criteria. |
+| 2026-10-16 | `ready` → `baseline-checking` | Claimed by omp coding assistant; configured primary-checkout branch `delivery/calibrator-speedup-addendum-b/CAL-B2`. |
+| 2026-10-16 | `baseline-checking` → `baseline-passed` | Configured full verification passed at declared base `21e531b`. |
+| 2026-10-16 | `baseline-passed` → `implementing` | Baseline passed; B2 seam confirmed; user waived independent reviews. |
 
 ## Claim
 
-None
+omp coding assistant
 
 ## Parent
 
@@ -41,7 +50,7 @@ Replace the `loss_tol * bandLossScale` acceptance and reuse tests with the appro
 
 ## Blocked by
 
-- CAL-B7 — measured scenario calibration and replay.
+- None; CAL-B7 is implemented and committed as `21e531b` with the user's review waiver.
 
 ## Expected seam
 
@@ -56,6 +65,7 @@ Replace the `loss_tol * bandLossScale` acceptance and reuse tests with the appro
 
 | At | Phase | Command | CWD | Commit | Result | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-16 | Baseline | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `21e531b` | passed | Release build succeeded; CTest 5/5 passed and pytest 10/10 passed. Configured full command is proven able to fail. |
 
 ## Review dispositions
 
@@ -64,14 +74,15 @@ Replace the `loss_tol * bandLossScale` acceptance and reuse tests with the appro
 
 ## Delivery record
 
-- Base commit: `af7f0e4bf883dec67e26dc6c94e5d665a8fb5536`
-- Baseline status: not started
-- Baseline verification: pending
+- Base commit: `21e531b753b18af4ff74a3a10f5d78b3bcbe44d8`
+- Baseline status: passed
+- Baseline verification:
+  - `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` (cwd: `/home/zhangy/git/ql-essvi`) — passed (CTest 5/5; pytest 10/10)
 - Baseline failure evidence: None
 - Unconfirmed commands: typecheck/lint not applicable; no configured linter
-- Branch: pending claim
+- Branch: `delivery/calibrator-speedup-addendum-b/CAL-B2`
 - Worktree: primary checkout, `/home/zhangy/git/ql-essvi` (configured checkout form)
 - Commit: pending
 - GitHub Issue: none (local tracker)
-- Tests: pending
-- Diff review: pending
+- Tests: baseline passed; implementation pending.
+- Diff review: explicitly waived by user; no independent review or approval claimed.
