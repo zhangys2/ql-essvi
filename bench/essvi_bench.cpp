@@ -974,10 +974,7 @@ bool runNewBenchmarks(const Options& options) {
   const bool target_missed = options.check && std::any_of(
       summaries.begin(), summaries.end(), [](const Summary& summary) {
         const auto checks = qualityChecks(summary);
-        return std::any_of(checks.begin(), checks.end(),
-                           [](const essvi::bench::QualityCheck& check) {
-                             return !check.targetPassed();
-                           });
+        return essvi::bench::hasTargetMiss(checks);
       });
   return target_missed;
 }

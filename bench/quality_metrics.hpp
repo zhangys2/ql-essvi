@@ -119,6 +119,12 @@ inline QualityCheck checkRatioAtMost(std::string name, double numerator,
                      hard_limit);
 }
 
+inline bool hasTargetMiss(const std::vector<QualityCheck>& checks) {
+  return std::any_of(checks.begin(), checks.end(), [](const QualityCheck& check) {
+    return !check.targetPassed();
+  });
+}
+
 inline bool hasValidTwoSidedBand(const Quote& quote) {
   if (!quote.included || !std::isfinite(quote.expiry) || quote.expiry <= 0.0 ||
       !std::isfinite(quote.forward) || quote.forward <= 0.0 ||

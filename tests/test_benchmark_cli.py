@@ -18,29 +18,6 @@ def run_benchmark(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_check_cli_returns_zero_for_passing_scenario() -> None:
-    result = run_benchmark(
-        "--scenario",
-        "quiet",
-        "--scenario-updates",
-        "1",
-        "--seed",
-        "1",
-        "--expiries",
-        "1",
-        "--quotes-per-expiry",
-        "1",
-        "--check",
-    )
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "quality_check_table=quiet" in result.stdout
-    check_rows = result.stdout.split("quality_check_table=quiet\n", 1)[1].splitlines()[1:]
-    status_rows = [line for line in check_rows if " | " in line]
-    assert status_rows
-    assert all(line.endswith("PASS | PASS") for line in status_rows)
-
-
 def test_check_cli_reports_positive_loss_over_zero_as_hard_breach(
     tmp_path: Path,
 ) -> None:

@@ -57,6 +57,12 @@ void mergesOnlyCompletePerUpdateQuotePopulations() {
   essvi::bench::BenchmarkQuality quality;
   essvi::bench::QuoteExcessMetrics warm;
   essvi::bench::QuoteExcessMetrics cold;
+
+  assert(!essvi::bench::mergePairedQuoteMetrics(quality, warm, cold, 0));
+  assert(quality.paired_updates == 0);
+  assert(quality.warm.quote_count == 0);
+  assert(quality.cold.quote_count == 0);
+
   warm.quote_count = 2;
   warm.summed_band_loss = 0.2;
   cold.quote_count = 2;
@@ -114,6 +120,21 @@ void separatesTargetAndHardLimitAndHandlesZeroReference() {
   assert(!positive_over_zero.targetPassed());
   assert(!positive_over_zero.hardLimitPassed());
 }
+
+void reportsTargetMissAcrossChecks() {
+  const std::vector<essvi::bench::QualityCheck> passing{
+      essvi::bench::checkAtMost("pass", 0.5, 1.0, 2.0),
+      essvi::bench::checkAtMost("boundary", 1.0, 1.0, 2.0)};
+  assert(!essvi::bench::hasTargetMiss(passing));
+
+  const std::vector<essvi::bench::QualityCheck> target_miss{
+      essvi::bench::checkAtMost("miss", 1.5, 1.0, 2.0)};
+  assert(essvi::bench::hasTargetMiss(target_miss));
+
+  const std::vector<essvi::bench::QualityCheck> unavailable{
+      {"unavailable", 0.0, 1.0, 2.0, false}};
+  assert(essvi::bench::hasTargetMiss(unavailable));
+}
 }  // namespace
 
 int main() {
@@ -122,5 +143,6 @@ int main() {
   requiresMatchedWarmAndColdQuoteCounts();
   mergesOnlyCompletePerUpdateQuotePopulations();
   separatesTargetAndHardLimitAndHandlesZeroReference();
+  reportsTargetMissAcrossChecks();
   return 0;
 }
