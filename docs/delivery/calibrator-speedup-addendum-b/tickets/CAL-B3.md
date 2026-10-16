@@ -2,15 +2,23 @@
 
 ## State
 
-- Current: ready
-- Last transition: `draft` → `ready`
-- At: 2026-10-16T11:24:10Z
-- Reason/evidence: parent implementation spec approved by user; `docs/delivery/calibrator-speedup-addendum-b/implementation-spec.md`
-- Blocker: CAL-B2
+- Current: implementing
+- Last transition: `baseline-passed` → `implementing`
+- At: 2026-10-16
+- Reason/evidence: CAL-B2 completed at `00f4db21e1f778ce90b54bb12514cb9ba5dc8cb1`; configured baseline passed at that commit; the user waived independent reviews.
+- Blocker: None
+
+## State history
+
+| At | Transition | Evidence |
+| --- | --- | --- |
+| 2026-10-16 | `ready` → `baseline-checking` | Claimed by omp coding assistant; primary-checkout branch `delivery/calibrator-speedup-addendum-b/CAL-B3` at the CAL-B2 commit. |
+| 2026-10-16 | `baseline-checking` → `baseline-passed` | Configured full verification passed at base `00f4db21e1f778ce90b54bb12514cb9ba5dc8cb1`; CTest 5/5 and pytest 10/10. |
+| 2026-10-16 | `baseline-passed` → `implementing` | Baseline evidence recorded; B3 seam confirmed; user waived independent reviews. |
 
 ## Claim
 
-None
+omp coding assistant
 
 ## Parent
 
@@ -41,7 +49,7 @@ Improve changed-slice local fitting with deterministic multi-start in the bounde
 
 ## Blocked by
 
-- CAL-B2 — per-quote gate and reuse semantics.
+- CAL-B2 — per-quote gate and reuse semantics (completed at `00f4db21e1f778ce90b54bb12514cb9ba5dc8cb1`).
 
 ## Expected seam
 
@@ -56,6 +64,8 @@ Improve changed-slice local fitting with deterministic multi-start in the bounde
 
 | At | Phase | Command | CWD | Commit | Result | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-16 | Baseline | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `00f4db21e1f778ce90b54bb12514cb9ba5dc8cb1` | passed | Release build succeeded; CTest 5/5 passed and pytest 10/10 passed. |
+| 2026-10-16 | Red | `export PATH="$PWD/.venv/bin:$PATH"; cmake --build build --target essvi_warm_calibrator_tests -j2` | `/home/zhangy/git/ql-essvi` | `00f4db21e1f778ce90b54bb12514cb9ba5dc8cb1` | expected failure | Compilation failed because the public result lacks the requested local-start and fallback-reason diagnostics; focused assertions express the CAL-B3 contract. |
 
 ## Review dispositions
 
@@ -64,12 +74,13 @@ Improve changed-slice local fitting with deterministic multi-start in the bounde
 
 ## Delivery record
 
-- Base commit: `af7f0e4bf883dec67e26dc6c94e5d665a8fb5536`
-- Baseline status: not started
-- Baseline verification: pending
+- Base commit: `00f4db21e1f778ce90b54bb12514cb9ba5dc8cb1`
+- Baseline status: passed
+- Baseline verification:
+  - `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` (cwd: `/home/zhangy/git/ql-essvi`) — passed (CTest 5/5; pytest 10/10)
 - Baseline failure evidence: None
 - Unconfirmed commands: typecheck/lint not applicable; no configured linter
-- Branch: pending claim
+- Branch: `delivery/calibrator-speedup-addendum-b/CAL-B3`
 - Worktree: primary checkout, `/home/zhangy/git/ql-essvi` (configured checkout form)
 - Commit: pending
 - GitHub Issue: none (local tracker)

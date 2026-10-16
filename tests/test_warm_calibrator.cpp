@@ -263,6 +263,7 @@ void perQuoteGateChecksSingleOutlierAgainstColdReference() {
   assert(warm.slices_refit > 0);
   assert(warm.slices_reused + warm.slices_refit == 3);
   assert(warm.fallback_slices > 0);
+  assert(warm.fallback_reason_counts.loss_above_gate > 0);
   assert(warm.path == essvi::CalibrationPath::fallback);
   assert(warm.objective <= cold.objective * 1.05 + 1e-12);
   essvi::WarmOptions different_legacy_tolerance = options;
@@ -388,8 +389,47 @@ void failedJacobiPrefitFallsBackWithoutRetry() {
   assert(!warm.converged);
   assert(warm.error == "no ATM quote");
   assert(warm.local_solver_slices == 2);
+  assert(warm.fallback_reason_counts.infeasible_local_result > 0);
   assert(warm.slices_refit == 1);
   assert(warm.slices_reused == 0);
+}
+
+void localSolverUsesThreeBoundedStarts() {
+  const auto previous_quotes = essvi::bench::realisticChain(1, 100, 7);
+  const auto previous = essvi::calibrate(previous_quotes);
+  assert(previous.converged);
+
+  auto current_quotes = previous_quotes;
+  auto target = previous.surface.slices.front();
+  target.rho = std::clamp(target.rho + 0.03, -0.95, 0.95);
+  std::size_t quote_index = 0;
+  for (auto& quote : current_quotes) {
+    const double k = std::log(quote.strike / quote.forward);
+    const double iv = std::sqrt(
+        essvi::sliceTotalVariance(target, k) / quote.expiry);
+    const double noise = quote_index++ % 2 == 0 ? 5e-5 : -5e-5;
+    quote.bid_iv = std::max(0.001, iv + noise - 2e-5);
+    quote.ask_iv = iv + noise + 2e-5;
+    quote.mid_iv = iv + noise;
+  }
+
+  essvi::WarmOptions options;
+  options.quote_tol = 0.0;
+  options.quote_cap = 5.0;
+  const auto warm = essvi::calibrateWarm(
+      current_quotes, &previous, previous_quotes, options);
+  const auto repeated = essvi::calibrateWarm(
+      current_quotes, &previous, previous_quotes, options);
+  assert(warm.converged && repeated.converged);
+  assert(warm.local_solver_slices == 1);
+  assert(warm.local_solver_starts == 3);
+  assert(warm.local_objective_evaluations > 0);
+  assert(warm.local_objective_evaluations <= 25);
+  assert(warm.local_objective_evaluations ==
+         repeated.local_objective_evaluations);
+  assert(warm.local_solver_starts == repeated.local_solver_starts);
+  sameParameters(warm.surface, repeated.surface);
+  checkDenseGrid(warm.surface);
 }
 
 void localWarmRefitHonorsBudgetAndQuality() {
@@ -425,7 +465,11 @@ void localWarmRefitHonorsBudgetAndQuality() {
   assert(warm.slices_refit == 1);
   assert(warm.slices_reused == 2);
   assert(warm.local_solver_slices == 1);
-  assert(warm.local_objective_evaluations <= 15);
+  assert(warm.local_solver_starts == 1);
+  assert(warm.local_objective_evaluations == 1);
+  assert(warm.local_objective_evaluations <= 25);
+  assert(std::abs(warm.surface.slices.back().rho -
+                  previous.surface.slices.back().rho) <= 0.05 + 1e-12);
   assert(warm.local_mm_bound_calls <= 11);
   assert(warm.objective <= cold.objective * 1.05 + 1e-12);
   checkDenseGrid(warm.surface);
@@ -441,5 +485,6 @@ int main() {
   sequentialCalendarRepairRetriesRejectedCandidates();
   failedJacobiPrefitFallsBackWithoutRetry();
   localWarmRefitHonorsBudgetAndQuality();
+  localSolverUsesThreeBoundedStarts();
   return 0;
 }
