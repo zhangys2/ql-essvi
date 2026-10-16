@@ -24,6 +24,9 @@ namespace essvi {
 namespace {
 constexpr double kEps = 1e-8;
 constexpr std::size_t kMaxCalibrationThreads = ESSVI_MAX_CALIBRATION_THREADS;
+constexpr std::size_t kFullColdSearchBudget = 8;
+constexpr std::size_t kDegradedAgeBeforeForcedCold = 3;
+constexpr double kFastScenarioResidualP95 = 0.005561586;
 using Clock = std::chrono::steady_clock;
 
 std::vector<std::string> split(const std::string& s) {
@@ -239,6 +242,28 @@ bool quoteGroupReusable(const std::vector<const Quote*>& current,
       return false;
   }
   return true;
+}
+
+double meanAbsoluteMidIvMove(const QuoteGroups& current,
+                             const QuoteGroups& previous) {
+  double absolute_move_sum = 0.0;
+  std::size_t matched_quotes = 0;
+  for (std::size_t group = 0; group < current.expiries.size(); ++group) {
+    const auto* previous_quotes =
+        quoteGroupAt(previous, current.expiries[group]);
+    if (!previous_quotes || previous_quotes->size() != current.slices[group].size())
+      continue;
+    for (std::size_t quote = 0; quote < current.slices[group].size(); ++quote) {
+      const auto& now = *current.slices[group][quote];
+      const auto& before = *(*previous_quotes)[quote];
+      if (now.id != before.id || !std::isfinite(now.mid_iv) ||
+          !std::isfinite(before.mid_iv))
+        continue;
+      absolute_move_sum += std::abs(now.mid_iv - before.mid_iv);
+      ++matched_quotes;
+    }
+  }
+  return matched_quotes ? absolute_move_sum / matched_quotes : 0.0;
 }
 
 struct PreparedQuote {
@@ -925,10 +950,12 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
     return out;
   }
   out.reuse_ages.reserve(current_groups.expiries.size());
+  out.degraded_ages.reserve(current_groups.expiries.size());
 
   RhoWorkerPool rho_workers(current_groups.expiries.size() > 1);
   bool used_warm_path = false;
   bool used_fallback = false;
+  double quality_ratio_square_sum = 0.0;
   const auto fitting_started = Clock::now();
   {
       struct WarmCandidate {
@@ -946,6 +973,7 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
         std::uint64_t local_bound_calls{};
         CalibrationResult full_cold_reference;
         bool full_cold_reference_attempted{};
+        bool full_cold_budget_exhausted{};
       };
       std::vector<WarmCandidate> candidates(current_groups.expiries.size());
       const auto previousReuseAge = [&](double expiry) {
@@ -958,6 +986,25 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
         }
         return std::size_t{0};
       };
+      const auto previousDegradedAge = [&](double expiry) {
+        if (!has_previous) return std::size_t{0};
+        for (std::size_t i = 0; i < previous_surface.slices.size(); ++i) {
+          if (previous_surface.slices[i].expiry != expiry) continue;
+          return i < previous_result->degraded_ages.size()
+                     ? previous_result->degraded_ages[i]
+                     : std::size_t{0};
+        }
+        return std::size_t{0};
+      };
+      const bool prior_fallback_majority =
+          has_previous &&
+          previous_result->fallback_slices * 2 > previous_surface.slices.size();
+      const double mean_absolute_move =
+          has_previous ? meanAbsoluteMidIvMove(current_groups, previous_groups)
+                       : 0.0;
+      const bool skip_local_for_large_move =
+          prior_fallback_majority &&
+          mean_absolute_move >= kFastScenarioResidualP95;
       const auto previousSliceBefore = [&](double expiry) -> const Slice* {
         const Slice* previous = nullptr;
         for (const auto& slice : previous_surface.slices) {
@@ -973,9 +1020,21 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
           -> const CalibrationResult& {
         if (!plan.full_cold_reference_attempted) {
           plan.full_cold_reference_attempted = true;
-          plan.full_cold_reference =
-              fitSlice(plan.prepared, expiry, previous, rho_workers);
-          out.iterations += plan.full_cold_reference.iterations;
+          const bool forced =
+              previousDegradedAge(expiry) >= kDegradedAgeBeforeForcedCold;
+          if (has_previous && !forced &&
+              out.full_cold_searches >= kFullColdSearchBudget) {
+            plan.full_cold_budget_exhausted = true;
+            ++out.fallback_reason_counts.budget_exhausted;
+          } else {
+            if (has_previous) {
+              ++out.full_cold_searches;
+              if (forced) ++out.forced_full_cold_searches;
+            }
+            plan.full_cold_reference =
+                fitSlice(plan.prepared, expiry, previous, rho_workers);
+            out.iterations += plan.full_cold_reference.iterations;
+          }
         }
         return plan.full_cold_reference;
       };
@@ -987,7 +1046,9 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
         plan.loss_scale = bandLossScale(plan.prepared);
         plan.warm_start = surfaceSliceAt(previous_surface, expiry);
         plan.old_previous = previousSliceBefore(expiry);
-        if (!plan.warm_start) continue;
+        if (!plan.warm_start ||
+            previousDegradedAge(expiry) >= kDegradedAgeBeforeForcedCold)
+          continue;
   
         const auto* old_quote_group = quoteGroupAt(previous_groups, expiry);
         const bool quotes_unchanged =
@@ -1040,16 +1101,32 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
       // Jacobi prefit: changed slices see only their previous-snapshot predecessor.
       {
           std::size_t local_fit_count = 0;
-          for (const auto& plan : candidates)
-            local_fit_count += plan.warm_start && !plan.have_candidate;
+          for (std::size_t i = 0; i < candidates.size(); ++i) {
+            const auto& plan = candidates[i];
+            local_fit_count += plan.warm_start && !plan.have_candidate &&
+                               previousDegradedAge(current_groups.expiries[i]) <
+                                   kDegradedAgeBeforeForcedCold &&
+                               !skip_local_for_large_move;
+          }
           std::vector<std::size_t> local_indices;
           if (local_fit_count != 0) {
             local_indices.reserve(local_fit_count);
             for (std::size_t i = 0; i < candidates.size(); ++i) {
               const auto& plan = candidates[i];
-              if (plan.warm_start && !plan.have_candidate)
+              if (plan.warm_start && !plan.have_candidate &&
+                  previousDegradedAge(current_groups.expiries[i]) <
+                      kDegradedAgeBeforeForcedCold &&
+                  !skip_local_for_large_move)
                 local_indices.push_back(i);
             }
+            std::sort(local_indices.begin(), local_indices.end(),
+                      [&](std::size_t a, std::size_t b) {
+                        const auto age_a =
+                            previousDegradedAge(current_groups.expiries[a]);
+                        const auto age_b =
+                            previousDegradedAge(current_groups.expiries[b]);
+                        return age_a != age_b ? age_a > age_b : a < b;
+                      });
             rho_workers.parallelFor(
                 local_indices.size(), [&](std::size_t begin, std::size_t end) {
                   for (std::size_t task = begin; task < end; ++task) {
@@ -1099,107 +1176,203 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
         bool candidate_reused = plan.candidate_reused;
         bool candidate_from_warm = plan.candidate_from_warm;
   
-        bool calendar_repair_needed =
-            have_candidate &&
-            !calendarSafe(candidate,
-                          calendarBounds(previous_slice, expiry, candidate.rho));
-                
-  
-        // Repair only candidates made infeasible by the updated predecessor.
-        
-        if (calendar_repair_needed && warm_start) {
-          ++out.local_solver_slices;
-          std::uint64_t local_bound_calls = 0;
-          CalibrationResult local;
-          {
-            detail::MmBoundCallScope local_bound_scope(&local_bound_calls);
-            local = fitSlice(plan.prepared, expiry, previous_slice, rho_workers,
-                             warm_start);
+        const auto selectBudgetFallback = [&](const Slice* restricted_slice,
+                                              double restricted_loss) {
+          Slice best_slice{};
+          double best_loss = INFINITY;
+          bool found = false;
+          BoundMemo safe_bound(false);
+          const auto consider = [&](const Slice& possible, double loss) {
+            if (!std::isfinite(loss)) return;
+            const auto calendar =
+                calendarBounds(previous_slice, expiry, possible.rho);
+            if (!pairSafe(possible, safe_bound, calendar)) return;
+            if (!found || loss < best_loss) {
+              best_slice = possible;
+              best_loss = loss;
+              found = true;
+            }
+          };
+          if (restricted_slice) consider(*restricted_slice, restricted_loss);
+          if (have_candidate) consider(candidate, candidate_loss);
+          if (warm_start) {
+            Slice prior = *warm_start;
+            prior.expiry = expiry;
+            consider(prior, bandLoss(prior, plan.prepared));
           }
-          out.local_solver_starts += local.local_solver_starts;
-          out.local_objective_evaluations += local.objective_evaluations;
-          out.local_mm_bound_calls += local_bound_calls;
-          out.fallback_reason_counts.bound_check_failed +=
-              local.fallback_reason_counts.bound_check_failed;
-          bound_calls += local_bound_calls;
-          out.iterations += local.iterations;
-          if (local.converged &&
-              calendarSafe(local.surface.slices.front(),
-                           calendarBounds(previous_slice, expiry,
-                                          local.surface.slices.front().rho))) {
-            candidate = local.surface.slices.front();
-            candidate_loss = local.objective;
-            have_candidate = true;
-            candidate_reused = false;
-            candidate_from_warm = true;
-          } else {
-            ++out.fallback_reason_counts.calendar_repair_failed;
-            have_candidate = false;
+          if (!found) return false;
+          candidate = best_slice;
+          candidate_loss = best_loss;
+          have_candidate = true;
+          candidate_reused = false;
+          candidate_from_warm = false;
+          used_fallback = true;
+          ++out.fallback_slices;
+          return true;
+        };
+
+        const bool forced_full_cold =
+            warm_start &&
+            previousDegradedAge(expiry) >= kDegradedAgeBeforeForcedCold;
+        if (forced_full_cold) {
+          const auto& cold = fullColdReference(plan, expiry, previous_slice);
+          if (!cold.converged) {
+            out.timings.slice_fitting_seconds = secondsSince(fitting_started);
+            out.error = cold.error.empty() ? "forced cold refit failed" : cold.error;
+            out.path = CalibrationPath::fallback;
+            finish();
+            return out;
           }
-        }
-  
-        const bool candidate_fails_cap =
-            candidate_from_warm && have_candidate &&
-            !passesQuoteCap(candidate, plan.prepared, options.quote_cap);
-        if (candidate_fails_cap)
-          ++out.fallback_reason_counts.loss_above_gate;
-        const bool needs_restricted = warm_start &&
-                                     (!have_candidate || candidate_fails_cap);
-        if (needs_restricted) {
-          const auto restricted = fitSlice(plan.prepared, expiry, previous_slice,
-                                           rho_workers, nullptr, warm_start);
-          out.iterations += restricted.iterations;
-          if (restricted.converged) {
-            const Slice restricted_slice = restricted.surface.slices.front();
-            if (passesQuoteCap(restricted_slice, plan.prepared,
-                               options.quote_cap)) {
-              candidate = restricted_slice;
-              candidate_loss = restricted.objective;
+          candidate = cold.surface.slices.front();
+          candidate_loss = cold.objective;
+          have_candidate = true;
+          candidate_reused = false;
+          candidate_from_warm = false;
+          used_fallback = true;
+          ++out.fallback_slices;
+        } else {
+          const bool calendar_repair_needed =
+              have_candidate &&
+              !calendarSafe(candidate,
+                            calendarBounds(previous_slice, expiry, candidate.rho));
+
+          // Repair only candidates made infeasible by the updated predecessor.
+          if (calendar_repair_needed && warm_start) {
+            ++out.local_solver_slices;
+            std::uint64_t local_bound_calls = 0;
+            CalibrationResult local;
+            {
+              detail::MmBoundCallScope local_bound_scope(&local_bound_calls);
+              local = fitSlice(plan.prepared, expiry, previous_slice, rho_workers,
+                               warm_start);
+            }
+            out.local_solver_starts += local.local_solver_starts;
+            out.local_objective_evaluations += local.objective_evaluations;
+            out.local_mm_bound_calls += local_bound_calls;
+            out.fallback_reason_counts.bound_check_failed +=
+                local.fallback_reason_counts.bound_check_failed;
+            bound_calls += local_bound_calls;
+            out.iterations += local.iterations;
+            if (local.converged &&
+                calendarSafe(local.surface.slices.front(),
+                             calendarBounds(previous_slice, expiry,
+                                            local.surface.slices.front().rho))) {
+              candidate = local.surface.slices.front();
+              candidate_loss = local.objective;
               have_candidate = true;
               candidate_reused = false;
-              candidate_from_warm = false;
-              used_fallback = true;
-              ++out.fallback_slices;
+              candidate_from_warm = true;
             } else {
-              ++out.fallback_reason_counts.loss_above_gate;
-              ++out.quality_checks;
-              out.quality_warm_loss += bandLoss(restricted_slice, plan.prepared);
-              out.quality_loss_scale += plan.loss_scale;
-              const auto& cold =
-                  fullColdReference(plan, expiry, previous_slice);
-              if (!cold.converged) {
-                out.timings.slice_fitting_seconds =
-                    secondsSince(fitting_started);
-                out.error = "cold quality reference failed at t=" +
-                            std::to_string(expiry);
-                out.path = used_fallback ? CalibrationPath::fallback
-                                         : CalibrationPath::warm;
-                finish();
-                return out;
-              }
-              const Slice& cold_slice = cold.surface.slices.front();
-              out.quality_reference_loss +=
-                  bandLoss(cold_slice, plan.prepared);
-              if (passesAdaptiveQuoteCap(restricted_slice, cold_slice,
-                                         plan.prepared, options.quote_cap)) {
+              ++out.fallback_reason_counts.calendar_repair_failed;
+              have_candidate = false;
+            }
+          }
+
+          const bool candidate_fails_cap =
+              candidate_from_warm && have_candidate &&
+              !passesQuoteCap(candidate, plan.prepared, options.quote_cap);
+          if (candidate_fails_cap)
+            ++out.fallback_reason_counts.loss_above_gate;
+          const bool needs_restricted =
+              warm_start && (!have_candidate || candidate_fails_cap);
+          if (needs_restricted) {
+            ++out.restricted_cold_searches;
+            const auto restricted = fitSlice(plan.prepared, expiry, previous_slice,
+                                             rho_workers, nullptr, warm_start);
+            out.iterations += restricted.iterations;
+            if (restricted.converged) {
+              const Slice restricted_slice = restricted.surface.slices.front();
+              if (passesQuoteCap(restricted_slice, plan.prepared,
+                                 options.quote_cap)) {
                 candidate = restricted_slice;
                 candidate_loss = restricted.objective;
+                have_candidate = true;
+                candidate_reused = false;
+                candidate_from_warm = false;
+                used_fallback = true;
+                ++out.fallback_slices;
               } else {
-                candidate = cold_slice;
-                candidate_loss = cold.objective;
+                ++out.fallback_reason_counts.loss_above_gate;
+                out.quality_warm_loss += bandLoss(restricted_slice, plan.prepared);
+                out.quality_loss_scale += plan.loss_scale;
+                const auto& cold =
+                    fullColdReference(plan, expiry, previous_slice);
+                if (plan.full_cold_budget_exhausted) {
+                  if (!selectBudgetFallback(&restricted_slice,
+                                            restricted.objective)) {
+                    out.timings.slice_fitting_seconds =
+                        secondsSince(fitting_started);
+                    out.error = "budget exhausted without feasible candidate at t=" +
+                                std::to_string(expiry);
+                    out.path = CalibrationPath::fallback;
+                    finish();
+                    return out;
+                  }
+                } else if (!cold.converged) {
+                  out.timings.slice_fitting_seconds =
+                      secondsSince(fitting_started);
+                  out.error = "cold quality reference failed at t=" +
+                              std::to_string(expiry);
+                  out.path = CalibrationPath::fallback;
+                  finish();
+                  return out;
+                } else {
+                  ++out.quality_checks;
+                  const Slice& cold_slice = cold.surface.slices.front();
+                  out.quality_reference_loss +=
+                      bandLoss(cold_slice, plan.prepared);
+                  if (passesAdaptiveQuoteCap(restricted_slice, cold_slice,
+                                             plan.prepared, options.quote_cap)) {
+                    candidate = restricted_slice;
+                    candidate_loss = restricted.objective;
+                  } else {
+                    candidate = cold_slice;
+                    candidate_loss = cold.objective;
+                  }
+                  have_candidate = true;
+                  candidate_reused = false;
+                  candidate_from_warm = false;
+                  used_fallback = true;
+                  ++out.fallback_slices;
+                }
               }
-              have_candidate = true;
-              candidate_reused = false;
-              candidate_from_warm = false;
-              used_fallback = true;
-              ++out.fallback_slices;
+            } else {
+              const auto& cold =
+                  fullColdReference(plan, expiry, previous_slice);
+              if (plan.full_cold_budget_exhausted) {
+                if (!selectBudgetFallback(nullptr, INFINITY)) {
+                  out.timings.slice_fitting_seconds =
+                      secondsSince(fitting_started);
+                  out.error = "budget exhausted without feasible candidate at t=" +
+                              std::to_string(expiry);
+                  out.path = CalibrationPath::fallback;
+                  finish();
+                  return out;
+                }
+              } else if (!cold.converged) {
+                out.timings.slice_fitting_seconds = secondsSince(fitting_started);
+                out.error = cold.error.empty() ? "slice fit failed" : cold.error;
+                out.path = CalibrationPath::fallback;
+                finish();
+                return out;
+              } else {
+                candidate = cold.surface.slices.front();
+                candidate_loss = cold.objective;
+                have_candidate = true;
+                candidate_reused = false;
+                candidate_from_warm = false;
+                used_fallback = true;
+                ++out.fallback_slices;
+              }
             }
-          } else {
-            const auto& cold =
-                fullColdReference(plan, expiry, previous_slice);
+          } else if (!have_candidate) {
+            const auto& cold = fullColdReference(plan, expiry, previous_slice);
             if (!cold.converged) {
               out.timings.slice_fitting_seconds = secondsSince(fitting_started);
-              out.error = cold.error.empty() ? "slice fit failed" : cold.error;
+              out.error = plan.full_cold_budget_exhausted
+                              ? "full-cold budget exhausted before fitting new expiry"
+                              : (cold.error.empty() ? "slice fit failed"
+                                                    : cold.error);
               out.path = CalibrationPath::fallback;
               finish();
               return out;
@@ -1209,25 +1382,9 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
             have_candidate = true;
             candidate_reused = false;
             candidate_from_warm = false;
-            used_fallback = true;
-            ++out.fallback_slices;
           }
-        } else if (!have_candidate) {
-          const auto& cold = fullColdReference(plan, expiry, previous_slice);
-          if (!cold.converged) {
-            out.timings.slice_fitting_seconds = secondsSince(fitting_started);
-            out.error = cold.error.empty() ? "slice fit failed" : cold.error;
-            out.path = CalibrationPath::cold;
-            finish();
-            return out;
-          }
-          candidate = cold.surface.slices.front();
-          candidate_loss = cold.objective;
-          have_candidate = true;
-          candidate_reused = false;
-          candidate_from_warm = false;
         }
-  
+
         if (!have_candidate || !std::isfinite(candidate_loss)) {
           out.timings.slice_fitting_seconds = secondsSince(fitting_started);
           out.error = "no finite feasible candidate at t=" +
@@ -1242,6 +1399,35 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
         out.reuse_ages.push_back(candidate_reused
                                      ? previousReuseAge(expiry) + 1
                                      : 0);
+        const std::size_t prior_degraded_age = previousDegradedAge(expiry);
+        const std::size_t degraded_age =
+            passesQuoteCap(candidate, plan.prepared, options.quote_cap)
+                ? 0
+                : prior_degraded_age + 1;
+        out.degraded_ages.push_back(degraded_age);
+        if (degraded_age > 0) ++out.degraded_slices;
+        double slice_ratio_square_sum = 0.0;
+        std::size_t slice_quote_count = 0;
+        double slice_maximum_ratio = 0.0;
+        for (const auto& quote : plan.prepared) {
+          if (!quote.has_band) continue;
+          const double ratio = quoteExcessRatio(candidate, quote);
+          slice_ratio_square_sum += ratio * ratio;
+          slice_maximum_ratio = std::max(slice_maximum_ratio, ratio);
+          out.quality_maximum_excess_ratio =
+              std::max(out.quality_maximum_excess_ratio, ratio);
+          ++slice_quote_count;
+          ++out.quality_quote_count;
+        }
+        quality_ratio_square_sum += slice_ratio_square_sum;
+        out.worst_slice_max_excess_ratio =
+            std::max(out.worst_slice_max_excess_ratio, slice_maximum_ratio);
+        if (slice_quote_count != 0) {
+          const double slice_rms = std::sqrt(
+              slice_ratio_square_sum / static_cast<double>(slice_quote_count));
+          out.worst_slice_rms_excess_ratio =
+              std::max(out.worst_slice_rms_excess_ratio, slice_rms);
+        }
         out.objective += candidate_loss;
         if (candidate_reused)
           ++out.slices_reused;
@@ -1249,6 +1435,10 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
           ++out.slices_refit;
         used_warm_path = used_warm_path || candidate_from_warm;
       }
+      if (out.quality_quote_count != 0)
+        out.quality_rms_excess_ratio =
+            std::sqrt(quality_ratio_square_sum /
+                      static_cast<double>(out.quality_quote_count));
     }
   out.timings.slice_fitting_seconds = secondsSince(fitting_started);
 
@@ -1259,10 +1449,15 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
   if (!out.converged) {
     out.surface.slices.clear();
     out.reuse_ages.clear();
+    out.degraded_ages.clear();
+    out.degraded_slices = 0;
   }
-  out.path = used_fallback ? CalibrationPath::fallback
+  out.path = out.converged &&
+                     out.fallback_reason_counts.budget_exhausted != 0
+                 ? CalibrationPath::degraded
+                 : (used_fallback ? CalibrationPath::fallback
                            : (used_warm_path ? CalibrationPath::warm
-                                             : CalibrationPath::cold);
+                                             : CalibrationPath::cold));
   finish();
   return out;
 }

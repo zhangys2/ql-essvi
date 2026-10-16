@@ -332,6 +332,32 @@ The focused warm test verifies all three starts, the evaluation cap, repeatable 
 
 The warm p99 target and fallback target are missed in every scenario; normal and front fallback on every update. Quiet misses the 0.47 ms median and 7.6 ms p99 non-regression reference, and its loss ratio is unavailable because some cold reference losses are zero. Fast seeds 2–5 reported 71, 126, 86, and 59 warm failures respectively; these runs also had unpaired/unscored updates. The benchmark reported zero invalid surfaces and zero dense-grid butterfly/calendar violations across the 20 runs. The 25-evaluation local-solver cap and quality gate remain covered by focused tests; the market-like scenario results show substantial latency/fallback and fast-path failure residuals for CAL-B4/B5 to address.
 
+## WP-B4 — Bounded fallback and degraded results
+
+Warm calibration now runs local → restricted-cold → full-cold stages with a deterministic limit of eight full-cold reference/fallback searches per update. Initial calibration without a usable prior result is not budgeted as warm fallback work. If the next full-cold request exceeds the budget, the calibrator returns the lowest-loss feasible candidate among the restricted fit, the current local/warm candidate, and the retained prior slice, after checking butterfly and current-predecessor calendar constraints. If no feasible candidate can complete the surface (for example, a new expiry after the budget is consumed), calibration returns a non-empty failure instead of a partial successful result.
+
+A valid budget-exhausted surface has `path=degraded` and `converged=true`; the final surface still passes `validate()`. `degraded_ages` aligns with `surface.slices`: a slice failing the base per-quote cap increments its consecutive age, and an age resets to zero only when the returned slice passes that cap. `degraded_slices` counts nonzero ages. A slice with prior age ≥3 bypasses reuse/local work and is forced through a full-cold refit on the next update, even above the ordinary cap; the age resets only if that selected fit passes the gate. Local refits for pending slices are ordered by descending age, with expiry order as the deterministic tie-break. Benchmark output distinguishes fallback and degraded paths, counts both as fallback updates, and reports search counts, reason histograms, achieved ratio summaries, and final per-slice ages in JSON without changing shared CSV headers.
+
+The approved high-fallback shortcut uses this exact threshold: if the previous result's fallback-slice count is greater than half its surface slices and the **mean absolute midpoint-IV move across matching included quotes** is at least `0.005561586`, skip local prefit and start at restricted cold. The threshold is the pooled fast-scenario p95 residual-noise move measured in WP-B7. The move metric matches quotes by expiry-group order and quote ID; unavailable matches do not contribute.
+
+Focused warm tests cover local skipping under that shortcut, restricted-stage diagnostics, the eight-search limit, valid degraded surfaces and dense-grid safety, age carry-forward and forced full cold after three degraded outputs, age reset on a passing forced fit, and explicit failure when budget exhaustion prevents fitting a new expiry. The configured full-suite result is recorded in the CAL-B4 ticket.
+
+Small output smoke (not the 40 × 100 / 200-update acceptance run): `build/essvi_bench --scenario fast --scenario-updates 5 --expiries 10 --quotes-per-expiry 100 --seed 11 --timings-out /tmp/cal-b4-smoke.json`. All five warm outputs converged with zero invalid surfaces and zero dense-grid violations; the JSON summary parsed successfully.
+
+| Metric | Result |
+|---|---:|
+| Warm p50 / p99 | 16.303 / 34.225 ms |
+| Warm fallback / degraded updates | 2 / 3 of 5 (100% combined) |
+| Mean / maximum degraded slices | 10 / 10 |
+| Maximum degraded age | 5 |
+| Restricted / full-cold / forced full-cold searches | 30 / 44 / 20 |
+| Budget-exhaustion reason count | 6 |
+| Warm / cold summed band-loss ratio | 2.1203 |
+| Warm max excess ratio / worst-slice RMS ratio | 21,942.002 / 5,343.792 |
+| Warm failures / invalid surfaces / dense-grid violations | 0 / 0 / 0 |
+
+This short run confirms bounded stage accounting and valid degraded-path reporting, not Addendum B performance acceptance. It reports 100% combined fallback updates and large per-quote excess ratios; the quality and latency gaps remain visible for CAL-B5's regression sequence.
+
 ## WP-B2 — Per-quote gate and reuse drift
 
 The warm gate now evaluates each included two-sided quote independently in total variance: `ratio = max(0, bid_var - fit_var, fit_var - ask_var) / max(ask_var - bid_var, 1e-6)`. A candidate passes the base gate only when every ratio is at most `WarmOptions::quote_cap` (default 0.1). A failed reuse falls through to local fitting; a local candidate that fails the base gate is followed by a cold search restricted to prior rho ±0.15 over the feasible psi interval. If that restricted result passes the base cap, it is used. Otherwise one same-snapshot full-cold reference is cached per slice, and the restricted candidate is retained only when every quote is within `max(quote_cap, cold_ratio + 0.01)`; otherwise the full-cold result is selected. Reuse also requires the per-quote cap and calendar check; `CalibrationResult::reuse_ages` tracks unchanged-parameter reuse and forces refit after 12 consecutive updates. `calibrateWarm` now takes the prior `CalibrationResult` (nullable) so the surface and reuse state travel together. `loss_tol` remains a deprecated compatibility/reporting value; it no longer gates reuse or acceptance. Scheduled `cold_check_interval` was removed. The benchmark accepts `--quote-cap`; its reported share-above-cap metric remains fixed at 0.1 for the approved target.

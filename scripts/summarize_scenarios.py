@@ -133,13 +133,14 @@ def main() -> int:
     print("Fallback/rejection reason histograms (five-seed totals):")
     print(
         "scenario | infeasible local result | loss above gate | "
-        "calendar repair failed | bound check failed"
+        "calendar repair failed | bound check failed | budget exhausted"
     )
     reason_names = (
         "infeasible_local_result",
         "loss_above_gate",
         "calendar_repair_failed",
         "bound_check_failed",
+        "budget_exhausted",
     )
     for scenario in SCENARIOS:
         runs = [reports[(scenario, seed)] for seed in SEEDS]
@@ -151,7 +152,8 @@ def main() -> int:
             f"{scenario} | {totals['infeasible_local_result']} | "
             f"{totals['loss_above_gate']} | "
             f"{totals['calendar_repair_failed']} | "
-            f"{totals['bound_check_failed']}"
+            f"{totals['bound_check_failed']} | "
+            f"{totals['budget_exhausted']}"
         )
 
     print("Load averages by scenario and seed (1/5/15-minute, before -> after):")

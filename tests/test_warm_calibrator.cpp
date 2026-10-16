@@ -524,6 +524,98 @@ void localWarmRefitHonorsBudgetAndQuality() {
   assert(warm.objective <= cold.objective * 1.05 + 1e-12);
   checkDenseGrid(warm.surface);
 }
+
+void stagedFallbackBudgetReturnsValidDegradedResults() {
+  const auto previous_quotes = essvi::bench::realisticChain(10, 100, 11);
+  const auto previous = essvi::calibrate(previous_quotes);
+  assert(previous.converged);
+
+  auto current = previous_quotes;
+  for (std::size_t i = 0; i < current.size(); ++i) {
+    auto& quote = current[i];
+    const double k = std::log(quote.strike / quote.forward);
+    const double direction = i % 2 == 0 ? 1.0 : -1.0;
+    quote.mid_iv = std::max(0.001, quote.mid_iv + direction * 0.01 *
+                                                (1.0 + std::abs(k)));
+    quote.bid_iv = quote.mid_iv;
+    quote.ask_iv = quote.mid_iv;
+  }
+
+  essvi::WarmOptions options;
+  options.quote_tol = 0.0;
+  options.quote_cap = 0.0;
+  const auto high_fallback = [&] {
+    auto prior = previous;
+    prior.fallback_slices = 6;
+    return essvi::calibrateWarm(current, &prior, previous_quotes, options);
+  }();
+  assert(high_fallback.converged);
+  assert(high_fallback.local_solver_slices == 0);
+  assert(high_fallback.restricted_cold_searches > 0);
+  checkDenseGrid(high_fallback.surface);
+
+  auto prior_result = previous;
+  auto prior_quotes = previous_quotes;
+  auto result = essvi::calibrateWarm(current, &prior_result, prior_quotes, options);
+  assert(result.converged);
+  assert(result.path == essvi::CalibrationPath::degraded);
+  assert(result.full_cold_searches == 8);
+  assert(result.forced_full_cold_searches == 0);
+  assert(result.fallback_reason_counts.budget_exhausted > 0);
+  assert(result.degraded_slices > 0);
+  assert(result.degraded_ages.size() == result.surface.slices.size());
+  assert(result.quality_quote_count == current.size());
+  assert(std::isfinite(result.quality_rms_excess_ratio));
+  assert(std::isfinite(result.worst_slice_rms_excess_ratio));
+  checkDenseGrid(result.surface);
+
+  for (int update = 2; update <= 3; ++update) {
+    prior_result = result;
+    prior_quotes = current;
+    result = essvi::calibrateWarm(current, &prior_result, prior_quotes, options);
+    assert(result.converged);
+    assert(result.path == essvi::CalibrationPath::degraded);
+    assert(result.degraded_slices > 0);
+    checkDenseGrid(result.surface);
+  }
+
+  prior_result = result;
+  prior_quotes = current;
+  result = essvi::calibrateWarm(current, &prior_result, prior_quotes, options);
+  assert(result.converged);
+  assert(result.forced_full_cold_searches > 0);
+  assert(result.full_cold_searches > 8);
+  assert(result.path == essvi::CalibrationPath::fallback ||
+         result.path == essvi::CalibrationPath::degraded);
+  checkDenseGrid(result.surface);
+
+  auto with_new_expiry = current;
+  auto new_quote = with_new_expiry.front();
+  new_quote.expiry = previous.surface.slices.back().expiry + 0.05;
+  new_quote.id = "new-expiry";
+  new_quote.strike = new_quote.forward;
+  new_quote.bid_iv = new_quote.mid_iv;
+  new_quote.ask_iv = new_quote.mid_iv;
+  with_new_expiry.push_back(new_quote);
+  const auto incomplete = essvi::calibrateWarm(
+      with_new_expiry, &previous, previous_quotes, options);
+  assert(!incomplete.converged);
+  assert(!incomplete.error.empty());
+  assert(incomplete.full_cold_searches == 8);
+  assert(incomplete.path != essvi::CalibrationPath::degraded);
+  assert(incomplete.fallback_reason_counts.budget_exhausted > 0);
+
+  const auto reset_quotes = essvi::bench::syntheticChain(1, 100, 23);
+  auto reset_prior = essvi::calibrate(reset_quotes);
+  assert(reset_prior.converged);
+  reset_prior.degraded_ages = {3};
+  const auto reset = essvi::calibrateWarm(
+      reset_quotes, &reset_prior, reset_quotes);
+  assert(reset.converged);
+  assert(reset.forced_full_cold_searches == 1);
+  assert(reset.degraded_ages.size() == 1);
+  assert(reset.degraded_ages.front() == 0);
+}
 }  // namespace
 
 int main() {
@@ -538,5 +630,6 @@ int main() {
   failedCalendarRepairIsCounted();
   localWarmRefitHonorsBudgetAndQuality();
   localSolverUsesThreeBoundedStarts();
+  stagedFallbackBudgetReturnsValidDegradedResults();
   return 0;
 }

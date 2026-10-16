@@ -17,6 +17,7 @@
 #include <iostream>
 #include <limits>
 #include <stdexcept>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -45,12 +46,22 @@ struct Summary {
   std::string name;
   std::vector<double> warm_seconds;
   std::vector<double> cold_seconds;
-  std::array<std::size_t, 3> path_counts{};
+  std::array<std::size_t, 4> path_counts{};
   std::size_t samples{};
   std::size_t snapshots{};
   std::size_t slices_refit{};
   std::size_t slices_reused{};
   std::size_t fallback_slices{};
+  std::size_t degraded_slice_observations{};
+  std::size_t max_degraded_slices_per_update{};
+  std::size_t max_degraded_age{};
+  std::size_t restricted_cold_searches{};
+  std::size_t full_cold_searches{};
+  std::size_t forced_full_cold_searches{};
+  std::uint64_t quality_quote_count{};
+  double maximum_quality_ratio{};
+  double maximum_worst_slice_rms_ratio{};
+  double maximum_worst_slice_max_ratio{};
   std::size_t warm_failures{};
   std::size_t cold_failures{};
   essvi::bench::SurfaceQualityCounts warm_surface_quality;
@@ -135,6 +146,7 @@ const char* pathName(essvi::CalibrationPath path) {
     case essvi::CalibrationPath::cold: return "cold";
     case essvi::CalibrationPath::warm: return "warm";
     case essvi::CalibrationPath::fallback: return "fallback";
+    case essvi::CalibrationPath::degraded: return "degraded";
   }
   return "unknown";
 }
@@ -196,6 +208,23 @@ void record(Summary& summary, const essvi::CalibrationResult& warm,
   summary.slices_refit += warm.slices_refit;
   summary.slices_reused += warm.slices_reused;
   summary.fallback_slices += warm.fallback_slices;
+  summary.degraded_slice_observations += warm.degraded_slices;
+  summary.max_degraded_slices_per_update =
+      std::max(summary.max_degraded_slices_per_update, warm.degraded_slices);
+  summary.restricted_cold_searches += warm.restricted_cold_searches;
+  summary.full_cold_searches += warm.full_cold_searches;
+  summary.forced_full_cold_searches += warm.forced_full_cold_searches;
+  summary.quality_quote_count += warm.quality_quote_count;
+  summary.maximum_quality_ratio =
+      std::max(summary.maximum_quality_ratio, warm.quality_maximum_excess_ratio);
+  summary.maximum_worst_slice_max_ratio =
+      std::max(summary.maximum_worst_slice_max_ratio,
+               warm.worst_slice_max_excess_ratio);
+  summary.maximum_worst_slice_rms_ratio =
+      std::max(summary.maximum_worst_slice_rms_ratio,
+               warm.worst_slice_rms_excess_ratio);
+  for (const auto age : warm.degraded_ages)
+    summary.max_degraded_age = std::max(summary.max_degraded_age, age);
   summary.warm_failures += !warm.converged;
   summary.cold_failures += !cold.converged;
 
@@ -249,6 +278,8 @@ void record(Summary& summary, const essvi::CalibrationResult& warm,
       warm.fallback_reason_counts.calendar_repair_failed;
   summary.fallback_reason_counts.bound_check_failed +=
       warm.fallback_reason_counts.bound_check_failed;
+  summary.fallback_reason_counts.budget_exhausted +=
+      warm.fallback_reason_counts.budget_exhausted;
   summary.quality.checks += warm.quality_checks;
   summary.quality_warm_loss += warm.quality_warm_loss;
   summary.quality_reference_loss += warm.quality_reference_loss;
@@ -301,8 +332,22 @@ void printSummary(const Summary& summary) {
             << "path_cold=" << summary.path_counts[0] << '\n'
             << "path_warm=" << summary.path_counts[1] << '\n'
             << "path_fallback=" << summary.path_counts[2] << '\n'
-            << "fallback_updates=" << summary.path_counts[2] << '\n'
+            << "path_degraded=" << summary.path_counts[3] << '\n'
+            << "fallback_updates="
+            << summary.path_counts[2] + summary.path_counts[3] << '\n'
             << "fallback_slices=" << summary.fallback_slices << '\n'
+            << "mean_degraded_slices="
+            << (samples ? static_cast<double>(summary.degraded_slice_observations) / samples : 0.0) << '\n'
+            << "max_degraded_slices_per_update="
+            << summary.max_degraded_slices_per_update << '\n'
+            << "max_degraded_age=" << summary.max_degraded_age << '\n'
+            << "restricted_cold_searches=" << summary.restricted_cold_searches << '\n'
+            << "full_cold_searches=" << summary.full_cold_searches << '\n'
+            << "forced_full_cold_searches=" << summary.forced_full_cold_searches << '\n'
+            << "worst_slice_max_excess_ratio=" << summary.maximum_worst_slice_max_ratio << '\n'
+            << "worst_slice_rms_excess_ratio=" << summary.maximum_worst_slice_rms_ratio << '\n'
+            << "quality_quote_count=" << summary.quality_quote_count << '\n'
+            << "maximum_quality_excess_ratio=" << summary.maximum_quality_ratio << '\n'
             << "warm_local_solver_slices=" << summary.local_solver_slices << '\n'
             << "warm_local_solver_starts=" << summary.local_solver_starts << '\n'
             << "fallback_reason_infeasible_local_result="
@@ -313,6 +358,8 @@ void printSummary(const Summary& summary) {
             << summary.fallback_reason_counts.calendar_repair_failed << '\n'
             << "fallback_reason_bound_check_failed="
             << summary.fallback_reason_counts.bound_check_failed << '\n'
+            << "fallback_reason_budget_exhausted="
+            << summary.fallback_reason_counts.budget_exhausted << '\n'
             << "warm_failures=" << summary.warm_failures << '\n'
             << "cold_failures=" << summary.cold_failures << '\n'
             << "warm_invalid_surfaces="
@@ -442,8 +489,23 @@ void writeJsonSummary(std::ostream& output, const Summary& summary) {
          << (samples ? summary.slices_reused / samples : 0.0)
          << ",\"path_counts\":{\"cold\":" << summary.path_counts[0]
          << ",\"warm\":" << summary.path_counts[1]
-         << ",\"fallback\":" << summary.path_counts[2] << "}"
+         << ",\"fallback\":" << summary.path_counts[2]
+         << ",\"degraded\":" << summary.path_counts[3] << "}"
+         << ",\"fallback_updates\":"
+         << summary.path_counts[2] + summary.path_counts[3]
          << ",\"fallback_slices\":" << summary.fallback_slices
+         << ",\"mean_degraded_slices\":"
+         << (samples ? static_cast<double>(summary.degraded_slice_observations) / samples : 0.0)
+         << ",\"max_degraded_slices_per_update\":"
+         << summary.max_degraded_slices_per_update
+         << ",\"max_degraded_age\":" << summary.max_degraded_age
+         << ",\"restricted_cold_searches\":" << summary.restricted_cold_searches
+         << ",\"full_cold_searches\":" << summary.full_cold_searches
+         << ",\"forced_full_cold_searches\":" << summary.forced_full_cold_searches
+         << ",\"quality_quote_count\":" << summary.quality_quote_count
+         << ",\"maximum_quality_excess_ratio\":" << summary.maximum_quality_ratio
+         << ",\"worst_slice_max_excess_ratio\":" << summary.maximum_worst_slice_max_ratio
+         << ",\"worst_slice_rms_excess_ratio\":" << summary.maximum_worst_slice_rms_ratio
          << ",\"local_solver_slices\":" << summary.local_solver_slices
          << ",\"local_solver_starts\":" << summary.local_solver_starts
          << ",\"fallback_reason_counts\":{\"infeasible_local_result\":"
@@ -453,7 +515,9 @@ void writeJsonSummary(std::ostream& output, const Summary& summary) {
          << ",\"calendar_repair_failed\":"
          << summary.fallback_reason_counts.calendar_repair_failed
          << ",\"bound_check_failed\":"
-         << summary.fallback_reason_counts.bound_check_failed << "}"
+         << summary.fallback_reason_counts.bound_check_failed
+         << ",\"budget_exhausted\":"
+         << summary.fallback_reason_counts.budget_exhausted << "}"
          << ",\"warm_failures\":" << summary.warm_failures
          << ",\"cold_failures\":" << summary.cold_failures
          << ",\"warm_invalid_surfaces\":"
@@ -671,6 +735,11 @@ void writeLegacyTimings(const std::string& path, const Options& options,
                         const essvi::CalibrationResult& warm) {
   std::ofstream output(path);
   if (!output) throw std::runtime_error("cannot write timing report: " + path);
+  std::ostringstream degraded_ages;
+  for (std::size_t i = 0; i < warm.degraded_ages.size(); ++i) {
+    if (i) degraded_ages << ',';
+    degraded_ages << warm.degraded_ages[i];
+  }
   output << std::setprecision(17)
          << "{\n"
          << "  \"mode\": \"" << mode << "\",\n"
@@ -726,6 +795,27 @@ void writeLegacyTimings(const std::string& path, const Options& options,
          << warm.local_objective_evaluations << ",\n"
          << "    \"local_mm_bound_calls\": "
          << warm.local_mm_bound_calls << ",\n"
+         << "    \"restricted_cold_searches\": "
+         << warm.restricted_cold_searches << ",\n"
+         << "    \"full_cold_searches\": " << warm.full_cold_searches
+         << ",\n"
+         << "    \"forced_full_cold_searches\": "
+         << warm.forced_full_cold_searches << ",\n"
+         << "    \"degraded_slices\": " << warm.degraded_slices
+         << ",\n"
+         << "    \"degraded_ages\": [" << degraded_ages.str() << "],\n"
+         << "    \"quality_quote_count\": " << warm.quality_quote_count
+         << ",\n"
+         << "    \"quality_maximum_excess_ratio\": "
+         << warm.quality_maximum_excess_ratio << ",\n"
+         << "    \"quality_rms_excess_ratio\": "
+         << warm.quality_rms_excess_ratio << ",\n"
+         << "    \"worst_slice_max_excess_ratio\": "
+         << warm.worst_slice_max_excess_ratio << ",\n"
+         << "    \"worst_slice_rms_excess_ratio\": "
+         << warm.worst_slice_rms_excess_ratio << ",\n"
+         << "    \"budget_exhausted\": "
+         << warm.fallback_reason_counts.budget_exhausted << ",\n"
          << "    \"quote_grouping_seconds\": "
          << warm.timings.quote_grouping_seconds << ",\n"
          << "    \"slice_fitting_seconds\": "
@@ -880,7 +970,8 @@ std::vector<essvi::bench::QualityCheck> qualityChecks(const Summary& summary) {
   const double fallback_hard_percent = is_fast ? 25.0 : 5.0;
   const double fallback_rate_percent =
       summary.samples
-          ? 100.0 * static_cast<double>(summary.path_counts[2]) /
+          ? 100.0 * static_cast<double>(summary.path_counts[2] +
+                                         summary.path_counts[3]) /
                 static_cast<double>(summary.samples)
           : unavailable;
   const double max_target = std::max(0.1, cold.maximum_ratio + 0.01);
