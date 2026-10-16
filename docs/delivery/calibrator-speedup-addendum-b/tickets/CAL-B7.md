@@ -2,10 +2,10 @@
 
 ## State
 
-- Current: implementing
-- Last transition: `baseline-passed` → `implementing`
+- Current: implemented
+- Last transition: `implementing` → `implemented`
 - At: 2026-10-16
-- Reason/evidence: baseline passed; implementation and verification are underway. The user explicitly waived further independent reviews; no review approval is claimed.
+- Reason/evidence: implementation committed as `cc9e36a1831e7f9cd22d59273d88f823c55755b9`; configured final verification passed. The user explicitly waived independent reviews; no review approval is claimed.
 - Blocker: None for implementation under the user's waiver.
 
 ## State history
@@ -14,6 +14,7 @@
 | --- | --- | --- |
 | 2026-10-16 | `baseline-checking` → `baseline-passed` | Configured baseline command passed; CTest 5/5 and pytest 6/6. |
 | 2026-10-16 | `baseline-passed` → `implementing` | Approved CAL-B7 seam; user directed implementation without further independent reviews. |
+| 2026-10-16 | `implementing` → `implemented` | Commit `cc9e36a1831e7f9cd22d59273d88f823c55755b9`; final CTest 5/5 and pytest 10/10. |
 
 ## Claim
 
@@ -64,14 +65,14 @@ The benchmark-only snapshot preparation/replay adapter, `bench/essvi_bench.cpp`,
 | At | Phase | Command | CWD | Commit | Result | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-10-16 | Baseline | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `1b35f5f` | passed | Release build succeeded; CTest 5/5 and pytest 6/6 passed before B7 changes. |
-| 2026-10-16 | Red | Configured full command | `/home/zhangy/git/ql-essvi` | working tree | failed | CTest 4/5; the recalibrated fast scenario no longer exceeded the legacy test's 5% loss allowance. The existing assertion was retained; its fixture now uses the pre-B7 move only as a dedicated gate stress. |
+| 2026-10-16 | Red | Configured full command | `/home/zhangy/git/ql-essvi` | working tree | failed | CTest 4/5; the recalibrated fast scenario no longer exceeded the legacy test's 5% loss allowance. The existing assertion was retained; its fixture now uses the pre-B7 move only as a dedicated gate stress, with zero loss tolerance. |
 | 2026-10-16 | Red | Configured full command | `/home/zhangy/git/ql-essvi` | working tree | failed | After CTest passed, the CLI test's fast-scenario assumption of positive loss over a zero cold reference failed: the measured scenario produced finite ratio `1.2055741142028782`. The positive-over-zero edge remains covered by the exact C++ quality test; the CLI test now checks text/JSON ratio and status consistency. |
-| 2026-10-16 | Green | `export PATH="$PWD/.venv/bin:$PATH"; cmake --build build --target essvi_warm_calibrator_tests -j2 && ctest --test-dir build -R essvi_warm_calibrator_tests --output-on-failure` | `/home/zhangy/git/ql-essvi` | working tree | passed | Focused warm-calibrator CTest 1/1 passed with the dedicated legacy gate-stress fixture. |
-| 2026-10-16 | Green | `.venv/bin/python -m pytest -q tests/test_benchmark_cli.py` | `/home/zhangy/git/ql-essvi` | working tree | passed | CLI summary-consistency test passed 1/1; positive-over-zero handling remains covered by `separatesTargetAndHardLimitAndHandlesZeroReference`. |
-| 2026-10-16 | Replay | `python/run_snapshot_replay.py --data-root /home/zhangy/vol-rv/data --output-dir build/snapshot-replay --bench build/essvi_bench` | `/home/zhangy/git/ql-essvi` | working tree | passed | 620 snapshots: 619 usable, one unusable; 601 warm pairs, 18 cold starts, 8 gap events, 16 missing intervals; 16 locked, 0 crossed, 228,055 other exclusions. Per-day metrics and exclusions are recorded in `docs/perf-results.md` and `build/snapshot-replay/`. |
-| 2026-10-16 | Scenario matrix | `scripts/verify_scenarios.sh` | `/home/zhangy/git/ql-essvi` | working tree | completed with expected target misses | All 20 cases completed; every `--check` returned 2 for target misses. The script returned 1 after printing the full matrix; results and load averages are recorded in `docs/perf-results.md`. |
+| 2026-10-16 | Green | `export PATH="$PWD/.venv/bin:$PATH"; cmake --build build --target essvi_warm_calibrator_tests -j2 && ctest --test-dir build -R essvi_warm_calibrator_tests --output-on-failure` | `/home/zhangy/git/ql-essvi` | `cc9e36a` | passed | Focused warm-calibrator CTest 1/1 passed with the dedicated legacy gate-stress fixture. |
+| 2026-10-16 | Green | `.venv/bin/python -m pytest -q tests/test_benchmark_cli.py` | `/home/zhangy/git/ql-essvi` | `cc9e36a` | passed | CLI summary-consistency test passed 1/1; positive-over-zero handling remains covered by `separatesTargetAndHardLimitAndHandlesZeroReference`. |
+| 2026-10-16 | Replay | `python/run_snapshot_replay.py --data-root /home/zhangy/vol-rv/data --output-dir build/snapshot-replay --bench build/essvi_bench` | `/home/zhangy/git/ql-essvi` | `cc9e36a` | passed | 620 snapshots: 619 usable, one unusable; 601 warm pairs, 18 cold starts, 8 gap events, 16 missing intervals; 16 locked, 0 crossed, 228,055 other exclusions. Per-day metrics and exclusions are recorded in `docs/perf-results.md` and `build/snapshot-replay/`. |
+| 2026-10-16 | Scenario matrix | `scripts/verify_scenarios.sh` | `/home/zhangy/git/ql-essvi` | `cc9e36a` | completed with expected target misses | All 20 cases completed; every `--check` returned 2 for target misses. The script returned 1 after printing the full matrix; results and load averages are recorded in `docs/perf-results.md`. |
 | 2026-10-16 | Review waiver | User directive: “no more reviews, just implement” | `/home/zhangy/git/ql-essvi` | n/a | waived | No independent review was requested or performed; no review approval is claimed. |
-| 2026-10-16 | Final | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | working tree | passed | Release build succeeded; CTest 5/5 passed and pytest 10/10 passed. |
+| 2026-10-16 | Final | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `cc9e36a` | passed | Release build succeeded; CTest 5/5 passed and pytest 10/10 passed. |
 
 ## Review dispositions
 
@@ -88,7 +89,7 @@ The benchmark-only snapshot preparation/replay adapter, `bench/essvi_bench.cpp`,
 - Unconfirmed commands: typecheck/lint not applicable; no configured linter
 - Branch: `delivery/calibrator-speedup-addendum-b/CAL-B7`
 - Worktree: primary checkout, `/home/zhangy/git/ql-essvi` (configured checkout form)
-- Commit: pending
+- Commit: `cc9e36a1831e7f9cd22d59273d88f823c55755b9`
 - GitHub Issue: none (local tracker)
 - Tests: final configured CTest 5/5 and pytest 10/10 pass; scenario target misses documented.
 - Diff review: explicitly waived by user; no independent review or approval claimed.
