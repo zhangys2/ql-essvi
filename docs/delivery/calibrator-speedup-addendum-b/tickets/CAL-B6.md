@@ -2,11 +2,11 @@
 
 ## State
 
-- Current: ready
-- Last transition: `draft` → `ready`
-- At: 2026-10-16T11:24:10Z
-- Reason/evidence: parent implementation spec approved by user; `docs/delivery/calibrator-speedup-addendum-b/implementation-spec.md`
-- Blocker: CAL-B5
+- Current: implemented
+- Last transition: `ready` → `baseline-passed` → `implementing` → `implemented`
+- At: 2026-10-16
+- Reason/evidence: cold-path A/B evidence recorded in `docs/perf-results.md`; reference source provenance is unavailable and sessions disagree, so the approved outcome is inconclusive and no cold-path code change is justified.
+- Blocker: None
 
 ## Claim
 
@@ -56,6 +56,12 @@ Cold calibration path and benchmark reporting, likely `cpp/calibrator.cpp`, `ben
 
 | At | Phase | Command | CWD | Commit | Result | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-16 | Baseline | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `c3e39c0e1bb4a1d9a4234e93ca22da1d6a932ecd` | passed | Release build succeeded; CTest 5/5 passed and pytest 10/10 passed. |
+| 2026-10-16 | Provenance | `file build/wp5-parallel/essvi_bench; stat build/wp5-parallel/essvi_bench build/wp5-parallel/CMakeFiles/essvi_core.dir/cpp/calibrator.cpp.o; compare CMakeCache.txt and compile_commands.json` | `/home/zhangy/git/ql-essvi` | `c3e39c0e1bb4a1d9a4234e93ca22da1d6a932ecd` | partial; comparison inconclusive | GCC 15.2.0, Release/effective `-O2`, thread cap 4, native/profile options off match. The reference build has no recorded source SHA; its object is dated 2026-10-15 before current source modifications, and the historical tree was uncommitted. |
+| 2026-10-16 | A/B session 1 | Reference/current `essvi_bench`; 40 × 100, 9 repeats, then 1 × 100, 20 repeats; shared seed-1 CSV fixtures | `/home/zhangy/git/ql-essvi` | `c3e39c0e1bb4a1d9a4234e93ca22da1d6a932ecd` | measured; insufficient to classify | Repeated full-chain medians 54.567 / 62.999 ms (reference/current); single-slice 2.350 / 2.656 ms. Reference-side load was not captured. |
+| 2026-10-16 | A/B session 2 | Same binaries, CSVs, dimensions, repeats; external `/proc/loadavg` before/after each invocation | `/home/zhangy/git/ql-essvi` | `c3e39c0e1bb4a1d9a4234e93ca22da1d6a932ecd` | inconclusive | Full-chain medians 111.955 / 97.672 ms; single-slice 2.506 / 3.651 ms (reference/current). Timing direction reverses for full-chain; session 2 reference itself misses the 55 ms and 2.5 ms medians. Parameter max relative difference was zero on both sizes. No code change justified. |
+| 2026-10-16 | Configured verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `c3e39c0e1bb4a1d9a4234e93ca22da1d6a932ecd` | passed | No product code changed; CTest 5/5 and pytest 10/10 passed. |
+| 2026-10-16 | Documentation commit | Record verified fixture equivalence, provenance, and paired A/B outcome in `docs/perf-results.md` | `/home/zhangy/git/ql-essvi` | `0e1f41739833d7b012028a760ed436bace7eef67` | recorded; inconclusive | The reference source revision is unavailable and the sessions disagree; no cold-path code change was justified. |
 
 ## Review dispositions
 
@@ -64,14 +70,14 @@ Cold calibration path and benchmark reporting, likely `cpp/calibrator.cpp`, `ben
 
 ## Delivery record
 
-- Base commit: `af7f0e4bf883dec67e26dc6c94e5d665a8fb5536`
-- Baseline status: not started
-- Baseline verification: pending
+- Base commit: `c3e39c0e1bb4a1d9a4234e93ca22da1d6a932ecd`
+- Baseline status: passed
+- Baseline verification: configured CMake build, CTest 5/5, pytest 10/10 passed at base commit `c3e39c0e1bb4a1d9a4234e93ca22da1d6a932ecd`.
 - Baseline failure evidence: None
 - Unconfirmed commands: typecheck/lint not applicable; no configured linter
-- Branch: pending claim
+- Branch: `delivery/calibrator-speedup-addendum-b/CAL-B6`
 - Worktree: primary checkout, `/home/zhangy/git/ql-essvi` (configured checkout form)
-- Commit: pending
+- Commit: `0e1f41739833d7b012028a760ed436bace7eef67`
 - GitHub Issue: none (local tracker)
-- Tests: pending
-- Diff review: pending
+- Tests: configured CTest 5/5 and pytest 10/10 passed. Paired A/B measured both sizes/repeat counts on shared seed-1 inputs; timing result is inconclusive because reference source revision is unavailable and repeated sessions disagree.
+- Diff review: waived at user request; no independent review performed.
