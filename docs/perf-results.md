@@ -107,3 +107,54 @@ WP11's candidate-search hint scans the precomputed coarse MM-bound workspace dir
 The current IBIT conversion smoke read three snapshots from the configured data directory. The first had 0 valid two-sided OTM quotes and was skipped; the next two produced 498 and 495 valid quotes. Replay on the current binary used those two converted snapshots: one warm transition, 20 refitted/0 reused slices, 29 local-fit attempts, 5 fallback slices, 0 warm/cold failures, and 0 invalid surfaces. The final replay smoke measured 20.356 ms warm vs 25.850 ms cold; summed loss was 0.000594771 vs 0.001043726 (ratio 0.570). Load average was 1.05 1.33 1.34 before and after. Timing JSON reports `updates: 1` for the one adjacent-snapshot transition; the full scenario report records `updates: 200`. This is a plumbing/performance sample only; the converter uses European Black-Scholes stand-ins, not American-IV accuracy evidence. Replay, scenario, single-slice, and legacy timing JSON files parsed successfully.
 
 Final verification on the current Release tree: full CTest 4/4 passed (25.04 s); Python pytest 5/5 passed (0.52 s). The focused warm test also passed under ThreadSanitizer (4-thread cap, 7.90 s) and Release max-thread cap 1 (0.66 s). The legacy bench smoke (`--repeats 2 --warm-updates 3`) reused 40/40 slices and emitted parseable JSON; warm p99 was 0.685 ms. The full WP6-WP11 scenario benchmark includes replay-free synthetic data; replay results are reported separately above.
+
+## WP-B1 — `49fed2b` baseline and per-quote quality
+
+The WP-B1 benchmark instrumentation was run against the approved base, `49fed2bd0a31f1df60ffc370f8af82978d1b51d0`. The implementation branch started at `af7f0e4bf883dec67e26dc6c94e5d665a8fb5536`; its tree matches `49fed2b`. CAL-B1 changed only benchmark reporting, tests, and runner scripts; the calibrator and loss-scale gate were not modified. These measurements are from the pre-WP-B2 gate, not the new per-quote gate.
+
+The Release build used C++20, GCC 15.2.0, effective `-O2`, and the 4-vCPU AMD EPYC 9354P host. `scripts/verify_scenarios.sh` ran quiet, normal, fast, and front for seeds 1–5, 200 updates per scenario/seed, 40 expiries × 100 quotes, with the existing `loss_tol=0.05` and cold-check interval 10. Scenario amplitudes remain the original synthetic values; WP-B7 will recalibrate them from collected snapshots. Timers cover only warm/cold calibration calls. The runner completed all 20 cases serially. Every `--check` returned 2 because at least one target was missed; fast seeds 2 and 3 also failed full paired-update coverage (197/200 and 196/200 respectively). The script returned 1 after printing the complete matrix; this was an expected quality/coverage failure, not an execution failure.
+
+Warm/cold quality metrics are merged only when both valid results cover the complete valid two-sided quote set for the same update. Thus each comparison uses matching quote populations. The run included 3,993 paired updates of 4,000 total: the 18 other scenario/seed runs had 200 paired updates each, while fast seeds 2 and 3 had 197 and 196. Unpaired updates are reported and make `--check` fail. Values below are five-seed median [minimum, maximum]. The cap is 0.1; loss is the ratio of summed per-quote band loss, not the existing width-scaled gate value.
+
+| Scenario | Paired updates / 200 | Warm p50 (ms) | Warm p99 (ms) | Fallback updates (%) | Share above cap delta (pp) | Maximum ratio warm / cold | RMS ratio warm / cold | Summed band-loss ratio | RMS excess-IV delta (vol pt) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| quiet | 200 [200, 200] | 0.413031 [0.404705, 0.496840] | 4.99531 [3.71924, 6.79089] | 0 [0, 1.5] | 3.00838 [1.28625, 7.22463] | 0.328828 [0.254271, 0.474417] / 0.240286 [0.137301, 0.294707] | 0.0340939 [0.0215308, 0.0546441] / 0.00708899 [0.00338581, 0.0152022] | 16.3978 [1.75370, 72.3258] | 0.0196046 [0.0112145, 0.0491839] |
+| normal | 200 [200, 200] | 1.03759 [0.948927, 1.32622] | 54.7095 [46.1574, 67.3341] | 22.5 [20.5, 29.5] | 9.96412 [8.41425, 11.36] | 0.744533 [0.711175, 0.891100] / 0.246743 [0.151293, 0.473936] | 0.0710031 [0.0665109, 0.0788025] / 0.00554696 [0.00291107, 0.0174514] | 53.8362 [10.9119, 112.573] | 0.0536984 [0.0464304, 0.0590196] |
+| fast | 200 [196, 200] | 54.0474 [30.6489, 65.0477] | 117.488 [74.9509, 235.313] | 86.5 [80.5, 96.5] | 1.24237 [0.747625, 2.64872] | 4.69974 [0.778388, 7806.4] / 4.70701 [0.187145, 7750.37] | 0.433228 [0.0386822, 54.5329] / 0.419033 [0.00178535, 54.195] | 1.10881 [0.996895, 299.499] | 0.0135374 [0.00586116, 0.0300491] |
+| front | 200 [200, 200] | 1.19720 [1.00284, 11.5672] | 34.5177 [25.7381, 68.1123] | 30.5 [25, 35.5] | 7.17750 [5.05813, 10.1587] | 2.12641 [0.842882, 8.85910] / 2.58437 [0.665395, 9.39147] | 0.0707055 [0.0562263, 0.812919] / 0.0527643 [0.00998099, 0.835272] | 2.22556 [0.901585, 155.246] | 0.0121359 [-0.0239676, 0.0423118] |
+
+All 20 runs had zero warm/cold failures, zero invalid warm/cold surfaces, and zero dense-grid butterfly/calendar violations. Quiet p50 median stayed below the `49fed2b` baseline of 0.47 ms, but seed 2 measured 0.496840 ms; quiet p99 stayed below the 7.6 ms baseline in all five seeds. The stricter quiet p99 target of 3 ms was missed in all five seeds. Normal, fast, and front missed their p99 and fallback targets in all five seeds; each also breached the corresponding hard limits. The quality target misses are reported per seed in the `--check` output. The summary medians do not determine individual pass/fail status.
+
+The old gate and new per-quote measurements are reported side by side. Old-gate fields are medians [ranges] across seeds; checked losses and scale aggregate only scheduled quality-check events. The fallback-update percentage in the primary table is the existing loss-scale gate's resulting fallback-path rate.
+
+| Scenario | Old-gate checks | Checked warm loss | Cold reference loss | Band-loss scale | `loss_tol` |
+|---|---:|---:|---:|---:|---:|
+| quiet | 20 [20, 23] | 4.26242e-05 [8.68514e-06, 0.000957942] | 9.23326e-11 [0, 0.000150919] | 0.0152508 [0.0151561, 0.0306513] | 0.05 |
+| normal | 180 [158, 220] | 0.0490752 [0.0416918, 0.0544085] | 0.00933619 [0.00582524, 0.0179343] | 0.483858 [0.413964, 0.510053] | 0.05 |
+| fast | 2546 [1862, 3589] | 3.82786 [2.66946, 4.53582] | 0.251244 [0.000136121, 1.89970] | 4.49517 [2.97981, 9.291] | 0.05 |
+| front | 190 [103, 836] | 0.0157761 [0.00422110, 3.55787] | 0.00872655 [0.000127251, 3.36029] | 0.102199 [0.0657856, 0.864477] | 0.05 |
+
+Load averages are 1/5/15-minute values, before → after each run. The sequence was serial (quiet, normal, fast, front); host load was elevated and changed during the run, so absolute timings are noisy.
+
+| Scenario | Seed | Load average before → after |
+|---|---:|---|
+| quiet | 1 | 1.34 1.16 1.08 → 2.25 1.39 1.16 |
+| quiet | 2 | 2.25 1.39 1.16 → 3.27 1.70 1.27 |
+| quiet | 3 | 3.27 1.70 1.27 → 3.52 1.83 1.32 |
+| quiet | 4 | 3.52 1.83 1.32 → 4.19 2.09 1.42 |
+| quiet | 5 | 4.19 2.09 1.42 → 4.39 2.23 1.48 |
+| normal | 1 | 4.39 2.23 1.48 → 4.42 2.35 1.53 |
+| normal | 2 | 4.42 2.35 1.53 → 4.11 2.38 1.55 |
+| normal | 3 | 4.11 2.38 1.55 → 3.92 2.43 1.58 |
+| normal | 4 | 3.92 2.43 1.58 → 3.73 2.48 1.62 |
+| normal | 5 | 3.73 2.48 1.62 → 4.33 2.67 1.69 |
+| fast | 1 | 4.33 2.67 1.69 → 4.45 2.86 1.79 |
+| fast | 2 | 4.45 2.86 1.79 → 4.31 2.96 1.85 |
+| fast | 3 | 4.31 2.96 1.85 → 4.76 3.15 1.94 |
+| fast | 4 | 4.76 3.15 1.94 → 5.05 3.34 2.03 |
+| fast | 5 | 5.05 3.34 2.03 → 5.03 3.47 2.11 |
+| front | 1 | 5.03 3.47 2.11 → 5.01 3.55 2.16 |
+| front | 2 | 5.01 3.55 2.16 → 4.92 3.61 2.21 |
+| front | 3 | 4.92 3.61 2.21 → 5.41 3.81 2.31 |
+| front | 4 | 5.41 3.81 2.31 → 4.94 3.79 2.32 |
+| front | 5 | 4.94 3.79 2.32 → 4.75 3.80 2.35 |

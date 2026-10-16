@@ -1,6 +1,7 @@
 #include "calibrator.hpp"
 #include "essvi_surface.hpp"
 #include "realistic_warm.hpp"
+#include "quality_metrics.hpp"
 #include "synthetic_chain.hpp"
 
 #include <algorithm>
@@ -14,8 +15,10 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -35,6 +38,7 @@ struct Options {
   std::string scenario;
   std::string replay_dir;
   std::size_t replay_limit{};
+  bool check{};
 };
 
 struct Summary {
@@ -49,9 +53,9 @@ struct Summary {
   std::size_t fallback_slices{};
   std::size_t warm_failures{};
   std::size_t cold_failures{};
-  std::size_t warm_invalid_surfaces{};
-  std::size_t cold_invalid_surfaces{};
-  std::size_t quality_checks{};
+  essvi::bench::SurfaceQualityCounts warm_surface_quality;
+  essvi::bench::SurfaceQualityCounts cold_surface_quality;
+  essvi::bench::BenchmarkQuality quality;
   std::uint64_t objective_evaluations{};
   std::uint64_t mm_bound_calls{};
   std::size_t local_solver_slices{};
@@ -136,8 +140,8 @@ double normalizedCall(double forward, double strike, double variance) {
   return forward * cdf(d1) - strike * cdf(d2);
 }
 
-bool denseGridValid(const essvi::Surface& surface) {
-  if (surface.slices.empty() || !essvi::validate(surface).empty()) return false;
+std::size_t denseGridViolationCount(const essvi::Surface& surface) {
+  std::size_t violations = 0;
   std::array<double, 101> previous_variance{};
   bool has_previous = false;
   for (const auto& slice : surface.slices) {
@@ -148,10 +152,12 @@ bool denseGridValid(const essvi::Surface& surface) {
       const double k = -0.5 + 0.01 * static_cast<double>(j);
       strike[j] = 100.0 * std::exp(k);
       variance[j] = essvi::sliceTotalVariance(slice, k);
-      if (!(std::isfinite(variance[j]) && variance[j] > 0.0)) return false;
-      if (has_previous &&
-          variance[j] < previous_variance[j] - 1e-8)
-        return false;
+      if (!(std::isfinite(variance[j]) && variance[j] > 0.0)) {
+        ++violations;
+        continue;
+      }
+      if (has_previous && variance[j] < previous_variance[j] - 1e-8)
+        ++violations;
       call[j] = normalizedCall(100.0, strike[j], variance[j]);
     }
     for (std::size_t j = 1; j < 100; ++j) {
@@ -159,16 +165,19 @@ bool denseGridValid(const essvi::Surface& surface) {
                                 (strike[j] - strike[j - 1]);
       const double right_slope = (call[j + 1] - call[j]) /
                                  (strike[j + 1] - strike[j]);
-      if (right_slope < left_slope - 1e-8) return false;
+      if (!(std::isfinite(left_slope) && std::isfinite(right_slope) &&
+            right_slope >= left_slope - 1e-8))
+        ++violations;
     }
     previous_variance = variance;
     has_previous = true;
   }
-  return true;
+  return violations;
 }
 
 void record(Summary& summary, const essvi::CalibrationResult& warm,
-            const essvi::CalibrationResult& cold, double warm_seconds,
+            const essvi::CalibrationResult& cold,
+            const std::vector<essvi::Quote>& quotes, double warm_seconds,
             double cold_seconds) {
   summary.warm_seconds.push_back(warm_seconds);
   summary.cold_seconds.push_back(cold_seconds);
@@ -179,20 +188,54 @@ void record(Summary& summary, const essvi::CalibrationResult& warm,
   summary.fallback_slices += warm.fallback_slices;
   summary.warm_failures += !warm.converged;
   summary.cold_failures += !cold.converged;
-  if (warm.converged && !denseGridValid(warm.surface))
-    ++summary.warm_invalid_surfaces;
-  if (cold.converged && !denseGridValid(cold.surface))
-    ++summary.cold_invalid_surfaces;
+
+  const bool warm_surface_valid = warm.converged &&
+                                  !warm.surface.slices.empty() &&
+                                  essvi::validate(warm.surface).empty();
+  const bool cold_surface_valid = cold.converged &&
+                                  !cold.surface.slices.empty() &&
+                                  essvi::validate(cold.surface).empty();
+  if (warm.converged) {
+    if (!warm_surface_valid)
+      ++summary.warm_surface_quality.invalid_surfaces;
+    else
+      summary.warm_surface_quality.dense_grid_violations +=
+          denseGridViolationCount(warm.surface);
+  }
+  if (cold.converged) {
+    if (!cold_surface_valid)
+      ++summary.cold_surface_quality.invalid_surfaces;
+    else
+      summary.cold_surface_quality.dense_grid_violations +=
+          denseGridViolationCount(cold.surface);
+  }
   if (warm.converged && std::isfinite(warm.objective))
     summary.warm_loss += warm.objective;
   if (cold.converged && std::isfinite(cold.objective))
     summary.cold_loss += cold.objective;
+
+  if (warm_surface_valid && cold_surface_valid) {
+    const std::size_t eligible_quotes =
+        essvi::bench::countValidTwoSidedBands(quotes);
+    const auto warm_metrics =
+        essvi::bench::measureExcessMetrics(quotes, warm.surface, 0.1);
+    const auto cold_metrics =
+        essvi::bench::measureExcessMetrics(quotes, cold.surface, 0.1);
+    if (eligible_quotes > 0 &&
+        warm_metrics.quote_count == eligible_quotes &&
+        cold_metrics.quote_count == eligible_quotes) {
+      summary.quality.warm.merge(warm_metrics);
+      summary.quality.cold.merge(cold_metrics);
+      ++summary.quality.paired_updates;
+    }
+  }
+
   summary.objective_evaluations += warm.objective_evaluations;
   summary.mm_bound_calls += warm.mm_bound_calls;
   summary.local_solver_slices += warm.local_solver_slices;
   summary.local_objective_evaluations += warm.local_objective_evaluations;
   summary.local_mm_bound_calls += warm.local_mm_bound_calls;
-  summary.quality_checks += warm.quality_checks;
+  summary.quality.checks += warm.quality_checks;
   summary.quality_warm_loss += warm.quality_warm_loss;
   summary.quality_reference_loss += warm.quality_reference_loss;
   summary.quality_loss_scale += warm.quality_loss_scale;
@@ -206,8 +249,28 @@ void printTimes(const char* prefix, const std::vector<double>& values) {
             << prefix << "_max_seconds=" << maximum(values) << '\n';
 }
 
+void printQuoteMetrics(const char* prefix,
+                       const essvi::bench::QuoteExcessMetrics& metrics) {
+  std::cout << prefix << "_quote_count=" << metrics.quote_count << '\n'
+            << prefix << "_share_above_cap=" << metrics.share_above_cap()
+            << '\n'
+            << prefix << "_maximum_excess_ratio=" << metrics.maximum_ratio
+            << '\n'
+            << prefix << "_rms_excess_ratio=" << metrics.rms_ratio() << '\n'
+            << prefix << "_summed_band_loss=" << metrics.summed_band_loss
+            << '\n'
+            << prefix << "_rms_excess_vol_points="
+            << metrics.rms_excess_vol_points() << '\n'
+            << prefix << "_maximum_excess_vol_points="
+            << metrics.maximum_excess_vol_points << '\n';
+}
+
 void printSummary(const Summary& summary) {
   const double samples = static_cast<double>(summary.samples);
+  const auto& warm_quality = summary.quality.warm;
+  const auto& cold_quality = summary.quality.cold;
+  const bool has_paired_quotes =
+      essvi::bench::hasPairedQuoteObservations(warm_quality, cold_quality);
   std::cout << std::setprecision(17)
             << "run=" << summary.name << '\n'
             << "load_average_before=" << summary.load_average_before << '\n'
@@ -228,11 +291,32 @@ void printSummary(const Summary& summary) {
             << "warm_local_solver_slices=" << summary.local_solver_slices << '\n'
             << "warm_failures=" << summary.warm_failures << '\n'
             << "cold_failures=" << summary.cold_failures << '\n'
-            << "warm_invalid_surfaces=" << summary.warm_invalid_surfaces << '\n'
-            << "cold_invalid_surfaces=" << summary.cold_invalid_surfaces << '\n'
-            << "summed_warm_band_loss=" << summary.warm_loss << '\n'
-            << "summed_cold_band_loss=" << summary.cold_loss << '\n'
-            << "warm_objective_evaluations_per_refit_slice="
+            << "warm_invalid_surfaces="
+            << summary.warm_surface_quality.invalid_surfaces << '\n'
+            << "cold_invalid_surfaces="
+            << summary.cold_surface_quality.invalid_surfaces << '\n'
+            << "warm_dense_grid_violations="
+            << summary.warm_surface_quality.dense_grid_violations << '\n'
+            << "cold_dense_grid_violations="
+            << summary.cold_surface_quality.dense_grid_violations << '\n'
+            << "summed_warm_objective=" << summary.warm_loss << '\n'
+            << "summed_cold_objective=" << summary.cold_loss << '\n'
+            << "paired_quote_updates=" << summary.quality.paired_updates << '\n'
+            << "summed_warm_band_loss=" << warm_quality.summed_band_loss
+            << '\n'
+            << "summed_cold_band_loss=" << cold_quality.summed_band_loss
+            << '\n';
+  if (has_paired_quotes)
+    std::cout << "warm_cold_share_above_cap_delta_pp="
+              << (warm_quality.share_above_cap() -
+                  cold_quality.share_above_cap()) *
+                     100.0
+              << '\n';
+  else
+    std::cout << "warm_cold_share_above_cap_delta_pp=unavailable\n";
+  printQuoteMetrics("warm", warm_quality);
+  printQuoteMetrics("cold", cold_quality);
+  std::cout << "warm_objective_evaluations_per_refit_slice="
             << (summary.slices_refit
                     ? static_cast<double>(summary.objective_evaluations) /
                           static_cast<double>(summary.slices_refit)
@@ -256,16 +340,25 @@ void printSummary(const Summary& summary) {
                           static_cast<double>(summary.local_solver_slices)
                     : 0.0)
             << '\n'
-            << "quality_checks=" << summary.quality_checks << '\n'
-            << "quality_warm_loss=" << summary.quality_warm_loss << '\n'
-            << "quality_reference_loss=" << summary.quality_reference_loss << '\n'
-            << "quality_loss_scale=" << summary.quality_loss_scale << '\n'
-            << "loss_tolerance=" << summary.loss_tolerance << '\n';
-  if (summary.cold_loss > 0.0)
-    std::cout << "warm_cold_loss_ratio="
-              << summary.warm_loss / summary.cold_loss << '\n';
-  else
-    std::cout << "warm_cold_loss_ratio=undefined (cold loss is zero)\n";
+            << "old_gate_quality_checks=" << summary.quality.checks << '\n'
+            << "old_gate_quality_warm_loss=" << summary.quality_warm_loss
+            << '\n'
+            << "old_gate_quality_reference_loss="
+            << summary.quality_reference_loss << '\n'
+            << "old_gate_quality_loss_scale=" << summary.quality_loss_scale
+            << '\n'
+            << "old_gate_loss_tolerance=" << summary.loss_tolerance << '\n';
+  if (has_paired_quotes) {
+    const auto loss_ratio = essvi::bench::checkRatioAtMost(
+        "summed_band_loss_ratio", warm_quality.summed_band_loss,
+        cold_quality.summed_band_loss, 1.05, 1.20);
+    if (loss_ratio.available)
+      std::cout << "warm_cold_band_loss_ratio=" << loss_ratio.value << '\n';
+    else
+      std::cout << "warm_cold_band_loss_ratio=undefined (cold loss is zero)\n";
+  } else {
+    std::cout << "warm_cold_band_loss_ratio=unavailable\n";
+  }
 }
 
 void writeJsonTimes(std::ostream& output, const char* name,
@@ -276,11 +369,29 @@ void writeJsonTimes(std::ostream& output, const char* name,
          << ",\"max\":" << maximum(values) << '}';
 }
 
+void writeJsonQuoteMetrics(std::ostream& output, const char* name,
+                           const essvi::bench::QuoteExcessMetrics& metrics) {
+  output << "\"" << name << "\":{" << "\"quote_count\":"
+         << metrics.quote_count << ",\"above_cap_count\":"
+         << metrics.above_cap_count << ",\"share_above_cap\":"
+         << metrics.share_above_cap() << ",\"maximum_excess_ratio\":"
+         << metrics.maximum_ratio << ",\"rms_excess_ratio\":"
+         << metrics.rms_ratio() << ",\"summed_band_loss\":"
+         << metrics.summed_band_loss << ",\"rms_excess_vol_points\":"
+         << metrics.rms_excess_vol_points()
+         << ",\"maximum_excess_vol_points\":"
+         << metrics.maximum_excess_vol_points << '}';
+}
+
 void writeJsonSummary(std::ostream& output, const Summary& summary) {
   const double samples = static_cast<double>(summary.samples);
+  const bool has_paired_quotes = essvi::bench::hasPairedQuoteObservations(
+      summary.quality.warm, summary.quality.cold);
   output << "{\"run\":\"" << summary.name << "\","
-         << "\"load_average_before\":\"" << summary.load_average_before << "\","
-         << "\"load_average_after\":\"" << summary.load_average_after << "\","
+         << "\"load_average_before\":\"" << summary.load_average_before
+         << "\","
+         << "\"load_average_after\":\"" << summary.load_average_after
+         << "\","
          << "\"samples\":" << summary.samples << ','
          << "\"snapshots\":" << summary.snapshots << ',';
   writeJsonTimes(output, "warm_seconds", summary.warm_seconds);
@@ -297,11 +408,39 @@ void writeJsonSummary(std::ostream& output, const Summary& summary) {
          << ",\"local_solver_slices\":" << summary.local_solver_slices
          << ",\"warm_failures\":" << summary.warm_failures
          << ",\"cold_failures\":" << summary.cold_failures
-         << ",\"warm_invalid_surfaces\":" << summary.warm_invalid_surfaces
-         << ",\"cold_invalid_surfaces\":" << summary.cold_invalid_surfaces
-         << ",\"summed_warm_band_loss\":" << summary.warm_loss
-         << ",\"summed_cold_band_loss\":" << summary.cold_loss
-         << ",\"warm_objective_evaluations_per_refit_slice\":"
+         << ",\"warm_invalid_surfaces\":"
+         << summary.warm_surface_quality.invalid_surfaces
+         << ",\"cold_invalid_surfaces\":"
+         << summary.cold_surface_quality.invalid_surfaces
+         << ",\"warm_dense_grid_violations\":"
+         << summary.warm_surface_quality.dense_grid_violations
+         << ",\"cold_dense_grid_violations\":"
+         << summary.cold_surface_quality.dense_grid_violations
+         << ",\"summed_warm_objective\":" << summary.warm_loss
+         << ",\"summed_cold_objective\":" << summary.cold_loss
+         << ",\"paired_updates\":" << summary.quality.paired_updates << ',';
+  writeJsonQuoteMetrics(output, "warm_quality", summary.quality.warm);
+  output << ',';
+  writeJsonQuoteMetrics(output, "cold_quality", summary.quality.cold);
+  output << ",\"share_above_cap_delta_pp\":";
+  if (has_paired_quotes) {
+    output << (summary.quality.warm.share_above_cap() -
+               summary.quality.cold.share_above_cap()) *
+                  100.0;
+  } else {
+    output << "null";
+  }
+  output << ",\"summed_band_loss_ratio\":";
+  if (has_paired_quotes) {
+    const auto loss_ratio = essvi::bench::checkRatioAtMost(
+        "summed_band_loss_ratio", summary.quality.warm.summed_band_loss,
+        summary.quality.cold.summed_band_loss, 1.05, 1.20);
+    if (loss_ratio.available) output << loss_ratio.value;
+    else output << "null";
+  } else {
+    output << "null";
+  }
+  output << ",\"warm_objective_evaluations_per_refit_slice\":"
          << (summary.slices_refit
                  ? static_cast<double>(summary.objective_evaluations) /
                        static_cast<double>(summary.slices_refit)
@@ -321,11 +460,14 @@ void writeJsonSummary(std::ostream& output, const Summary& summary) {
                  ? static_cast<double>(summary.local_mm_bound_calls) /
                        static_cast<double>(summary.local_solver_slices)
                  : 0.0)
-         << ",\"quality_checks\":" << summary.quality_checks
-         << ",\"quality_warm_loss\":" << summary.quality_warm_loss
-         << ",\"quality_reference_loss\":" << summary.quality_reference_loss
-         << ",\"quality_loss_scale\":" << summary.quality_loss_scale
-         << ",\"loss_tolerance\":" << summary.loss_tolerance << '}';
+         << ",\"old_gate_quality_checks\":" << summary.quality.checks
+         << ",\"old_gate_quality_warm_loss\":"
+         << summary.quality_warm_loss
+         << ",\"old_gate_quality_reference_loss\":"
+         << summary.quality_reference_loss
+         << ",\"old_gate_quality_loss_scale\":"
+         << summary.quality_loss_scale
+         << ",\"old_gate_loss_tolerance\":" << summary.loss_tolerance << '}';
 }
 
 void writeJsonSummaries(const std::string& path,
@@ -390,7 +532,7 @@ void runScenario(const Options& options, essvi::bench::WarmScenario scenario,
     const auto cold = essvi::calibrate(current_quotes);
     const double cold_seconds =
         std::chrono::duration<double>(Clock::now() - cold_start).count();
-    record(summary, warm, cold, warm_seconds, cold_seconds);
+    record(summary, warm, cold, current_quotes, warm_seconds, cold_seconds);
 
     if (warm.converged)
       previous_surface = warm.surface;
@@ -437,7 +579,7 @@ void runReplay(const Options& options, Summary& summary) {
     const auto cold = essvi::calibrate(current_quotes);
     const double cold_seconds =
         std::chrono::duration<double>(Clock::now() - cold_start).count();
-    record(summary, warm, cold, warm_seconds, cold_seconds);
+    record(summary, warm, cold, current_quotes, warm_seconds, cold_seconds);
 
     if (warm.converged)
       previous_surface = warm.surface;
@@ -653,6 +795,96 @@ void runLegacy(const Options& options) {
 #endif
 }
 
+std::vector<essvi::bench::QualityCheck> qualityChecks(const Summary& summary) {
+  using essvi::bench::checkAtMost;
+  using essvi::bench::checkRatioAtMost;
+  const auto& warm = summary.quality.warm;
+  const auto& cold = summary.quality.cold;
+  const bool has_quotes =
+      essvi::bench::hasPairedQuoteObservations(warm, cold);
+  const double unavailable = std::numeric_limits<double>::quiet_NaN();
+  const auto metric = [has_quotes, unavailable](double value) {
+    return has_quotes ? value : unavailable;
+  };
+  const bool is_fast = summary.name == "fast";
+  const double p99_target_ms = is_fast ? 10.0 : 3.0;
+  const double p99_hard_ms = is_fast ? 20.0 : 10.0;
+  const double fallback_target_percent = is_fast ? 10.0 : 1.0;
+  const double fallback_hard_percent = is_fast ? 25.0 : 5.0;
+  const double fallback_rate_percent =
+      summary.samples
+          ? 100.0 * static_cast<double>(summary.path_counts[2]) /
+                static_cast<double>(summary.samples)
+          : unavailable;
+  const double max_target = std::max(0.1, cold.maximum_ratio + 0.01);
+  const double max_hard = std::max(0.2, cold.maximum_ratio + 0.05);
+  std::vector<essvi::bench::QualityCheck> checks;
+  checks.reserve(13);
+  checks.push_back(
+        checkAtMost("unpaired or unscored updates",
+                    static_cast<double>(summary.samples -
+                                        summary.quality.paired_updates),
+                    0.0, 0.0));
+  checks.push_back(checkAtMost(
+      "share above cap warm minus cold (percentage points)",
+      metric((warm.share_above_cap() - cold.share_above_cap()) * 100.0),
+      0.5, 2.0));
+  checks.push_back(checkAtMost("maximum excess ratio, warm",
+                               metric(warm.maximum_ratio), max_target,
+                               max_hard));
+  checks.push_back(checkAtMost("RMS excess ratio, warm",
+                               metric(warm.rms_ratio()), 0.02, 0.05));
+  checks.push_back(checkRatioAtMost("summed band loss warm / cold",
+                                    metric(warm.summed_band_loss),
+                                    metric(cold.summed_band_loss), 1.05, 1.20));
+  checks.push_back(checkAtMost(
+      "RMS excess IV points warm minus cold",
+      metric(warm.rms_excess_vol_points() - cold.rms_excess_vol_points()),
+      0.02, 0.05));
+  checks.push_back(checkAtMost("warm p99 (milliseconds)",
+                               percentile(summary.warm_seconds, 0.99) * 1000.0,
+                               p99_target_ms, p99_hard_ms));
+  checks.push_back(checkAtMost("fallback updates (percent)",
+                               fallback_rate_percent,
+                               fallback_target_percent,
+                               fallback_hard_percent));
+  checks.push_back(checkAtMost("warm failures", summary.warm_failures, 0.0,
+                               0.0));
+  checks.push_back(checkAtMost("warm invalid surfaces",
+                               summary.warm_surface_quality.invalid_surfaces,
+                               0.0, 0.0));
+  checks.push_back(checkAtMost(
+      "dense-grid butterfly/calendar violations",
+      summary.warm_surface_quality.dense_grid_violations, 0.0, 0.0));
+  if (summary.name == "quiet") {
+    checks.push_back(checkAtMost(
+        "quiet median non-regression vs 49fed2b (milliseconds)",
+        percentile(summary.warm_seconds, 0.50) * 1000.0, 0.47, 0.47));
+    checks.push_back(checkAtMost(
+        "quiet p99 non-regression vs 49fed2b (milliseconds)",
+        percentile(summary.warm_seconds, 0.99) * 1000.0, 7.6, 7.6));
+  }
+  return checks;
+}
+
+void printCheckTable(const Summary& summary) {
+  std::cout << "quality_check_table=" << summary.name << '\n'
+            << "metric | value | target | hard limit | target status | hard status\n";
+  for (const auto& check : qualityChecks(summary)) {
+    const char* target_status =
+        !check.available ? "UNAVAILABLE"
+                         : (check.targetPassed() ? "PASS" : "MISS");
+    const char* hard_status =
+        !check.available ? "UNAVAILABLE"
+                         : (check.hardLimitPassed() ? "PASS" : "BREACH");
+    std::cout << check.name << " | ";
+    if (check.available) std::cout << check.value;
+    else std::cout << "unavailable";
+    std::cout << " | <= " << check.target << " | <= " << check.hard_limit
+              << " | " << target_status << " | " << hard_status << '\n';
+  }
+}
+
 Options parseOptions(int argc, char** argv) {
   Options options;
   for (int i = 1; i < argc; ++i) {
@@ -664,8 +896,12 @@ Options parseOptions(int argc, char** argv) {
              "[--warm-cold-check-interval N] [--input normalized_quotes.csv] "
              "[--parameters-out path] [--timings-out path] "
              "[--scenario quiet|normal|fast|front|all] [--seed N] "
-             "[--replay-dir directory] [--replay-limit N]\n";
+             "[--replay-dir directory] [--replay-limit N] [--check]\n";
       std::exit(0);
+    }
+    if (argument == "--check") {
+      options.check = true;
+      continue;
     }
     if (i + 1 == argc)
       throw std::invalid_argument("missing value for " + argument);
@@ -707,10 +943,12 @@ Options parseOptions(int argc, char** argv) {
   if ((!options.scenario.empty() || !options.replay_dir.empty()) &&
       !options.parameters_out.empty())
     throw std::invalid_argument("--parameters-out is only supported by legacy mode");
+  if (options.check && options.scenario.empty())
+    throw std::invalid_argument("--check requires --scenario");
   return options;
 }
 
-void runNewBenchmarks(const Options& options) {
+bool runNewBenchmarks(const Options& options) {
   std::vector<Summary> summaries;
   if (!options.replay_dir.empty()) {
     Summary summary;
@@ -729,12 +967,22 @@ void runNewBenchmarks(const Options& options) {
       Summary summary;
       runScenario(options, scenario, summary);
       printSummary(summary);
+      if (options.check) printCheckTable(summary);
       summaries.push_back(std::move(summary));
     }
   }
   if (!options.timings_out.empty())
     writeJsonSummaries(options.timings_out, summaries, options.seed,
                        summaries.empty() ? 0 : summaries.front().samples);
+  const bool target_missed = options.check && std::any_of(
+      summaries.begin(), summaries.end(), [](const Summary& summary) {
+        const auto checks = qualityChecks(summary);
+        return std::any_of(checks.begin(), checks.end(),
+                           [](const essvi::bench::QualityCheck& check) {
+                             return !check.targetPassed();
+                           });
+      });
+  return target_missed;
 }
 
 }  // namespace
@@ -742,10 +990,11 @@ void runNewBenchmarks(const Options& options) {
 int main(int argc, char** argv) {
   try {
     const Options options = parseOptions(argc, argv);
-    if (!options.scenario.empty() || !options.replay_dir.empty())
-      runNewBenchmarks(options);
-    else
-      runLegacy(options);
+    if (!options.scenario.empty() || !options.replay_dir.empty()) {
+      const bool target_missed = runNewBenchmarks(options);
+      return target_missed ? 2 : 0;
+    }
+    runLegacy(options);
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return 1;

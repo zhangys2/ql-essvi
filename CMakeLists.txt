@@ -65,6 +65,12 @@ if(BUILD_TESTING)
   target_include_directories(essvi_warm_calibrator_tests PRIVATE bench)
   target_link_libraries(essvi_warm_calibrator_tests PRIVATE essvi_core)
   add_test(NAME essvi_warm_calibrator_tests COMMAND essvi_warm_calibrator_tests)
+
+  add_executable(essvi_benchmark_quality_tests tests/test_benchmark_quality.cpp)
+  target_include_directories(essvi_benchmark_quality_tests PRIVATE bench)
+  target_link_libraries(essvi_benchmark_quality_tests PRIVATE essvi_core)
+  add_test(NAME essvi_benchmark_quality_tests
+    COMMAND essvi_benchmark_quality_tests)
 endif()
 
 if(ESSVI_WITH_QUANTLIB)
