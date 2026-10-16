@@ -4,8 +4,8 @@
 
 - Current: implemented
 - Last transition: `changes-requested` → `implemented`
-- At: 2026-10-16T12:26:34Z
-- Reason/evidence: all three review-round-1 findings corrected; focused C++ aggregation and ratio tests, both CLI exit-path regressions, full CTest, and pytest pass.
+- At: 2026-10-16T12:41:46Z
+- Reason/evidence: review-round-2 findings corrected in `439327de13f5d2cdfcde180ac72984ba0f6546ed`; zero expected quote count now has a no-mutation test, and exit decision logic is covered deterministically without pinning host timings.
 - Blocker: None
 
 ## Claim
@@ -70,6 +70,11 @@ None
 | 2026-10-16 | Review round 1 | Base-to-HEAD review `af7f0e4bf883dec67e26dc6c94e5d665a8fb5536..3fd4fe3`; three independent axes | `/home/zhangy/git/ql-essvi` | `3fd4fe3` | changes requested | Spec flagged positive-over-zero as an unavailable ratio instead of a definite breach; standards flagged missing aggregation-seam coverage; verification flagged no passing `--check` CLI case. Its configured full command passed CTest 5/5 and pytest 5/5. |
 | 2026-10-16 | Review corrections | `export PATH="$PWD/.venv/bin:$PATH"; cmake --build build --target essvi_bench essvi_benchmark_quality_tests -j2 && ctest --test-dir build -R essvi_benchmark_quality_tests --output-on-failure && .venv/bin/python -m pytest -q tests/test_benchmark_cli.py` | `/home/zhangy/git/ql-essvi` | working tree | passed | Focused CTest 1/1 and CLI pytest 2/2 passed. Tests cover incomplete/asymmetric paired counts, zero/zero ratio 1, positive/zero `inf` as `MISS | BREACH` with JSON `null`, `--check` exit 0 for a passing one-quote quiet case, and exit 2 for a fast target miss. |
 | 2026-10-16 | Final verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | working tree | passed | Release build succeeded; CTest 5/5 passed; pytest 7/7 passed. |
+| 2026-10-16T12:27:24Z | Review round 2 start | Final review range `af7f0e4bf883dec67e26dc6c94e5d665a8fb5536..c3849a5`; three independent axes | `/home/zhangy/git/ql-essvi` | `c3849a5` | reviewing | All round-1 findings corrected and verified; fresh independent review pending. |
+| 2026-10-16T12:36:01Z | Review round 2 | Base-to-HEAD review `af7f0e4bf883dec67e26dc6c94e5d665a8fb5536..c3849a5`; three independent axes | `/home/zhangy/git/ql-essvi` | `c3849a5` | changes required | Spec axis approved. Standards flagged a timing-dependent exit-zero CLI test; verification flagged missing coverage for zero expected quote count. Review verification passed CTest 5/5 and pytest 7/7. |
+| 2026-10-16T12:41:46Z | Review round 2 corrections | `export PATH="$PWD/.venv/bin:$PATH"; cmake --build build --target essvi_bench essvi_benchmark_quality_tests -j2 && ctest --test-dir build -R essvi_benchmark_quality_tests --output-on-failure && .venv/bin/python -m pytest -q tests/test_benchmark_cli.py` | `/home/zhangy/git/ql-essvi` | `439327d` | passed | Build succeeded; focused CTest 1/1 and CLI pytest 1/1 passed. The C++ test covers zero expected quote count with no aggregate mutation and deterministic pass/miss/unavailable exit-decision cases. |
+| 2026-10-16T12:41:46Z | Passing CLI smoke | `./build/essvi_bench --scenario quiet --scenario-updates 1 --seed 1 --expiries 1 --quotes-per-expiry 1 --check` | `/home/zhangy/git/ql-essvi` | `439327d` | passed | Real CLI returned exit 0; all printed target and hard-limit statuses were `PASS`. Timing is recorded only as smoke evidence, not pinned by a permanent test. |
+| 2026-10-16T12:41:46Z | Final verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `439327d` | passed | Release build succeeded; CTest 5/5 passed; pytest 6/6 passed. |
 
 ## Review dispositions
 
@@ -78,7 +83,9 @@ None
 | Pre-review | P2: equal aggregate warm/cold quote counts could still compare different updates or populations; empty-pair comparisons were not consistently unavailable. | Resolved | Per-update full-quote-set pairing, paired-update coverage enforcement, and empty-comparison guards added; reviewer recheck confirmed the same-update/same-quote mismatch is closed. |
 | 1 — Spec P2 | Positive warm loss over zero cold loss was marked unavailable, hiding a definite breach. | Resolved | `checkRatioAtMost` now returns available `+inf` for positive/zero; check table reports target miss and hard breach. The CLI regression verifies `inf | MISS | BREACH`; JSON preserves valid syntax using `null`; zero/zero remains 1. |
 | 1 — Standards P2 | Pairing guard and benchmark aggregation lacked automated test coverage. | Resolved | `mergePairedQuoteMetrics`, called by `record()`, rejects equal-but-incomplete and asymmetric update counts without mutating aggregates; CTest regression verifies coverage, paired-update count, and no partial merge. |
-| 1 — Verification P2 | Successful `--check` CLI path and exit 0 were untested. | Resolved | Pytest invokes the built CLI for a deterministic passing one-quote quiet scenario and asserts exit 0/all PASS; a separate fast case asserts exit 2 on a target miss. |
+| 1 — Verification P2 | Successful `--check` CLI path and exit 0 were untested. | Resolved | The permanent test now covers the deterministic shared target-miss decision helper for passing, missed, and unavailable checks; real CLI exit 0 was exercised as a smoke, and a separate fast case asserts exit 2 on a target miss. Machine-dependent timing is not asserted. |
+| 2 — Standards P2 (judgment) | Successful CLI test asserts measured one-sample quiet timing remains under the performance target; host scheduling can cause false failures unrelated to exit-status behavior. | Resolved | Removed the timing-pinned CLI success test; `hasTargetMiss` is tested for all-pass, target-miss, and unavailable check lists. A one-off real CLI smoke returned 0 with all statuses passing. |
+| 2 — Verification P2 (UNTESTED) | `mergePairedQuoteMetrics` has an `expected_quote_count == 0` rejection branch with no test; existing empty-metric tests do not call the helper with zero expected count. | Resolved | CTest now calls the helper with zero expected quote count and asserts false return, zero `paired_updates`, and unchanged warm/cold aggregate quote counts. |
 
 ## Delivery record
 
@@ -91,7 +98,7 @@ None
 - Unconfirmed commands: none (typecheck/lint not applicable)
 - Branch: `delivery/calibrator-speedup-addendum-b/CAL-B1`
 - Worktree: primary checkout, `/home/zhangy/git/ql-essvi` (configured checkout form)
-- Commit: pending review corrections
+- Commits: `3fd4fe3` (implementation), `c3849a5` (review round-1 corrections), `439327d` (review round-2 corrections)
 - GitHub Issue: none (local tracker)
-- Tests: final CTest 5/5 and pytest 7/7 passed; scenario matrix target/coverage misses are documented.
-- Diff review: review round 1 changes all addressed; round 2 pending.
+- Tests: final CTest 5/5 and pytest 6/6 passed; scenario matrix target/coverage misses are documented.
+- Diff review: round 2 corrections implemented; round 3 review pending.
