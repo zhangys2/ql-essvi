@@ -2,10 +2,10 @@
 
 ## State
 
-- Current: implementing
-- Last transition: `baseline-passed` → `implementing`
+- Current: implemented
+- Last transition: `implementing` → `implemented`
 - At: 2026-10-16
-- Reason/evidence: configured baseline passed at CAL-B3 completion commit `74d3a0e4eb65c021c3bd8b00685b6c51a963830a`; user waived further independent reviews.
+- Reason/evidence: implementation and configured verification completed in commit `f0682e0c3012be976e327273ef12b4488217e33d`; user waived further independent reviews.
 - Blocker: None
 
 ## Claim
@@ -59,10 +59,10 @@ Implement the local → restricted cold → full cold stages with a per-update b
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-10-16 | Baseline | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `74d3a0e4eb65c021c3bd8b00685b6c51a963830a` | passed | Release build succeeded; CTest 5/5 passed and pytest 10/10 passed. |
 | 2026-10-16 | Red | `cmake --build build --target essvi_warm_calibrator_tests -j2` | `/home/zhangy/git/ql-essvi` | `74d3a0e4eb65c021c3bd8b00685b6c51a963830a` | failed as expected | New regression coverage could not compile before implementation: `CalibrationPath::degraded` and budget/quality result diagnostics were not yet present. |
-| 2026-10-16 | Green focused | `cmake --build build --target essvi_warm_calibrator_tests essvi_bench -j2 && ctest --test-dir build -R essvi_warm_calibrator_tests --output-on-failure` | `/home/zhangy/git/ql-essvi` | pending | passed | Focused warm-calibrator coverage passed, including budget exhaustion, degraded validity, forced full-cold recovery, shortcut, reset, and no-result failure. |
-| 2026-10-16 | Scenario smoke | `build/essvi_bench --scenario fast --scenario-updates 5 --expiries 10 --quotes-per-expiry 100 --seed 11 --timings-out /tmp/cal-b4-smoke.json` | `/home/zhangy/git/ql-essvi` | pending | passed; acceptance not claimed | Five outputs converged; 2 fallback + 3 degraded; 30 restricted, 44 full-cold, 20 forced searches; six budget denials; zero failures, invalid surfaces, or dense-grid violations. JSON summary parsed. Small smoke only, not the 40 × 100 / 200-update acceptance scenario. |
-| 2026-10-16 | Legacy JSON smoke | `build/essvi_bench --expiries 2 --quotes-per-expiry 100 --repeats 1 --warm-updates 2 --timings-out /tmp/cal-b4-legacy.json` | `/home/zhangy/git/ql-essvi` | pending | passed | Legacy warm JSON parsed; `degraded_ages` aligned with two slices as `[0, 0]`; quality diagnostics present and zero for this unchanged-slice sample. |
-| 2026-10-16 | Configured verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | pending | passed | Release build succeeded; CTest 5/5 passed and pytest 10/10 passed. |
+| 2026-10-16 | Green focused | `cmake --build build --target essvi_warm_calibrator_tests essvi_bench -j2 && ctest --test-dir build -R essvi_warm_calibrator_tests --output-on-failure` | `/home/zhangy/git/ql-essvi` | `f0682e0c3012be976e327273ef12b4488217e33d` | passed | Focused warm-calibrator coverage passed, including budget exhaustion, degraded validity, forced full-cold recovery, shortcut, reset, and no-result failure. |
+| 2026-10-16 | Scenario smoke | `build/essvi_bench --scenario fast --scenario-updates 5 --expiries 10 --quotes-per-expiry 100 --seed 11 --timings-out /tmp/cal-b4-smoke.json` | `/home/zhangy/git/ql-essvi` | `f0682e0c3012be976e327273ef12b4488217e33d` | passed; acceptance not claimed | Five outputs converged; 2 fallback + 3 degraded; 30 restricted, 44 full-cold, 20 forced searches; six budget denials; zero failures, invalid surfaces, or dense-grid violations. JSON summary parsed. Small smoke only, not the 40 × 100 / 200-update acceptance scenario. |
+| 2026-10-16 | Legacy JSON smoke | `build/essvi_bench --expiries 2 --quotes-per-expiry 100 --repeats 1 --warm-updates 2 --timings-out /tmp/cal-b4-legacy.json` | `/home/zhangy/git/ql-essvi` | `f0682e0c3012be976e327273ef12b4488217e33d` | passed | Legacy warm JSON parsed; `degraded_ages` aligned with two slices as `[0, 0]`; quality diagnostics present and zero for this unchanged-slice sample. |
+| 2026-10-16 | Configured verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `f0682e0c3012be976e327273ef12b4488217e33d` | passed | Release build succeeded; CTest 5/5 passed and pytest 10/10 passed. |
 
 ## Review dispositions
 
@@ -79,7 +79,7 @@ Implement the local → restricted cold → full cold stages with a per-update b
 - Unconfirmed commands: typecheck/lint not applicable; no configured linter
 - Branch: `delivery/calibrator-speedup-addendum-b/CAL-B4`
 - Worktree: primary checkout, `/home/zhangy/git/ql-essvi` (configured checkout form)
-- Commit: pending
+- Commit: `f0682e0c3012be976e327273ef12b4488217e33d`
 - GitHub Issue: none (local tracker)
-- Tests: pending
+- Tests: focused warm-calibrator CTest passed; configured CTest 5/5 and pytest 10/10 passed; fast 10 × 100 / 5-update and legacy JSON smokes passed. The smoke is not Addendum B performance acceptance.
 - Diff review: waived at user request; no independent review performed.
