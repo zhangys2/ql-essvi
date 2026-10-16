@@ -78,27 +78,29 @@ void warmUpdatesReuseAndRefitSafely() {
   essvi::WarmOptions options;
   options.quote_tol = 1e-6;
   options.loss_tol = 1e-8;
-  options.cold_check_interval = 10;
-  auto previous_surface = cold.surface;
+  auto previous_result = cold;
   for (std::size_t update = 1; update <= 100; ++update) {
     auto current_quotes = previous_quotes;
     for (auto& quote : current_quotes) {
       quote.bid_iv += 1e-7;
       quote.ask_iv += 1e-7;
     }
-    options.update_number = update;
-    const auto warm = essvi::calibrateWarm(current_quotes, previous_surface,
+    const bool reuse_allowed = previous_result.reuse_ages.empty() ||
+                               previous_result.reuse_ages.front() < 12;
+    const auto warm = essvi::calibrateWarm(current_quotes, &previous_result,
                                            previous_quotes, options);
     assert(warm.converged);
     assert(warm.path == essvi::CalibrationPath::warm);
-    assert(warm.slices_reused == 40);
-    assert(warm.slices_refit == 0);
+    assert(warm.slices_reused == (reuse_allowed ? 40 : 0));
+    assert(warm.slices_refit == (reuse_allowed ? 0 : 40));
+    assert(warm.reuse_ages.size() == warm.surface.slices.size());
+    for (const auto age : warm.reuse_ages) assert(age <= 12);
     assert(warm.objective <= cold.objective + 1e-12);
     assert(warm.objective_evaluations >= static_cast<std::uint64_t>(warm.iterations));
     assert(std::isfinite(warm.runtime_seconds));
     assert(warm.mm_bound_calls > 0);
     checkDenseGrid(warm.surface);
-    previous_surface = warm.surface;
+    previous_result = warm;
     previous_quotes = std::move(current_quotes);
   }
 
@@ -110,9 +112,7 @@ void warmUpdatesReuseAndRefitSafely() {
     }
   }
   options.loss_tol = 1e-12;
-  options.cold_check_interval = 0;
-  options.update_number = 101;
-  const auto warm_refit = essvi::calibrateWarm(changed_quotes, previous_surface,
+  const auto warm_refit = essvi::calibrateWarm(changed_quotes, &previous_result,
                                                previous_quotes, options);
   const auto cold_refit = essvi::calibrate(changed_quotes);
   assert(warm_refit.converged && cold_refit.converged);
@@ -122,14 +122,14 @@ void warmUpdatesReuseAndRefitSafely() {
   assert(warm_refit.objective <= cold_refit.objective * 1.05 + 1e-12);
   checkDenseGrid(warm_refit.surface);
 
-  const auto repeated_a = essvi::calibrateWarm(changed_quotes, previous_surface,
+  const auto repeated_a = essvi::calibrateWarm(changed_quotes, &previous_result,
                                                previous_quotes, options);
-  const auto repeated_b = essvi::calibrateWarm(changed_quotes, previous_surface,
+  const auto repeated_b = essvi::calibrateWarm(changed_quotes, &previous_result,
                                                previous_quotes, options);
   assert(repeated_a.converged && repeated_b.converged);
   sameParameters(repeated_a.surface, repeated_b.surface);
 
-  const auto failed = essvi::calibrateWarm({}, previous_surface,
+  const auto failed = essvi::calibrateWarm({}, &previous_result,
                                             previous_quotes, options);
   assert(!failed.converged);
   assert(!failed.error.empty());
@@ -137,7 +137,7 @@ void warmUpdatesReuseAndRefitSafely() {
 
   auto no_atm = std::vector<essvi::Quote>{
       {"bad-atm", 0.5, 100.0, 1.0, 100.0, 0.2, 0.21, NAN, true}};
-  const auto infeasible = essvi::calibrateWarm(no_atm, previous_surface,
+  const auto infeasible = essvi::calibrateWarm(no_atm, &previous_result,
                                                 previous_quotes, options);
   assert(!infeasible.converged);
   assert(!infeasible.error.empty());
@@ -148,6 +148,14 @@ void changedQuotesReuseWhenPreviousSurfaceStillFits() {
   const auto previous_quotes = essvi::bench::syntheticChain(3, 100);
   const auto previous = essvi::calibrate(previous_quotes);
   assert(previous.converged);
+  const auto no_previous = essvi::calibrateWarm(
+      previous_quotes, nullptr, previous_quotes);
+  assert(no_previous.converged);
+  assert(no_previous.path == essvi::CalibrationPath::cold);
+  assert(no_previous.slices_refit == previous.surface.slices.size());
+  for (const auto age : no_previous.reuse_ages) assert(age == 0);
+  sameParameters(no_previous.surface, previous.surface);
+
   auto current = previous_quotes;
   for (auto& quote : current) {
     if (quote.expiry != previous.surface.slices.back().expiry) continue;
@@ -157,9 +165,8 @@ void changedQuotesReuseWhenPreviousSurfaceStillFits() {
 
   essvi::WarmOptions options;
   options.quote_tol = 0.0;
-  options.cold_check_interval = 0;
   const auto warm = essvi::calibrateWarm(
-      current, previous.surface, previous_quotes, options);
+      current, &previous, previous_quotes, options);
   assert(warm.converged);
   assert(warm.slices_reused == 3);
   assert(warm.slices_refit == 0);
@@ -167,7 +174,69 @@ void changedQuotesReuseWhenPreviousSurfaceStillFits() {
   checkDenseGrid(warm.surface);
 }
 
-void qualityGateUsesBandWidthScale() {
+void perQuoteCapBoundaryAndWidthFloor() {
+  const auto previous_quotes = essvi::bench::syntheticChain(3, 100);
+  const auto previous = essvi::calibrate(previous_quotes);
+  assert(previous.converged);
+  const auto& slice = previous.surface.slices.front();
+  const auto quote_index = std::find_if(
+      previous_quotes.begin(), previous_quotes.end(), [&](const auto& quote) {
+        return quote.expiry == slice.expiry && quote.id == "0-0";
+      });
+  assert(quote_index != previous_quotes.end());
+  const double k = std::log(quote_index->strike / quote_index->forward);
+  const double fitted_variance = essvi::sliceTotalVariance(slice, k);
+
+  auto boundary_quotes = previous_quotes;
+  auto& boundary_quote = *std::find_if(
+      boundary_quotes.begin(), boundary_quotes.end(), [&](const auto& quote) {
+        return quote.expiry == slice.expiry && quote.id == "0-0";
+      });
+  constexpr double width = 1e-3;
+  constexpr double target_ratio = 0.1;
+  const double ask_variance = fitted_variance - target_ratio * width;
+  const double bid_variance = ask_variance - width;
+  boundary_quote.bid_iv = std::sqrt(bid_variance / boundary_quote.expiry);
+  boundary_quote.ask_iv = std::sqrt(ask_variance / boundary_quote.expiry);
+  const double actual_bid = boundary_quote.expiry * boundary_quote.bid_iv *
+                            boundary_quote.bid_iv;
+  const double actual_ask = boundary_quote.expiry * boundary_quote.ask_iv *
+                            boundary_quote.ask_iv;
+  const double actual_width = std::max(actual_ask - actual_bid, 1e-6);
+  const double excess = std::max(
+      0.0, std::max(actual_bid - fitted_variance,
+                    fitted_variance - actual_ask));
+
+  essvi::WarmOptions options;
+  options.quote_tol = 0.0;
+  options.quote_cap = excess / actual_width;
+  const auto at_boundary = essvi::calibrateWarm(
+      boundary_quotes, &previous, previous_quotes, options);
+  assert(at_boundary.converged);
+  assert(at_boundary.slices_reused == 3);
+  assert(at_boundary.slices_refit == 0);
+
+  auto zero_width_quotes = previous_quotes;
+  auto& zero_width_quote = *std::find_if(
+      zero_width_quotes.begin(), zero_width_quotes.end(), [&](const auto& quote) {
+        return quote.expiry == slice.expiry && quote.id == "0-0";
+      });
+  zero_width_quote.bid_iv =
+      std::sqrt((fitted_variance + 5e-8) / zero_width_quote.expiry);
+  zero_width_quote.ask_iv = zero_width_quote.bid_iv;
+  const double point_variance = zero_width_quote.expiry *
+                                zero_width_quote.bid_iv * zero_width_quote.bid_iv;
+  const double floor_ratio =
+      std::abs(point_variance - fitted_variance) / 1e-6;
+  options.quote_cap = floor_ratio;
+  const auto floor_boundary = essvi::calibrateWarm(
+      zero_width_quotes, &previous, previous_quotes, options);
+  assert(floor_boundary.converged);
+  assert(floor_boundary.slices_reused == 3);
+  assert(floor_boundary.slices_refit == 0);
+}
+
+void perQuoteGateChecksSingleOutlierAgainstColdReference() {
   const auto previous_quotes = essvi::bench::realisticChain(3, 100, 7);
   const auto previous = essvi::calibrate(previous_quotes);
   assert(previous.converged);
@@ -175,35 +244,41 @@ void qualityGateUsesBandWidthScale() {
   auto current_quotes = previous_quotes;
   const double changed_expiry = previous.surface.slices.front().expiry;
   for (auto& quote : current_quotes) {
-    if (quote.expiry != changed_expiry) continue;
+    if (quote.expiry != changed_expiry || quote.id != "0-0") continue;
     const double k = std::log(quote.strike / quote.forward);
-    const double shift = 1.05 * 0.003 * (1.0 + 2.0 * std::abs(k));
+    const double shift = 0.004 * (1.0 + 2.0 * std::abs(k));
     quote.bid_iv += shift;
     quote.ask_iv += shift;
-    quote.mid_iv += shift;
   }
 
   essvi::WarmOptions options;
-  options.quote_tol = 0.0;
-  options.cold_check_interval = 1;
-  options.update_number = 1;
+  assert(options.quote_cap == 0.1);
+  options.quote_tol = 0.01;
+  options.quote_cap = 0.1;
   const auto warm = essvi::calibrateWarm(
-      current_quotes, previous.surface, previous_quotes, options);
+      current_quotes, &previous, previous_quotes, options);
   const auto cold = essvi::calibrate(current_quotes);
   assert(warm.converged && cold.converged);
   assert(warm.quality_checks > 0);
-  assert(warm.quality_loss_scale > 0.0);
-  assert(warm.quality_warm_loss <= warm.quality_reference_loss +
-                                       options.loss_tol *
-                                           warm.quality_loss_scale);
-  assert(warm.fallback_slices == 0);
-  assert(warm.path == essvi::CalibrationPath::warm);
-  assert(warm.objective <= cold.objective +
-                              options.loss_tol * warm.quality_loss_scale);
+  assert(warm.slices_refit > 0);
+  assert(warm.slices_reused + warm.slices_refit == 3);
+  assert(warm.fallback_slices > 0);
+  assert(warm.path == essvi::CalibrationPath::fallback);
+  assert(warm.objective <= cold.objective * 1.05 + 1e-12);
+  essvi::WarmOptions different_legacy_tolerance = options;
+  different_legacy_tolerance.loss_tol = 1e6;
+  const auto same_gate = essvi::calibrateWarm(
+      current_quotes, &previous, previous_quotes, different_legacy_tolerance);
+  assert(same_gate.converged);
+  sameParameters(warm.surface, same_gate.surface);
+  assert(warm.quality_checks == same_gate.quality_checks);
+  assert(warm.slices_reused == same_gate.slices_reused);
+  assert(warm.slices_refit == same_gate.slices_refit);
+  assert(warm.fallback_slices == same_gate.fallback_slices);
   checkDenseGrid(warm.surface);
 }
 
-void qualityGateFallsBackToColdSearch() {
+void perQuoteGateFallsBackToColdSearch() {
   constexpr std::uint64_t seed = 2;
   const auto previous_quotes = essvi::bench::realisticChain(3, 100, seed);
   const auto previous = essvi::calibrate(previous_quotes);
@@ -212,7 +287,7 @@ void qualityGateFallsBackToColdSearch() {
   auto current = previous_quotes;
   essvi::bench::Noise noise(seed + 1);
   {
-      // Keep the pre-B7 synthetic fast move only as a legacy-gate stress fixture.
+      // Keep the pre-B7 synthetic fast move as a stress fixture.
       // Production scenarios use the measured sizes in realistic_warm.hpp.
       const double common_level = essvi::bench::signedAmplitude(0.01, noise);
       const double common_tilt = essvi::bench::signedAmplitude(0.002, noise);
@@ -239,25 +314,22 @@ void qualityGateFallsBackToColdSearch() {
     }
   essvi::WarmOptions options;
   options.quote_tol = 0.0;
-  options.loss_tol = 0.0; // Keep this fixture adversarial after fast moves were calibrated to observed p95.
-  options.cold_check_interval = 0;
-  options.update_number = 1;
+  options.loss_tol = 0.0;  // Deprecated; this fallback comes from the quote cap.
   const auto warm = essvi::calibrateWarm(
-      current, previous.surface, previous_quotes, options);
+      current, &previous, previous_quotes, options);
   const auto cold = essvi::calibrate(current);
   assert(warm.converged && cold.converged);
   assert(warm.path == essvi::CalibrationPath::fallback);
   assert(warm.fallback_slices > 0);
   assert(warm.quality_checks > 0);
   assert(warm.quality_loss_scale > 0.0);
-  assert(warm.quality_warm_loss >
-           warm.quality_reference_loss +
-               options.loss_tol * warm.quality_loss_scale);
+  assert(warm.quality_warm_loss > 0.0);
+  assert(std::isfinite(warm.quality_reference_loss));
   assert(warm.loss_tolerance == options.loss_tol);
   assert(warm.local_solver_slices >= 3);
 
   const auto repeated = essvi::calibrateWarm(
-      current, previous.surface, previous_quotes, options);
+      current, &previous, previous_quotes, options);
   assert(repeated.converged);
   sameParameters(warm.surface, repeated.surface);
   assert(warm.objective <= cold.objective * 1.05 + 1e-12);
@@ -276,11 +348,10 @@ void sequentialCalendarRepairRetriesRejectedCandidates() {
   essvi::WarmOptions options;
   options.quote_tol = 0.0;
   options.loss_tol = 0.0;
-  options.cold_check_interval = 0;
   const auto warm = essvi::calibrateWarm(
-      current_quotes, previous.surface, previous_quotes, options);
+      current_quotes, &previous, previous_quotes, options);
   const auto repeated = essvi::calibrateWarm(
-      current_quotes, previous.surface, previous_quotes, options);
+      current_quotes, &previous, previous_quotes, options);
   assert(warm.converged && repeated.converged);
   assert(warm.local_solver_slices > 4);
   assert(warm.slices_refit + warm.slices_reused == 4);
@@ -311,9 +382,9 @@ void failedJacobiPrefitFallsBackWithoutRetry() {
   essvi::WarmOptions options;
   options.quote_tol = 0.0;
   options.loss_tol = 0.0;
-  options.cold_check_interval = 0;
+  options.quote_cap = 1.0;  // Keep the unrelated unchanged slice reusable.
   const auto warm = essvi::calibrateWarm(
-      current_quotes, previous.surface, previous_quotes, options);
+      current_quotes, &previous, previous_quotes, options);
   assert(!warm.converged);
   assert(warm.error == "no ATM quote");
   assert(warm.local_solver_slices == 2);
@@ -346,9 +417,9 @@ void localWarmRefitHonorsBudgetAndQuality() {
 
   essvi::WarmOptions options;
   options.quote_tol = 0.0;
-  options.cold_check_interval = 0;
+  options.quote_cap = 0.5;
   const auto warm = essvi::calibrateWarm(
-      current_quotes, previous.surface, previous_quotes, options);
+      current_quotes, &previous, previous_quotes, options);
   const auto cold = essvi::calibrate(current_quotes);
   assert(warm.converged && cold.converged);
   assert(warm.slices_refit == 1);
@@ -364,8 +435,9 @@ void localWarmRefitHonorsBudgetAndQuality() {
 int main() {
   warmUpdatesReuseAndRefitSafely();
   changedQuotesReuseWhenPreviousSurfaceStillFits();
-  qualityGateUsesBandWidthScale();
-  qualityGateFallsBackToColdSearch();
+  perQuoteCapBoundaryAndWidthFloor();
+  perQuoteGateChecksSingleOutlierAgainstColdReference();
+  perQuoteGateFallsBackToColdSearch();
   sequentialCalendarRepairRetriesRejectedCandidates();
   failedJacobiPrefitFallsBackWithoutRetry();
   localWarmRefitHonorsBudgetAndQuality();

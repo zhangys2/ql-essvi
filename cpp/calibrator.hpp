@@ -18,6 +18,8 @@ struct CalibrationTimings {
 
 struct CalibrationResult {
   Surface surface;
+  // Consecutive unchanged-parameter reuses, aligned with surface.slices.
+  std::vector<std::size_t> reuse_ages;
   bool converged{};
   double objective{};
   int iterations{};
@@ -42,14 +44,13 @@ struct CalibrationResult {
 
 struct WarmOptions {
   double quote_tol{1e-5};
-  double loss_tol{0.05};  // Fraction of squared total-variance band width.
-  std::size_t cold_check_interval{10};
-  std::size_t update_number{1};  // 1-based sequence number for deterministic periodic checks.
+  double loss_tol{0.05};  // Deprecated; retained for source compatibility only.
+  double quote_cap{0.1};
 };
 
 CalibrationResult calibrate(const std::vector<Quote>& quotes);
 CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
-                                const Surface& previous_surface,
+                                const CalibrationResult* previous_result,
                                 const std::vector<Quote>& previous_quotes,
                                 const WarmOptions& options = {});
 std::vector<Quote> readQuotes(const std::string& path);

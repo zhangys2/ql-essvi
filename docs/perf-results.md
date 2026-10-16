@@ -285,3 +285,20 @@ The current pre-B2 gate misses Addendum B quality/latency targets in all four sc
 | front | 5 | 5.25 4.04 3.22 → 5.09 4.13 3.28 |
 
 All real-data IVs are European Black-Scholes calibration-path stand-ins. The source quote bands are not verified consolidated NBBO, and the replay makes no American-pricing accuracy claim. The generated outputs are `build/snapshot-replay/move_measurements.json`, `replay_manifest.tsv`, `daily_replay_results.json`, and `daily_replay_quality.csv`.
+
+
+## WP-B2 — Per-quote gate and reuse drift
+
+The warm gate now evaluates each included two-sided quote independently in total variance: `ratio = max(0, bid_var - fit_var, fit_var - ask_var) / max(ask_var - bid_var, 1e-6)`. A candidate passes the base gate only when every ratio is at most `WarmOptions::quote_cap` (default 0.1). A failed reuse falls through to local fitting; a local candidate that fails the base gate is followed by a cold search restricted to prior rho ±0.15 over the feasible psi interval. If that restricted result passes the base cap, it is used. Otherwise one same-snapshot full-cold reference is cached per slice, and the restricted candidate is retained only when every quote is within `max(quote_cap, cold_ratio + 0.01)`; otherwise the full-cold result is selected. Reuse also requires the per-quote cap and calendar check; `CalibrationResult::reuse_ages` tracks unchanged-parameter reuse and forces refit after 12 consecutive updates. `calibrateWarm` now takes the prior `CalibrationResult` (nullable) so the surface and reuse state travel together. `loss_tol` remains a deprecated compatibility/reporting value; it no longer gates reuse or acceptance. Scheduled `cold_check_interval` was removed. The benchmark accepts `--quote-cap`; its reported share-above-cap metric remains fixed at 0.1 for the approved target.
+
+Small sensitivity smoke: quiet scenario, seed 7, 15 updates, 3 expiries × 100 quotes. These measurements exercise the option, not the 40 × 100 / 200-update acceptance scenario.
+
+| Gate cap | Fallback updates | Warm median (ms) | Warm/cold summed band-loss ratio | Warm share above 0.1 | Cold share above 0.1 | Load average before → after (1/5/15 min) |
+|---:|---:|---:|---:|---:|---:|---|
+| 0.05 | 15 / 15 | 5.371 | 0.9396 | 21.00% | 21.44% | 1.18 1.50 1.59 → 1.18 1.50 1.59 |
+| 0.1 | 15 / 15 | 5.857 | 0.9549 | 22.36% | 21.44% | 1.25 1.51 1.59 → 1.25 1.51 1.59 |
+| 0.2 | 15 / 15 | 5.771 | 1.0712 | 22.91% | 21.44% | 1.15 1.48 1.58 → 1.15 1.48 1.58 |
+
+All three runs had zero warm/cold failures, invalid surfaces, and dense-grid violations. Each had 15/15 fallback-path updates, so this short quiet smoke confirms that WP-B2’s stricter gate and restricted/full-cold stages work but does not meet the fallback target; WP-B3/WP-B4 are expected to reduce that rate. The warm/cold share metric is always computed at 0.1, independently of the selected gate cap. These 3-slice timings are not comparable to the 40 × 100 acceptance targets.
+
+The former `qualityGateFallsBackToColdSearch` assertion pinned `loss_tol * bandLossScale`; it was replaced with a per-quote candidate/reference assertion because that behavior is explicitly retired. The unchanged-slice fixture for `localWarmRefitHonorsBudgetAndQuality` uses cap 0.5 to isolate its local-refit budget assertion from unrelated slices rejected by the stricter 0.1 gate. The failed-prefit fixture uses cap 1.0 so its unaffected slice does not add an unrelated local fit. The 100-update reuse test now asserts the 12-update reuse ceiling and refit transition.

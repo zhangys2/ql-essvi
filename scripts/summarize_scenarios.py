@@ -114,20 +114,20 @@ def main() -> int:
             f"{metric_range(loss_ratio)} | {metric_range(iv_delta)}"
         )
 
-    print("Old loss-scale gate observations (median [min, max] by scenario):")
+    print("Per-quote gate reference diagnostics (median [min, max] by scenario):")
     print(
-        "scenario | gate checks | checked warm loss | cold reference loss | "
-        "band-loss scale | loss tolerance"
+        "scenario | gate checks | candidate band loss | cold reference band loss | "
+        "legacy band-loss scale diagnostic | loss_tol compatibility value"
     )
     for scenario in SCENARIOS:
         runs = [reports[(scenario, seed)] for seed in SEEDS]
         print(
             f"{scenario} | "
-            f"{metric_range([run['old_gate_quality_checks'] for run in runs])} | "
-            f"{metric_range([run['old_gate_quality_warm_loss'] for run in runs])} | "
-            f"{metric_range([run['old_gate_quality_reference_loss'] for run in runs])} | "
-            f"{metric_range([run['old_gate_quality_loss_scale'] for run in runs])} | "
-            f"{metric_range([run['old_gate_loss_tolerance'] for run in runs])}"
+            f"{metric_range([run['per_quote_gate_checks'] for run in runs])} | "
+            f"{metric_range([run['gate_candidate_band_loss'] for run in runs])} | "
+            f"{metric_range([run['gate_cold_reference_band_loss'] for run in runs])} | "
+            f"{metric_range([run['legacy_band_loss_scale_diagnostic'] for run in runs])} | "
+            f"{metric_range([run['loss_tol_compatibility_value'] for run in runs])}"
         )
 
     print("Load averages by scenario and seed (1/5/15-minute, before -> after):")

@@ -266,7 +266,7 @@ std::vector<PreparedQuote> prepareQuotes(const std::vector<const Quote*>& quotes
 }
 
 double bandLossScale(const std::vector<PreparedQuote>& quotes) {
-  // A variance-width floor keeps zero-width bands from disabling the gate.
+  // Keep zero-width bands represented in the legacy scale diagnostic.
   double scale = 0.0;
   for (const auto& quote : quotes) {
     if (!quote.has_band) continue;
@@ -285,6 +285,40 @@ double bandLoss(const Slice& s, const std::vector<PreparedQuote>& quotes) {
     z += d * d;
   }
   return z;
+}
+
+double quoteExcessRatio(const Slice& slice, const PreparedQuote& quote) {
+  const double variance = sliceTotalVariance(slice, quote.k);
+  const double excess = std::max(
+      0.0, std::max(quote.bid_variance - variance,
+                    variance - quote.ask_variance));
+  const double width =
+      std::max(quote.ask_variance - quote.bid_variance, 1e-6);
+  return excess / width;
+}
+
+bool passesQuoteCap(const Slice& slice,
+                    const std::vector<PreparedQuote>& quotes, double cap) {
+  for (const auto& quote : quotes) {
+    if (!quote.has_band) continue;
+    const double ratio = quoteExcessRatio(slice, quote);
+    if (!std::isfinite(ratio) || ratio > cap) return false;
+  }
+  return true;
+}
+
+bool passesAdaptiveQuoteCap(const Slice& candidate, const Slice& cold,
+                            const std::vector<PreparedQuote>& quotes,
+                            double cap) {
+  for (const auto& quote : quotes) {
+    if (!quote.has_band) continue;
+    const double candidate_ratio = quoteExcessRatio(candidate, quote);
+    const double cold_ratio = quoteExcessRatio(cold, quote);
+    if (!std::isfinite(candidate_ratio) || !std::isfinite(cold_ratio) ||
+        candidate_ratio > std::max(cap, cold_ratio + 0.01))
+      return false;
+  }
+  return true;
 }
 
 class BoundMemo {
@@ -407,7 +441,8 @@ struct RhoCandidate {
 
 CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
                            const Slice* prev, RhoWorkerPool& rho_workers,
-                           const Slice* warm_start = nullptr) {
+                           const Slice* warm_start = nullptr,
+                           const Slice* restricted_center = nullptr) {
   CalibrationResult out;
   const auto atm = nearestAtm(qs, t);
   if (!std::isfinite(atm.theta_star) || atm.theta_star <= 0) {
@@ -709,6 +744,17 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
       best = current;
       bestz = current_loss;
     }
+  } else if (restricted_center) {
+    // Keep the cold fallback near the prior slice; psi still spans its feasible interval.
+    const double rho_lower =
+        std::max(-0.95, restricted_center->rho - 0.15);
+    const double rho_upper =
+        std::min(0.95, restricted_center->rho + 0.15);
+    searchRhoWindow(rho_lower, rho_upper, 0.05, 22);
+    if (bestz < INFINITY) {
+      searchRhoWindow(std::max(rho_lower, best.rho - 0.06),
+                      std::min(rho_upper, best.rho + 0.06), 0.01, 18);
+    }
   } else {
     searchRhoWindow(-0.95, 0.95, 0.05, 22);
     if (bestz < INFINITY) {
@@ -785,6 +831,7 @@ CalibrationResult calibrate(const std::vector<Quote>& quotes) {
     finishResult(out, started, bound_calls);
     return out;
   }
+  out.reuse_ages.reserve(groups.expiries.size());
 
   // Avoid thread startup for one-expiry requests; multi-slice chains reuse this pool.
   RhoWorkerPool rho_workers(groups.expiries.size() > 1);
@@ -803,6 +850,7 @@ CalibrationResult calibrate(const std::vector<Quote>& quotes) {
       return out;
     }
     out.surface.slices.push_back(part.surface.slices.front());
+    out.reuse_ages.push_back(0);
     ++out.slices_refit;
   }
   out.timings.slice_fitting_seconds = secondsSince(fitting_started);
@@ -815,7 +863,7 @@ CalibrationResult calibrate(const std::vector<Quote>& quotes) {
 }
 
 CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
-                                const Surface& previous_surface,
+                                const CalibrationResult* previous_result,
                                 const std::vector<Quote>& previous_quotes,
                                 const WarmOptions& options) {
   CalibrationResult out;
@@ -826,21 +874,28 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
   detail::MmBoundCallScope bound_call_scope(&bound_calls);
   const auto finish = [&] { finishResult(out, started, bound_calls); };
   if (!std::isfinite(options.quote_tol) || options.quote_tol < 0.0 ||
-      !std::isfinite(options.loss_tol) || options.loss_tol < 0.0) {
+      !std::isfinite(options.quote_cap) || options.quote_cap < 0.0) {
     out.error = "invalid warm calibration options";
     finish();
     return out;
   }
 
+  const bool has_previous = previous_result && previous_result->converged &&
+                            !previous_result->surface.slices.empty();
+  const Surface empty_previous;
+  const Surface& previous_surface =
+      has_previous ? previous_result->surface : empty_previous;
   const auto grouping_started = Clock::now();
   const auto current_groups = groupQuotes(current_quotes);
-  const auto previous_groups = groupQuotes(previous_quotes);
+  QuoteGroups previous_groups;
+  if (has_previous) previous_groups = groupQuotes(previous_quotes);
   out.timings.quote_grouping_seconds = secondsSince(grouping_started);
   if (current_groups.expiries.empty()) {
     out.error = "no included quotes";
     finish();
     return out;
   }
+  out.reuse_ages.reserve(current_groups.expiries.size());
 
   RhoWorkerPool rho_workers(current_groups.expiries.size() > 1);
   bool used_warm_path = false;
@@ -860,8 +915,20 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
         bool local_attempted{};
         CalibrationResult local;
         std::uint64_t local_bound_calls{};
+        CalibrationResult full_cold_reference;
+        bool full_cold_reference_attempted{};
       };
       std::vector<WarmCandidate> candidates(current_groups.expiries.size());
+      const auto previousReuseAge = [&](double expiry) {
+        if (!has_previous) return std::size_t{0};
+        for (std::size_t i = 0; i < previous_surface.slices.size(); ++i) {
+          if (previous_surface.slices[i].expiry != expiry) continue;
+          return i < previous_result->reuse_ages.size()
+                     ? previous_result->reuse_ages[i]
+                     : std::size_t{0};
+        }
+        return std::size_t{0};
+      };
       const auto previousSliceBefore = [&](double expiry) -> const Slice* {
         const Slice* previous = nullptr;
         for (const auto& slice : previous_surface.slices) {
@@ -870,6 +937,18 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
             previous = &slice;
         }
         return previous;
+      };
+      // One full-cold fit per slice and current snapshot serves all gate decisions.
+      const auto fullColdReference = [&](WarmCandidate& plan, double expiry,
+                                         const Slice* previous)
+          -> const CalibrationResult& {
+        if (!plan.full_cold_reference_attempted) {
+          plan.full_cold_reference_attempted = true;
+          plan.full_cold_reference =
+              fitSlice(plan.prepared, expiry, previous, rho_workers);
+          out.iterations += plan.full_cold_reference.iterations;
+        }
+        return plan.full_cold_reference;
       };
   
       for (std::size_t i = 0; i < current_groups.expiries.size(); ++i) {
@@ -886,7 +965,8 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
             old_quote_group &&
             quoteGroupReusable(current_groups.slices[i], *old_quote_group,
                                options.quote_tol);
-        if (quotes_unchanged) {
+        const std::size_t reuse_age = previousReuseAge(expiry);
+        if (quotes_unchanged && reuse_age < 12) {
           BoundMemo safe_bound(false);
           const auto calendar = calendarBounds(plan.old_previous, expiry,
                                                plan.warm_start->rho);
@@ -894,7 +974,8 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
           reused.expiry = expiry;
           if (pairSafe(reused, safe_bound, calendar)) {
             const double loss = bandLoss(reused, plan.prepared);
-            if (std::isfinite(loss)) {
+            if (std::isfinite(loss) &&
+                passesQuoteCap(reused, plan.prepared, options.quote_cap)) {
               plan.candidate = reused;
               plan.candidate_loss = loss;
               plan.have_candidate = true;
@@ -904,22 +985,19 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
           }
         }
   
-        if (!plan.have_candidate) {
+        if (!plan.have_candidate && reuse_age < 12) {
           BoundMemo safe_bound(false);
           Slice prior = *plan.warm_start;
           prior.expiry = expiry;
           const auto calendar = calendarBounds(plan.old_previous, expiry,
                                                prior.rho);
-          if (pairSafe(prior, safe_bound, calendar)) {
-            const double prior_loss = bandLoss(prior, plan.prepared);
-            if (std::isfinite(prior_loss) &&
-                prior_loss <= options.loss_tol * plan.loss_scale) {
-              plan.candidate = prior;
-              plan.candidate_loss = prior_loss;
-              plan.have_candidate = true;
-              plan.candidate_reused = true;
-              plan.candidate_from_warm = true;
-            }
+          if (pairSafe(prior, safe_bound, calendar) &&
+              passesQuoteCap(prior, plan.prepared, options.quote_cap)) {
+            plan.candidate = prior;
+            plan.candidate_loss = bandLoss(prior, plan.prepared);
+            plan.have_candidate = std::isfinite(plan.candidate_loss);
+            plan.candidate_reused = plan.have_candidate;
+            plan.candidate_from_warm = plan.have_candidate;
           }
         }
       }
@@ -1013,16 +1091,83 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
           }
         }
   
-        if (!have_candidate) {
-          const auto cold = fitSlice(plan.prepared, expiry, previous_slice,
-                                     rho_workers);
-          out.iterations += cold.iterations;
+        const bool candidate_fails_cap =
+            candidate_from_warm && have_candidate &&
+            !passesQuoteCap(candidate, plan.prepared, options.quote_cap);
+        const bool needs_restricted = warm_start &&
+                                     (!have_candidate || candidate_fails_cap);
+        if (needs_restricted) {
+          const auto restricted = fitSlice(plan.prepared, expiry, previous_slice,
+                                           rho_workers, nullptr, warm_start);
+          out.iterations += restricted.iterations;
+          if (restricted.converged) {
+            const Slice restricted_slice = restricted.surface.slices.front();
+            if (passesQuoteCap(restricted_slice, plan.prepared,
+                               options.quote_cap)) {
+              candidate = restricted_slice;
+              candidate_loss = restricted.objective;
+              have_candidate = true;
+              candidate_reused = false;
+              candidate_from_warm = false;
+              used_fallback = true;
+              ++out.fallback_slices;
+            } else {
+              ++out.quality_checks;
+              out.quality_warm_loss += bandLoss(restricted_slice, plan.prepared);
+              out.quality_loss_scale += plan.loss_scale;
+              const auto& cold =
+                  fullColdReference(plan, expiry, previous_slice);
+              if (!cold.converged) {
+                out.timings.slice_fitting_seconds =
+                    secondsSince(fitting_started);
+                out.error = "cold quality reference failed at t=" +
+                            std::to_string(expiry);
+                out.path = used_fallback ? CalibrationPath::fallback
+                                         : CalibrationPath::warm;
+                finish();
+                return out;
+              }
+              const Slice& cold_slice = cold.surface.slices.front();
+              out.quality_reference_loss +=
+                  bandLoss(cold_slice, plan.prepared);
+              if (passesAdaptiveQuoteCap(restricted_slice, cold_slice,
+                                         plan.prepared, options.quote_cap)) {
+                candidate = restricted_slice;
+                candidate_loss = restricted.objective;
+              } else {
+                candidate = cold_slice;
+                candidate_loss = cold.objective;
+              }
+              have_candidate = true;
+              candidate_reused = false;
+              candidate_from_warm = false;
+              used_fallback = true;
+              ++out.fallback_slices;
+            }
+          } else {
+            const auto& cold =
+                fullColdReference(plan, expiry, previous_slice);
+            if (!cold.converged) {
+              out.timings.slice_fitting_seconds = secondsSince(fitting_started);
+              out.error = cold.error.empty() ? "slice fit failed" : cold.error;
+              out.path = CalibrationPath::fallback;
+              finish();
+              return out;
+            }
+            candidate = cold.surface.slices.front();
+            candidate_loss = cold.objective;
+            have_candidate = true;
+            candidate_reused = false;
+            candidate_from_warm = false;
+            used_fallback = true;
+            ++out.fallback_slices;
+          }
+        } else if (!have_candidate) {
+          const auto& cold = fullColdReference(plan, expiry, previous_slice);
           if (!cold.converged) {
             out.timings.slice_fitting_seconds = secondsSince(fitting_started);
             out.error = cold.error.empty() ? "slice fit failed" : cold.error;
-            used_fallback = warm_start != nullptr;
-            out.path = used_fallback ? CalibrationPath::fallback
-                                     : CalibrationPath::cold;
+            out.path = CalibrationPath::cold;
             finish();
             return out;
           }
@@ -1030,50 +1175,7 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
           candidate_loss = cold.objective;
           have_candidate = true;
           candidate_reused = false;
-          if (warm_start) {
-            used_fallback = true;
-            ++out.fallback_slices;
-          }
           candidate_from_warm = false;
-        }
-  
-        const bool periodic_update =
-            options.cold_check_interval > 0 && options.update_number > 0 &&
-            options.update_number % options.cold_check_interval == 0;
-        const std::size_t periodic_slice =
-            periodic_update
-                ? (options.update_number / options.cold_check_interval - 1) %
-                      current_groups.expiries.size()
-                : current_groups.expiries.size();
-        const bool periodic_check = candidate_from_warm && periodic_update &&
-                                    i == periodic_slice;
-        const bool exceeds_scaled_loss =
-            candidate_loss > options.loss_tol * plan.loss_scale;
-        if (candidate_from_warm && (periodic_check || exceeds_scaled_loss)) {
-          ++out.quality_checks;
-          out.quality_warm_loss += candidate_loss;
-          out.quality_loss_scale += plan.loss_scale;
-          const auto cold = fitSlice(plan.prepared, expiry, previous_slice,
-                                     rho_workers);
-          out.iterations += cold.iterations;
-          if (!cold.converged) {
-            out.timings.slice_fitting_seconds = secondsSince(fitting_started);
-            out.error = "cold quality check failed at t=" +
-                        std::to_string(expiry);
-            out.path = used_fallback ? CalibrationPath::fallback
-                                     : CalibrationPath::warm;
-            finish();
-            return out;
-          }
-          out.quality_reference_loss += cold.objective;
-          const double allowed_loss = options.loss_tol * plan.loss_scale;
-          if (candidate_loss > cold.objective + allowed_loss) {
-            candidate = cold.surface.slices.front();
-            candidate_loss = cold.objective;
-            candidate_reused = false;
-            used_fallback = true;
-            ++out.fallback_slices;
-          }
         }
   
         if (!have_candidate || !std::isfinite(candidate_loss)) {
@@ -1087,6 +1189,9 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
         }
   
         out.surface.slices.push_back(candidate);
+        out.reuse_ages.push_back(candidate_reused
+                                     ? previousReuseAge(expiry) + 1
+                                     : 0);
         out.objective += candidate_loss;
         if (candidate_reused)
           ++out.slices_reused;
@@ -1101,7 +1206,10 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
   out.error = validate(out.surface);
   out.timings.validation_seconds = secondsSince(validation_started);
   out.converged = out.error.empty();
-  if (!out.converged) out.surface.slices.clear();
+  if (!out.converged) {
+    out.surface.slices.clear();
+    out.reuse_ages.clear();
+  }
   out.path = used_fallback ? CalibrationPath::fallback
                            : (used_warm_path ? CalibrationPath::warm
                                              : CalibrationPath::cold);

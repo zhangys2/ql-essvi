@@ -30,7 +30,7 @@ struct Options {
   std::size_t repeats{9};
   std::size_t warm_updates{100};
   std::size_t scenario_updates{200};
-  std::size_t warm_cold_check_interval{10};
+  double quote_cap{0.1};
   std::uint64_t seed{0x8f3f73b5cf1c9ad1ULL};
   std::string input;
   std::string parameters_out;
@@ -67,6 +67,7 @@ struct Summary {
   double quality_reference_loss{};
   double quality_loss_scale{};
   double loss_tolerance{};
+  double quote_cap{0.1};
   std::string load_average_before;
   std::string load_average_after;
 };
@@ -76,7 +77,6 @@ struct LegacyOptions {
   std::size_t quotes_per_expiry{};
   std::size_t repeats{};
   std::size_t warm_updates{};
-  std::size_t warm_cold_check_interval{};
   std::string input;
   std::string parameters_out;
   std::string timings_out;
@@ -96,6 +96,14 @@ std::uint64_t parseSeed(const std::string& value) {
   if (consumed != value.size())
     throw std::invalid_argument("not an integer seed: " + value);
   return static_cast<std::uint64_t>(parsed);
+}
+
+double parseDouble(const std::string& value) {
+  std::size_t consumed = 0;
+  const double parsed = std::stod(value, &consumed);
+  if (consumed != value.size() || !std::isfinite(parsed))
+    throw std::invalid_argument("not a finite number: " + value);
+  return parsed;
 }
 
 double percentile(const std::vector<double>& values, double p) {
@@ -271,7 +279,8 @@ void printSummary(const Summary& summary) {
             << "load_average_before=" << summary.load_average_before << '\n'
             << "load_average_after=" << summary.load_average_after << '\n'
             << "samples=" << summary.samples << '\n'
-            << "snapshots=" << summary.snapshots << '\n';
+            << "snapshots=" << summary.snapshots << '\n'
+            << "warm_gate_quote_cap=" << summary.quote_cap << '\n';
   printTimes("warm", summary.warm_seconds);
   printTimes("cold", summary.cold_seconds);
   std::cout << "mean_slices_refit="
@@ -335,14 +344,14 @@ void printSummary(const Summary& summary) {
                           static_cast<double>(summary.local_solver_slices)
                     : 0.0)
             << '\n'
-            << "old_gate_quality_checks=" << summary.quality.checks << '\n'
-            << "old_gate_quality_warm_loss=" << summary.quality_warm_loss
+            << "per_quote_gate_checks=" << summary.quality.checks << '\n'
+            << "gate_candidate_band_loss=" << summary.quality_warm_loss
             << '\n'
-            << "old_gate_quality_reference_loss="
+            << "gate_cold_reference_band_loss="
             << summary.quality_reference_loss << '\n'
-            << "old_gate_quality_loss_scale=" << summary.quality_loss_scale
+            << "legacy_band_loss_scale_diagnostic=" << summary.quality_loss_scale
             << '\n'
-            << "old_gate_loss_tolerance=" << summary.loss_tolerance << '\n';
+            << "loss_tol_compatibility_value=" << summary.loss_tolerance << '\n';
   if (has_paired_quotes) {
     const auto loss_ratio = essvi::bench::checkRatioAtMost(
         "summed_band_loss_ratio", warm_quality.summed_band_loss,
@@ -388,7 +397,8 @@ void writeJsonSummary(std::ostream& output, const Summary& summary) {
          << "\"load_average_after\":\"" << summary.load_average_after
          << "\","
          << "\"samples\":" << summary.samples << ','
-         << "\"snapshots\":" << summary.snapshots << ',';
+         << "\"snapshots\":" << summary.snapshots << ','
+         << "\"warm_gate_quote_cap\":" << summary.quote_cap << ',';
   writeJsonTimes(output, "warm_seconds", summary.warm_seconds);
   output << ',';
   {
@@ -488,14 +498,14 @@ void writeJsonSummary(std::ostream& output, const Summary& summary) {
                  ? static_cast<double>(summary.local_mm_bound_calls) /
                        static_cast<double>(summary.local_solver_slices)
                  : 0.0)
-         << ",\"old_gate_quality_checks\":" << summary.quality.checks
-         << ",\"old_gate_quality_warm_loss\":"
+         << ",\"per_quote_gate_checks\":" << summary.quality.checks
+         << ",\"gate_candidate_band_loss\":"
          << summary.quality_warm_loss
-         << ",\"old_gate_quality_reference_loss\":"
+         << ",\"gate_cold_reference_band_loss\":"
          << summary.quality_reference_loss
-         << ",\"old_gate_quality_loss_scale\":"
+         << ",\"legacy_band_loss_scale_diagnostic\":"
          << summary.quality_loss_scale
-         << ",\"old_gate_loss_tolerance\":" << summary.loss_tolerance << '}';
+         << ",\"loss_tol_compatibility_value\":" << summary.loss_tolerance << '}';
 }
 
 void writeJsonSummaries(const std::string& path,
@@ -532,6 +542,7 @@ std::vector<std::filesystem::path> replayFiles(
 void runScenario(const Options& options, essvi::bench::WarmScenario scenario,
                  Summary& summary) {
   summary.name = essvi::bench::warmScenarioName(scenario);
+  summary.quote_cap = options.quote_cap;
   summary.load_average_before = loadAverage();
   auto previous_quotes = essvi::bench::realisticChain(
       options.expiries, options.quotes_per_expiry, options.seed);
@@ -539,20 +550,19 @@ void runScenario(const Options& options, essvi::bench::WarmScenario scenario,
   if (!initial.converged)
     throw std::runtime_error("initial scenario fit failed: " + initial.error);
 
-  auto previous_surface = initial.surface;
+  auto previous_result = initial;
   essvi::bench::Noise noise(options.seed + 1);
   essvi::WarmOptions warm_options;
-  warm_options.cold_check_interval = options.warm_cold_check_interval;
+  warm_options.quote_cap = options.quote_cap;
   for (std::size_t update = 1; update <= options.scenario_updates; ++update) {
     auto current_quotes = previous_quotes;
     essvi::bench::evolveWarmScenario(
         current_quotes, options.expiries, options.quotes_per_expiry,
         scenario, update, noise);
-    warm_options.update_number = update;
 
     const auto warm_start = Clock::now();
     const auto warm = essvi::calibrateWarm(
-        current_quotes, previous_surface, previous_quotes, warm_options);
+        current_quotes, &previous_result, previous_quotes, warm_options);
     const double warm_seconds =
         std::chrono::duration<double>(Clock::now() - warm_start).count();
 
@@ -563,9 +573,11 @@ void runScenario(const Options& options, essvi::bench::WarmScenario scenario,
     record(summary, warm, cold, current_quotes, warm_seconds, cold_seconds);
 
     if (warm.converged)
-      previous_surface = warm.surface;
+      previous_result = warm;
     else if (cold.converged)
-      previous_surface = cold.surface;
+      previous_result = cold;
+    else
+      previous_result = {};
     previous_quotes = std::move(current_quotes);
   }
   summary.load_average_after = loadAverage();
@@ -573,6 +585,7 @@ void runScenario(const Options& options, essvi::bench::WarmScenario scenario,
 
 void runReplay(const Options& options, Summary& summary) {
   summary.name = "replay (Black-Scholes European stand-in for American IVs)";
+  summary.quote_cap = options.quote_cap;
   summary.load_average_before = loadAverage();
   auto files = replayFiles(options.replay_dir);
   if (options.replay_limit && files.size() > options.replay_limit)
@@ -586,19 +599,18 @@ void runReplay(const Options& options, Summary& summary) {
   const auto initial = essvi::calibrate(previous_quotes);
   if (!initial.converged)
     throw std::runtime_error("initial replay fit failed: " + initial.error);
-  auto previous_surface = initial.surface;
+  auto previous_result = initial;
 
   essvi::WarmOptions warm_options;
-  warm_options.cold_check_interval = options.warm_cold_check_interval;
+  warm_options.quote_cap = options.quote_cap;
   for (std::size_t file_index = 1; file_index < files.size(); ++file_index) {
     auto current_quotes = essvi::readQuotes(files[file_index].string());
     if (current_quotes.empty())
       throw std::runtime_error("no quotes in " + files[file_index].string());
-    warm_options.update_number = file_index;
 
     const auto warm_start = Clock::now();
     const auto warm = essvi::calibrateWarm(
-        current_quotes, previous_surface, previous_quotes, warm_options);
+        current_quotes, &previous_result, previous_quotes, warm_options);
     const double warm_seconds =
         std::chrono::duration<double>(Clock::now() - warm_start).count();
 
@@ -609,9 +621,11 @@ void runReplay(const Options& options, Summary& summary) {
     record(summary, warm, cold, current_quotes, warm_seconds, cold_seconds);
 
     if (warm.converged)
-      previous_surface = warm.surface;
+      previous_result = warm;
     else if (cold.converged)
-      previous_surface = cold.surface;
+      previous_result = cold;
+    else
+      previous_result = {};
     previous_quotes = std::move(current_quotes);
   }
   summary.load_average_after = loadAverage();
@@ -664,8 +678,7 @@ void writeLegacyTimings(const std::string& path, const Options& options,
          << "  },\n"
          << "  \"warm\": {\n"
          << "    \"updates\": " << warm_seconds.size() << ",\n"
-         << "    \"cold_check_interval\": "
-         << options.warm_cold_check_interval << ",\n"
+         << "    \"quote_cap\": " << options.quote_cap << ",\n"
          << "    \"median_seconds\": " << percentile(warm_seconds, 0.50)
          << ",\n"
          << "    \"p90_seconds\": " << percentile(warm_seconds, 0.90)
@@ -737,11 +750,11 @@ void runLegacy(const Options& options) {
   std::vector<double> warm_seconds;
   warm_seconds.reserve(options.warm_updates);
   essvi::WarmOptions warm_options;
+  warm_options.quote_cap = options.quote_cap;
   warm_options.quote_tol = 1e-6;
   warm_options.loss_tol = 1e-6;
-  warm_options.cold_check_interval = options.warm_cold_check_interval;
   auto previous_quotes = quotes;
-  auto previous_surface = cold.surface;
+  auto previous_result = cold;
   essvi::CalibrationResult warm = cold;
   for (std::size_t i = 0; i < options.warm_updates; ++i) {
     auto current_quotes = previous_quotes;
@@ -749,15 +762,14 @@ void runLegacy(const Options& options) {
       if (quote.included && std::isfinite(quote.bid_iv)) quote.bid_iv += 1e-7;
       if (quote.included && std::isfinite(quote.ask_iv)) quote.ask_iv += 1e-7;
     }
-    warm_options.update_number = i + 1;
     const auto start = Clock::now();
-    warm = essvi::calibrateWarm(current_quotes, previous_surface,
+    warm = essvi::calibrateWarm(current_quotes, &previous_result,
                                 previous_quotes, warm_options);
     warm_seconds.push_back(
         std::chrono::duration<double>(Clock::now() - start).count());
     if (!warm.converged)
       throw std::runtime_error("warm calibration failed: " + warm.error);
-    previous_surface = warm.surface;
+    previous_result = warm;
     previous_quotes = std::move(current_quotes);
   }
   std::sort(warm_seconds.begin(), warm_seconds.end());
@@ -791,8 +803,7 @@ void runLegacy(const Options& options) {
             << "warm_p90_seconds=" << percentile(warm_seconds, 0.90) << '\n'
             << "warm_p99_seconds=" << percentile(warm_seconds, 0.99) << '\n'
             << "warm_max_seconds=" << maximum(warm_seconds) << '\n'
-            << "warm_cold_check_interval="
-            << options.warm_cold_check_interval << '\n'
+            << "warm_gate_quote_cap=" << options.quote_cap << '\n'
             << "warm_path=" << pathName(warm.path) << '\n'
             << "warm_slices_refit=" << warm.slices_refit << '\n'
             << "warm_slices_reused=" << warm.slices_reused << '\n'
@@ -920,7 +931,7 @@ Options parseOptions(int argc, char** argv) {
       std::cout
           << "usage: essvi_bench [--expiries N] [--quotes-per-expiry N] "
              "[--repeats N] [--warm-updates N] [--scenario-updates N] "
-             "[--warm-cold-check-interval N] [--input normalized_quotes.csv] "
+             "[--quote-cap RATIO] [--input normalized_quotes.csv] "
              "[--parameters-out path] [--timings-out path] "
              "[--scenario quiet|normal|fast|front|all] [--seed N] "
              "[--replay-dir directory] [--replay-limit N] [--check]\n";
@@ -941,8 +952,8 @@ Options parseOptions(int argc, char** argv) {
       options.warm_updates = parseSize(value);
     else if (argument == "--scenario-updates")
       options.scenario_updates = parseSize(value);
-    else if (argument == "--warm-cold-check-interval")
-      options.warm_cold_check_interval = parseSize(value);
+    else if (argument == "--quote-cap")
+      options.quote_cap = parseDouble(value);
     else if (argument == "--input") options.input = value;
     else if (argument == "--parameters-out") options.parameters_out = value;
     else if (argument == "--timings-out") options.timings_out = value;
@@ -958,6 +969,8 @@ Options parseOptions(int argc, char** argv) {
   if (!options.expiries || !options.quotes_per_expiry || !options.repeats ||
       !options.scenario_updates)
     throw std::invalid_argument("expiries, quote count, repeats, and scenario updates must be positive");
+  if (options.quote_cap < 0.0)
+    throw std::invalid_argument("quote cap must be non-negative");
   if (!options.scenario.empty() && options.scenario != "quiet" &&
       options.scenario != "normal" && options.scenario != "fast" &&
       options.scenario != "front" && options.scenario != "all")
