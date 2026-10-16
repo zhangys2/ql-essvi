@@ -10,6 +10,8 @@ void assertSameQuoteMetrics(const essvi::bench::QuoteExcessMetrics& actual,
                             const essvi::bench::QuoteExcessMetrics& expected) {
   assert(actual.quote_count == expected.quote_count);
   assert(actual.above_cap_count == expected.above_cap_count);
+  for (std::size_t i = 0; i < essvi::bench::kQualityCapCount; ++i)
+    assert(actual.above_cap_counts[i] == expected.above_cap_counts[i]);
   assert(actual.maximum_ratio == expected.maximum_ratio);
   assert(actual.squared_ratio_sum == expected.squared_ratio_sum);
   assert(actual.summed_band_loss == expected.summed_band_loss);
@@ -22,16 +24,22 @@ void assertSameQuoteMetrics(const essvi::bench::QuoteExcessMetrics& actual,
 void measuresPerQuoteVarianceAndVolPointExcess() {
   const std::vector<essvi::Quote> quotes{
       {"q", 1.0, 100.0, 1.0, 100.0, 0.2, 0.3, 0.25, true}};
-  const essvi::Surface fit{{essvi::Slice{1.0, 0.1, 0.05, 0.0}}};
+  const essvi::Surface fit{{essvi::Slice{1.0, 0.0975, 0.05, 0.0}}};
   const auto metrics =
       essvi::bench::measureExcessMetrics(quotes, fit, 0.1);
 
   assert(metrics.quote_count == 1);
   assert(metrics.above_cap_count == 1);
-  assert(std::abs(metrics.maximum_ratio - 0.2) < 1e-12);
-  assert(std::abs(metrics.rms_ratio() - 0.2) < 1e-12);
-  assert(std::abs(metrics.summed_band_loss - 0.0001) < 1e-12);
-  const double expected_excess_points = (std::sqrt(0.1) - 0.3) * 100.0;
+  assert(metrics.above_cap_counts[0] == 1);
+  assert(metrics.above_cap_counts[1] == 1);
+  assert(metrics.above_cap_counts[2] == 0);
+  assert(std::abs(metrics.share_above_cap(0) - 1.0) < 1e-12);
+  assert(std::abs(metrics.share_above_cap(1) - 1.0) < 1e-12);
+  assert(metrics.share_above_cap(2) == 0.0);
+  assert(std::abs(metrics.maximum_ratio - 0.15) < 1e-12);
+  assert(std::abs(metrics.rms_ratio() - 0.15) < 1e-12);
+  assert(std::abs(metrics.summed_band_loss - 0.00005625) < 1e-12);
+  const double expected_excess_points = (std::sqrt(0.0975) - 0.3) * 100.0;
   assert(std::abs(metrics.rms_excess_vol_points() - expected_excess_points) <
          1e-12);
 }
@@ -70,13 +78,44 @@ void mergesOnlyCompletePerUpdateQuotePopulations() {
   essvi::bench::BenchmarkQuality empty_quality;
   empty_quality.checks = 19;
   empty_quality.paired_updates = 23;
-  empty_quality.warm = {7, 2, 0.7, 1.4, 2.1, 3.2, 4.3};
-  empty_quality.cold = {8, 3, 0.8, 1.5, 2.2, 3.3, 4.4};
+  empty_quality.warm.quote_count = 7;
+  empty_quality.warm.above_cap_count = 2;
+  empty_quality.warm.above_cap_counts[0] = 3;
+  empty_quality.warm.above_cap_counts[1] = 2;
+  empty_quality.warm.maximum_ratio = 0.7;
+  empty_quality.warm.squared_ratio_sum = 1.4;
+  empty_quality.warm.summed_band_loss = 2.1;
+  empty_quality.warm.squared_excess_vol_points_sum = 3.2;
+  empty_quality.warm.maximum_excess_vol_points = 4.3;
+  empty_quality.cold.quote_count = 8;
+  empty_quality.cold.above_cap_count = 3;
+  empty_quality.cold.above_cap_counts[0] = 4;
+  empty_quality.cold.above_cap_counts[1] = 3;
+  empty_quality.cold.maximum_ratio = 0.8;
+  empty_quality.cold.squared_ratio_sum = 1.5;
+  empty_quality.cold.summed_band_loss = 2.2;
+  empty_quality.cold.squared_excess_vol_points_sum = 3.3;
+  empty_quality.cold.maximum_excess_vol_points = 4.4;
   const auto original_quality = empty_quality;
-  const essvi::bench::QuoteExcessMetrics zero_expected_warm{
-      1, 1, 0.9, 1.6, 2.3, 3.4, 4.5};
-  const essvi::bench::QuoteExcessMetrics zero_expected_cold{
-      2, 1, 1.0, 1.7, 2.4, 3.5, 4.6};
+
+  essvi::bench::QuoteExcessMetrics zero_expected_warm;
+  zero_expected_warm.quote_count = 1;
+  zero_expected_warm.above_cap_count = 1;
+  zero_expected_warm.above_cap_counts[0] = 1;
+  zero_expected_warm.maximum_ratio = 0.9;
+  zero_expected_warm.squared_ratio_sum = 1.6;
+  zero_expected_warm.summed_band_loss = 2.3;
+  zero_expected_warm.squared_excess_vol_points_sum = 3.4;
+  zero_expected_warm.maximum_excess_vol_points = 4.5;
+  essvi::bench::QuoteExcessMetrics zero_expected_cold;
+  zero_expected_cold.quote_count = 2;
+  zero_expected_cold.above_cap_count = 1;
+  zero_expected_cold.above_cap_counts[1] = 1;
+  zero_expected_cold.maximum_ratio = 1.0;
+  zero_expected_cold.squared_ratio_sum = 1.7;
+  zero_expected_cold.summed_band_loss = 2.4;
+  zero_expected_cold.squared_excess_vol_points_sum = 3.5;
+  zero_expected_cold.maximum_excess_vol_points = 4.6;
 
   assert(!essvi::bench::mergePairedQuoteMetrics(
       empty_quality, zero_expected_warm, zero_expected_cold, 0));
@@ -91,8 +130,10 @@ void mergesOnlyCompletePerUpdateQuotePopulations() {
 
   warm.quote_count = 2;
   warm.summed_band_loss = 0.2;
+  warm.above_cap_counts[0] = 1;
   cold.quote_count = 2;
   cold.summed_band_loss = 0.1;
+  cold.above_cap_counts[1] = 1;
 
   assert(!essvi::bench::mergePairedQuoteMetrics(quality, warm, cold, 3));
   assert(quality.paired_updates == 0);
@@ -112,6 +153,8 @@ void mergesOnlyCompletePerUpdateQuotePopulations() {
   assert(quality.cold.quote_count == 3);
   assert(std::abs(quality.warm.summed_band_loss - 0.2) < 1e-12);
   assert(std::abs(quality.cold.summed_band_loss - 0.1) < 1e-12);
+  assert(quality.warm.above_cap_counts[0] == 1);
+  assert(quality.cold.above_cap_counts[1] == 1);
 
   warm.quote_count = 2;
   assert(!essvi::bench::mergePairedQuoteMetrics(quality, warm, cold, 3));

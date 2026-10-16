@@ -1,4 +1,5 @@
 import json
+import math
 import subprocess
 from pathlib import Path
 
@@ -18,10 +19,8 @@ def run_benchmark(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_check_cli_reports_positive_loss_over_zero_as_hard_breach(
-    tmp_path: Path,
-) -> None:
-    report_path = tmp_path / "fast-zero-reference.json"
+def test_check_cli_serializes_loss_ratio_and_status(tmp_path: Path) -> None:
+    report_path = tmp_path / "fast-quality.json"
     result = run_benchmark(
         "--scenario",
         "fast",
@@ -34,15 +33,24 @@ def test_check_cli_reports_positive_loss_over_zero_as_hard_breach(
         "--check",
     )
 
-    assert result.returncode == 2, result.stdout + result.stderr
+    assert result.returncode in (0, 2), result.stdout + result.stderr
     assert "quality_check_table=fast" in result.stdout
     loss_row = next(
         line
         for line in result.stdout.split("quality_check_table=fast\n", 1)[1].splitlines()
         if line.startswith("summed band loss warm / cold |")
     )
-    assert "| inf |" in loss_row
-    assert loss_row.endswith("MISS | BREACH")
-
     report = json.loads(report_path.read_text(encoding="utf-8"))
-    assert report["runs"][0]["summed_band_loss_ratio"] is None
+    ratio = report["runs"][0]["summed_band_loss_ratio"]
+    printed_ratio = loss_row.split("|")[1].strip()
+
+    if ratio is None:
+        assert printed_ratio == "inf"
+        assert loss_row.endswith("MISS | BREACH")
+        return
+
+    assert math.isfinite(ratio)
+    assert math.isclose(float(printed_ratio), ratio, rel_tol=1e-15)
+    expected_target = "PASS" if ratio <= 1.05 else "MISS"
+    expected_hard_limit = "PASS" if ratio <= 1.2 else "BREACH"
+    assert loss_row.endswith(f"{expected_target} | {expected_hard_limit}")

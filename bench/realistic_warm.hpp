@@ -68,46 +68,40 @@ inline double signedAmplitude(double amplitude, Noise& noise) {
   return noise.centered() < 0.0 ? -amplitude : amplitude;
 }
 
+struct ScenarioAmplitudes {
+  double level;
+  double tilt;
+  double quote_noise;
+};
+
+// Equal-asset/equal-session-day quantiles from the available five-minute
+// IBIT/SPY snapshot pairs. See docs/perf-results.md, WP-B7 measurement method.
+inline constexpr ScenarioAmplitudes kQuietScenario{
+    5.786996128484235e-05, 7.318689397061038e-04, 4.435662553908102e-05};
+inline constexpr ScenarioAmplitudes kNormalScenario{
+    4.859012545148474e-04, 1.3646117877557956e-02, 8.638141035393551e-04};
+inline constexpr ScenarioAmplitudes kFastScenario{
+    2.928019908412336e-03, 1.7074039452014506e-01, 5.561586448558091e-03};
+inline constexpr double kFrontBackMoveRatio = 2.8052973951424724;
+
 inline void evolveWarmScenario(std::vector<Quote>& quotes,
                                std::size_t expiry_count,
                                std::size_t quotes_per_expiry,
                                WarmScenario scenario,
                                std::size_t update_number,
                                Noise& noise) {
-  double level_amplitude = 0.0;
-  double tilt_amplitude = 0.0;
-  double idiosyncratic_amplitude = 0.0;
-  double quote_noise_amplitude = 0.0;
+  ScenarioAmplitudes amplitudes{};
   switch (scenario) {
-    case WarmScenario::quiet:
-      tilt_amplitude = 0.00005;
-      idiosyncratic_amplitude = 0.00002;
-      quote_noise_amplitude = 0.00001;
-      break;
-    case WarmScenario::normal:
-      level_amplitude = 0.002;
-      tilt_amplitude = 0.0005;
-      idiosyncratic_amplitude = 0.0002;
-      quote_noise_amplitude = 0.00005;
-      break;
-    case WarmScenario::fast:
-      level_amplitude = 0.01;
-      tilt_amplitude = 0.002;
-      idiosyncratic_amplitude = 0.0002;
-      quote_noise_amplitude = 0.0001;
-      break;
-    case WarmScenario::front:
-      tilt_amplitude = 0.0002;
-      idiosyncratic_amplitude = 0.00005;
-      quote_noise_amplitude = 0.00003;
-      break;
+    case WarmScenario::quiet: amplitudes = kQuietScenario; break;
+    case WarmScenario::normal: amplitudes = kNormalScenario; break;
+    case WarmScenario::fast: amplitudes = kFastScenario; break;
+    case WarmScenario::front: amplitudes = kNormalScenario; break;
   }
 
-  const double common_level = signedAmplitude(level_amplitude, noise);
-  const double common_tilt = signedAmplitude(tilt_amplitude, noise);
-  const double quiet_level = signedAmplitude(0.0005, noise);
-  const double front_level = signedAmplitude(0.004, noise);
-  const double back_level = front_level > 0.0 ? 0.0005 : -0.0005;
+  const double common_level = signedAmplitude(amplitudes.level, noise);
+  const double common_tilt = signedAmplitude(amplitudes.tilt, noise);
+  const double back_level = signedAmplitude(kNormalScenario.level, noise);
+  const double front_level = back_level * kFrontBackMoveRatio;
   const std::size_t active_quiet_group = expiry_count == 0
                                              ? 0
                                              : (update_number - 1) % 10;
@@ -116,20 +110,18 @@ inline void evolveWarmScenario(std::vector<Quote>& quotes,
     double expiry_level = common_level;
     if (scenario == WarmScenario::quiet) {
       const bool active = expiry_index % 10 == active_quiet_group;
-      expiry_level = active ? quiet_level : 0.0;
+      expiry_level = active ? common_level : 0.0;
     } else if (scenario == WarmScenario::front) {
       expiry_level = expiry_index < expiry_count / 4 ? front_level : back_level;
     }
-    const double idiosyncratic =
-        noise.centered() * idiosyncratic_amplitude;
     const std::size_t begin = expiry_index * quotes_per_expiry;
     const std::size_t end = std::min(begin + quotes_per_expiry, quotes.size());
     for (std::size_t i = begin; i < end; ++i) {
       auto& quote = quotes[i];
       const double k = std::log(quote.strike / quote.forward);
       const double tilt = common_tilt * std::clamp(2.0 * k, -1.0, 1.0);
-      const double change = expiry_level + idiosyncratic + tilt +
-                            noise.centered() * quote_noise_amplitude;
+      const double change = expiry_level + tilt +
+                            noise.centered() * amplitudes.quote_noise;
       quote.bid_iv = std::max(0.001, quote.bid_iv + change);
       quote.ask_iv = std::max(quote.bid_iv, quote.ask_iv + change);
       quote.mid_iv = std::max(0.001, quote.mid_iv + change);

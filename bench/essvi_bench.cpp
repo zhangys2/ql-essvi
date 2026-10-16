@@ -391,7 +391,21 @@ void writeJsonSummary(std::ostream& output, const Summary& summary) {
          << "\"snapshots\":" << summary.snapshots << ',';
   writeJsonTimes(output, "warm_seconds", summary.warm_seconds);
   output << ',';
-  writeJsonTimes(output, "cold_seconds", summary.cold_seconds);
+  {
+    writeJsonTimes(output, "cold_seconds", summary.cold_seconds);
+    const auto writeSamples = [&](const char* name, const std::vector<double>& values) {
+      output << char(34) << name << char(34) << ":[";
+      for (std::size_t i = 0; i < values.size(); ++i) {
+        if (i) output << ',';
+        output << values[i];
+      }
+      output << ']';
+    };
+    output << ',';
+    writeSamples("warm_seconds_samples", summary.warm_seconds);
+    output << ',';
+    writeSamples("cold_seconds_samples", summary.cold_seconds);
+  }
   output << ",\"mean_slices_refit\":"
          << (samples ? summary.slices_refit / samples : 0.0)
          << ",\"mean_slices_reused\":"
@@ -416,7 +430,24 @@ void writeJsonSummary(std::ostream& output, const Summary& summary) {
          << ",\"paired_updates\":" << summary.quality.paired_updates << ',';
   writeJsonQuoteMetrics(output, "warm_quality", summary.quality.warm);
   output << ',';
-  writeJsonQuoteMetrics(output, "cold_quality", summary.quality.cold);
+  {
+    writeJsonQuoteMetrics(output, "cold_quality", summary.quality.cold);
+    output << ",\"cap_sensitivity\":[";
+    for (std::size_t i = 0; i < essvi::bench::kQualityCapCount; ++i) {
+      if (i) output << ',';
+      output << "{\"cap\":" << essvi::bench::kQualityCaps[i]
+             << ",\"paired_updates\":" << summary.quality.paired_updates
+             << ",\"warm_above_cap_count\":"
+             << summary.quality.warm.above_cap_counts[i]
+             << ",\"cold_above_cap_count\":"
+             << summary.quality.cold.above_cap_counts[i]
+             << ",\"warm_share_above_cap\":"
+             << summary.quality.warm.share_above_cap(i)
+             << ",\"cold_share_above_cap\":"
+             << summary.quality.cold.share_above_cap(i) << '}';
+    }
+    output << ']';
+  }
   output << ",\"share_above_cap_delta_pp\":";
   if (has_paired_quotes) {
     output << (summary.quality.warm.share_above_cap() -
@@ -546,8 +577,7 @@ void runReplay(const Options& options, Summary& summary) {
   auto files = replayFiles(options.replay_dir);
   if (options.replay_limit && files.size() > options.replay_limit)
     files.resize(options.replay_limit);
-  if (files.size() < 2)
-    throw std::runtime_error("replay needs at least two normalized snapshots");
+  if (files.empty()) throw std::runtime_error("replay needs at least one normalized snapshot");
   summary.snapshots = files.size();
 
   auto previous_quotes = essvi::readQuotes(files.front().string());

@@ -12,9 +12,14 @@
 
 namespace essvi::bench {
 
+inline constexpr double kQualityCaps[]{0.05, 0.1, 0.2};
+inline constexpr std::size_t kQualityCapCount =
+    sizeof(kQualityCaps) / sizeof(kQualityCaps[0]);
+
 struct QuoteExcessMetrics {
   std::size_t quote_count{};
   std::size_t above_cap_count{};
+  std::size_t above_cap_counts[kQualityCapCount]{};
   double maximum_ratio{};
   double squared_ratio_sum{};
   double summed_band_loss{};
@@ -25,6 +30,13 @@ struct QuoteExcessMetrics {
     return quote_count ? static_cast<double>(above_cap_count) /
                              static_cast<double>(quote_count)
                        : 0.0;
+  }
+
+  double share_above_cap(std::size_t cap_index) const {
+    return quote_count && cap_index < kQualityCapCount
+               ? static_cast<double>(above_cap_counts[cap_index]) /
+                     static_cast<double>(quote_count)
+               : 0.0;
   }
 
   double rms_ratio() const {
@@ -43,6 +55,8 @@ struct QuoteExcessMetrics {
   void merge(const QuoteExcessMetrics& other) {
     quote_count += other.quote_count;
     above_cap_count += other.above_cap_count;
+    for (std::size_t i = 0; i < kQualityCapCount; ++i)
+      above_cap_counts[i] += other.above_cap_counts[i];
     maximum_ratio = std::max(maximum_ratio, other.maximum_ratio);
     squared_ratio_sum += other.squared_ratio_sum;
     summed_band_loss += other.summed_band_loss;
@@ -173,6 +187,8 @@ inline QuoteExcessMetrics measureExcessMetrics(
 
     ++metrics.quote_count;
     metrics.above_cap_count += ratio > cap;
+    for (std::size_t i = 0; i < kQualityCapCount; ++i)
+      metrics.above_cap_counts[i] += ratio > kQualityCaps[i];
     metrics.maximum_ratio = std::max(metrics.maximum_ratio, ratio);
     metrics.squared_ratio_sum += ratio * ratio;
     metrics.summed_band_loss += excess * excess;

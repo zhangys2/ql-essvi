@@ -158,3 +158,130 @@ Load averages are 1/5/15-minute values, before → after each run. The sequence 
 | front | 3 | 4.92 3.61 2.21 → 5.41 3.81 2.31 |
 | front | 4 | 5.41 3.81 2.31 → 4.94 3.79 2.32 |
 | front | 5 | 4.94 3.79 2.32 → 4.75 3.80 2.35 |
+
+## WP-B7 — Replay-calibrated scenarios and full-session replay
+
+### Move estimator and data coverage
+
+The replay command was `python/run_snapshot_replay.py --data-root /home/zhangy/vol-rv/data --output-dir build/snapshot-replay --bench build/essvi_bench`. It read IBIT `ibit/chain_*.jsonl.gz` and SPY `zdte/spy_*.jsonl.gz`. Quotes were converted to European Black-Scholes mid implied volatility, matched across consecutive five-minute snapshots by expiry and contract identity, then fitted per expiry with a Theil-Sen regression of IV change against mean log-moneyness. The intercept is the common level move; half the slope is the tilt move for the benchmark's `clamp(2*k)` shape; residual variation estimates per-quote noise. Quantiles below are absolute moves.
+
+Pooled quantiles give equal weight to each asset and session day; observations within an asset-day share that day's weight equally. This prevents IBIT's denser chain from dominating SPY. The final capture contained 620 snapshots (619 usable, one unusable), covering 10 usable asset-days (five IBIT and five SPY). It produced 6,199 level/tilt observations and 164,009 residual observations. Same-session expiries use a fixed one-day date-based year fraction so expiry identity is stable across intraday snapshots. The current 2026-10-16 files were partial when captured.
+
+| Asset | Measure | Observations | p10 | p50 | p95 |
+|---|---|---:|---:|---:|---:|
+| IBIT | Level | 5,882 | 0.000046521 | 0.000467756 | 0.003376293 |
+| IBIT | Tilt | 5,882 | 0.000379699 | 0.003578760 | 0.054064609 |
+| IBIT | Residual noise | 155,064 | 0.000040666 | 0.001008464 | 0.007305616 |
+| SPY | Level | 317 | 0.000065178 | 0.000523359 | 0.002172665 |
+| SPY | Tilt | 317 | 0.005496195 | 0.065444918 | 0.233002777 |
+| SPY | Residual noise | 8,945 | 0.000048059 | 0.000749564 | 0.003841574 |
+
+| Pooled measure | Observations | p10 | p50 | p95 |
+|---|---:|---:|---:|---:|
+| Level | 6,199 | 0.000057870 | 0.000485901 | 0.002928020 |
+| Tilt | 6,199 | 0.000731869 | 0.013646118 | 0.170740395 |
+| Residual noise | 164,009 | 0.000044357 | 0.000863814 | 0.005561586 |
+
+Quiet uses p10, normal p50, fast p95. The measured front/back level ratio is 2.805297395; the front scenario uses the normal median for back expiries and scales front expiries by this ratio. No unmeasured per-expiry idiosyncratic amplitude is added.
+
+| Scenario | Level move | Tilt move | Residual quote noise | Front level / back level |
+|---|---:|---:|---:|---:|
+| quiet | 0.000057870 | 0.000731869 | 0.000044357 | — |
+| normal | 0.000485901 | 0.013646118 | 0.000863814 | — |
+| fast | 0.002928020 | 0.170740395 | 0.005561586 | — |
+| front | 0.001363098 | 0.013646118 | 0.000863814 | 2.805297395 |
+
+### Full-session replay coverage
+
+Replay retained each source timestamp and excluded locked/crossed quotes only in this benchmark adapter; the general preparation/CVI path is unchanged. Per-snapshot exclusion counts are in `build/snapshot-replay/replay_manifest.tsv`. Across the capture: 16 locked, 0 crossed, and 228,055 other quote exclusions. The unusable IBIT 2026-10-10 snapshot had no valid quotes. There were 601 consecutive warm pairs across the 10 usable asset-days, 18 cold starts (10 session starts plus 8 gap restarts), 8 gap events, and 16 missing five-minute intervals. Skipped/unusable snapshots and timestamp gaps break the chain and force a cold start.
+
+| Asset | Session | Snapshots | Usable / skipped | Warm pairs | Cold starts | Gap events | Missing intervals | Locked | Crossed | Other exclusions |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| IBIT | 2026-10-10 | 1 | 0 / 1 | 0 | 0 | 0 | 0 | 0 | 0 | 50 |
+| IBIT | 2026-10-12 | 60 | 60 / 0 | 51 | 9 | 8 | 16 | 2 | 0 | 41,653 |
+| IBIT | 2026-10-13 | 76 | 76 / 0 | 75 | 1 | 0 | 0 | 2 | 0 | 51,377 |
+| IBIT | 2026-10-14 | 76 | 76 / 0 | 75 | 1 | 0 | 0 | 1 | 0 | 52,978 |
+| IBIT | 2026-10-15 | 76 | 76 / 0 | 75 | 1 | 0 | 0 | 0 | 0 | 54,903 |
+| IBIT | 2026-10-16 | 9 | 9 / 0 | 8 | 1 | 0 | 0 | 0 | 0 | 6,420 |
+| SPY | 2026-10-12 | 76 | 76 / 0 | 75 | 1 | 0 | 0 | 1 | 0 | 5,316 |
+| SPY | 2026-10-13 | 78 | 78 / 0 | 77 | 1 | 0 | 0 | 1 | 0 | 5,561 |
+| SPY | 2026-10-14 | 78 | 78 / 0 | 77 | 1 | 0 | 0 | 7 | 0 | 4,758 |
+| SPY | 2026-10-15 | 78 | 78 / 0 | 77 | 1 | 0 | 0 | 1 | 0 | 4,325 |
+| SPY | 2026-10-16 | 12 | 12 / 0 | 11 | 1 | 0 | 0 | 1 | 0 | 714 |
+
+### Per-day quality and cap sensitivity
+
+These are pre-WP-B2 warm-path measurements. `Max W/C` is maximum excess ratio (warm/cold); `RMS W` is warm RMS excess ratio; loss is summed warm band loss divided by cold; RMS IV delta is warm minus cold in vol points. Each cap cell shows warm/cold share above cap as percent, then warm-minus-cold percentage points. The unusable IBIT 2026-10-10 row has no quality metrics because no fit was possible.
+
+| Asset | Session | Warm p99 (ms) | Fallback updates (%) | Max W/C | RMS W | Loss W/C | RMS IV delta (vol pt) |
+|---|---|---:|---:|---:|---:|---:|---:|
+| IBIT | 2026-10-12 | 56.879 | 98.04 | 37.792 / 28.536 | 4.725 | 1.367 | 0.719 |
+| IBIT | 2026-10-13 | 216.066 | 92.00 | 68.765 / 64.134 | 2.693 | 0.554 | -0.300 |
+| IBIT | 2026-10-14 | 87.138 | 90.67 | 32.453 / 19.308 | 2.532 | 0.511 | -0.036 |
+| IBIT | 2026-10-15 | 86.135 | 84.00 | 22.887 / 20.038 | 2.557 | 0.643 | -0.341 |
+| IBIT | 2026-10-16 | 58.853 | 87.50 | 22.729 / 11.043 | 2.147 | 0.509 | 0.096 |
+| SPY | 2026-10-12 | 7.523 | 20.00 | 8.557 / 8.148 | 2.050 | 1.018 | 0.029 |
+| SPY | 2026-10-13 | 10.880 | 22.08 | 10.164 / 9.634 | 2.067 | 1.001 | 0.030 |
+| SPY | 2026-10-14 | 5.487 | 3.90 | 7.928 / 6.106 | 1.890 | 0.764 | 0.059 |
+| SPY | 2026-10-15 | 3.867 | 6.49 | 11.382 / 11.093 | 3.342 | 0.903 | 0.059 |
+| SPY | 2026-10-16 | 6.681 | 0.00 | 6.745 / 5.826 | 2.119 | 0.793 | 0.070 |
+
+| Asset | Session | Cap 0.05: warm/cold %, Δpp | Cap 0.1: warm/cold %, Δpp | Cap 0.2: warm/cold %, Δpp |
+|---|---|---:|---:|---:|
+| IBIT | 2026-10-12 | 77.64 / 73.38, +4.26 | 75.27 / 71.05, +4.23 | 70.78 / 66.70, +4.09 |
+| IBIT | 2026-10-13 | 76.71 / 74.07, +2.64 | 74.45 / 72.01, +2.44 | 70.07 / 67.30, +2.77 |
+| IBIT | 2026-10-14 | 77.27 / 74.52, +2.75 | 75.26 / 72.09, +3.17 | 70.81 / 67.75, +3.05 |
+| IBIT | 2026-10-15 | 78.95 / 76.49, +2.46 | 76.71 / 74.40, +2.31 | 72.25 / 70.43, +1.82 |
+| IBIT | 2026-10-16 | 78.52 / 73.66, +4.86 | 76.02 / 71.41, +4.61 | 71.25 / 67.14, +4.11 |
+| SPY | 2026-10-12 | 79.63 / 80.03, -0.40 | 76.90 / 76.61, +0.29 | 72.22 / 71.71, +0.51 |
+| SPY | 2026-10-13 | 78.77 / 80.13, -1.36 | 77.47 / 77.05, +0.41 | 71.97 / 71.56, +0.41 |
+| SPY | 2026-10-14 | 74.44 / 76.10, -1.66 | 71.50 / 73.49, -1.99 | 67.32 / 69.14, -1.82 |
+| SPY | 2026-10-15 | 79.89 / 80.98, -1.09 | 78.02 / 78.48, -0.46 | 74.63 / 74.17, +0.46 |
+| SPY | 2026-10-16 | 77.07 / 74.31, +2.76 | 75.14 / 70.99, +4.14 | 69.34 / 68.23, +1.10 |
+
+Every replay session reported zero warm/cold failures, zero invalid surfaces, and zero dense-grid butterfly/calendar violations. The large IBIT fallback rates and quality differences are measured results from the old gate, not acceptance passes.
+
+### Five-seed scenario verification
+
+The recalibrated synthetic scenarios were checked with `scripts/verify_scenarios.sh`: quiet, normal, fast, and front; seeds 1–5; 200 updates per run; 40 expiries × 100 quotes. All 20 runs completed and emitted their target/hard-limit tables and load averages. All 20 `--check` invocations returned 2 for target misses; the script returned 1 after summarizing, with no execution failure. The results below are median [minimum, maximum]. Quiet p50 median was below the 49fed2b 0.47 ms baseline, but its range includes regressions; quiet p99 median exceeded the 7.6 ms baseline. Quiet's summed-loss ratio is unavailable because cold reference loss was zero in some seeds. Fast seed 5 had 73 unpaired/unscored updates and 67 warm failures.
+
+| Scenario | Warm p50 (ms) | Warm p99 (ms) | Fallback updates (%) | Cap-share delta (pp) |
+|---|---:|---:|---:|---:|
+| quiet | 0.414886 [0.392560, 0.580925] | 20.6996 [2.79764, 39.8506] | 1.5 [0, 5] | 2.60587 [0.297, 4.36013] |
+| normal | 77.2783 [60.3902, 81.8564] | 143.287 [85.1124, 282.596] | 100 [100, 100] | 1.21513 [-0.563125, 2.64525] |
+| fast | 38.528 [30.5705, 51.5613] | 89.6673 [66.3265, 242.096] | 99.5 [98.5, 100] | 0.0301802 [-0.000225225, 0.105224] |
+| front | 74.9967 [66.174, 77.1202] | 291.366 [110.198, 402.263] | 100 [100, 100] | 1.1475 [-0.646, 2.66612] |
+
+| Scenario | Maximum ratio warm / cold | RMS ratio warm / cold | Summed band-loss ratio | RMS excess-IV delta (vol pt) |
+|---|---:|---:|---:|---:|
+| quiet | 0.616787 [0.319872, 0.680804] / 0.0121983 [0, 0.0325625] | 0.0338438 [0.0123335, 0.0460532] / 1.79078e-05 [0, 4.48450e-05] | unavailable (zero cold reference) | 0.0358302 [0.0134186, 0.0500544] |
+| normal | 84.6709 [5.00511, 25,374.1] / 83.4915 [4.24346, 24,478.9] | 2.24823 [0.423733, 1,602.34] / 2.34549 [0.421754, 1,601.57] | 1.14520 [0.902552, 1.22732] | 0.0368503 [-0.0659836, 0.0977803] |
+| fast | 6.20630e6 [3.92477e6, 8.77257e6] / 6.20630e6 [3.91312e6, 8.77257e6] | 389,897 [227,658, 526,315] / 392,176 [224,946, 526,448] | 1.00137 [0.999922, 1.00435] | 0.332433 [0.150394, 0.480907] |
+| front | 394.507 [4.19593, 25,671.2] / 420.478 [4.19519, 25,239.1] | 2.35910 [0.432090, 1,549.75] / 2.45847 [0.430492, 1,568.86] | 1.14804 [0.901853, 1.24268] | 0.0359792 [-0.0655997, 0.0927253] |
+
+The current pre-B2 gate misses Addendum B quality/latency targets in all four scenario families. Quiet median latency remains near baseline, but p99 non-regression does not hold; normal and front have 100% fallback updates; fast has extreme per-quote ratios and unpaired/failure cases despite its low median cap-share delta. These are baseline issues for WP-B2/B3/B4, not hidden passes.
+
+| Scenario | Seed | Load average before → after (1/5/15 min) |
+|---|---:|---|
+| quiet | 1 | 1.83 2.80 2.56 → 2.10 2.81 2.57 |
+| quiet | 2 | 2.10 2.81 2.57 → 2.48 2.87 2.59 |
+| quiet | 3 | 2.48 2.87 2.59 → 2.68 2.89 2.60 |
+| quiet | 4 | 2.68 2.89 2.60 → 2.59 2.86 2.59 |
+| quiet | 5 | 2.59 2.86 2.59 → 2.89 2.92 2.62 |
+| normal | 1 | 2.89 2.92 2.62 → 3.44 3.07 2.68 |
+| normal | 2 | 3.44 3.07 2.68 → 4.43 3.33 2.78 |
+| normal | 3 | 4.43 3.33 2.78 → 4.58 3.49 2.86 |
+| normal | 4 | 4.58 3.49 2.86 → 4.61 3.61 2.92 |
+| normal | 5 | 4.61 3.61 2.92 → 4.20 3.59 2.93 |
+| fast | 1 | 4.20 3.59 2.93 → 3.91 3.57 2.94 |
+| fast | 2 | 3.91 3.57 2.94 → 3.57 3.51 2.93 |
+| fast | 3 | 3.57 3.51 2.93 → 3.46 3.49 2.93 |
+| fast | 4 | 3.46 3.49 2.93 → 3.85 3.58 2.97 |
+| fast | 5 | 3.85 3.58 2.97 → 3.50 3.51 2.97 |
+| front | 1 | 3.50 3.51 2.97 → 3.51 3.52 2.98 |
+| front | 2 | 3.51 3.52 2.98 → 3.98 3.63 3.04 |
+| front | 3 | 3.98 3.63 3.04 → 3.93 3.66 3.07 |
+| front | 4 | 3.93 3.66 3.07 → 5.25 4.04 3.22 |
+| front | 5 | 5.25 4.04 3.22 → 5.09 4.13 3.28 |
+
+All real-data IVs are European Black-Scholes calibration-path stand-ins. The source quote bands are not verified consolidated NBBO, and the replay makes no American-pricing accuracy claim. The generated outputs are `build/snapshot-replay/move_measurements.json`, `replay_manifest.tsv`, `daily_replay_results.json`, and `daily_replay_quality.csv`.
