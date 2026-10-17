@@ -20,8 +20,8 @@ from typing import Any, Callable
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 
-from convert_ibit_snapshots import HEADER, expiry_date, finite_number  # noqa: E402
-from replay_snapshots import prepare_snapshot  # noqa: E402
+from convert_ibit_snapshots import HEADER, expiry_date, finite_number
+from replay_snapshots import prepare_snapshot
 
 TRAINING_DATES = ("20261012", "20261013", "20261014")
 CAP = 0.1
@@ -176,21 +176,29 @@ def underlying_mid(value: dict[str, Any]) -> float | None:
     return last if last is not None and last > 0.0 else None
 
 
+def source_contract_index(
+    contracts: list[Any],
+) -> dict[str, tuple[int, dict[str, Any]]]:
+    indexed = {}
+    for index, contract in enumerate(contracts, start=1):
+        if not isinstance(contract, dict):
+            continue
+        identifier = str(
+            contract.get("conId") or contract.get("localSymbol") or index
+        )
+        if identifier in indexed:
+            raise ValueError(f"duplicate quote id {identifier}")
+        indexed[identifier] = (index, contract)
+    return indexed
+
+
 def fit_snapshot(
     snapshot: dict[str, Any], source_file: Path, fit_binary: Path, sequence: int
 ) -> tuple[Any, list[dict[str, Any]]]:
     prepared = prepare_snapshot(snapshot, "IBIT", str(source_file))
     if not prepared.valid_quotes:
         return prepared, []
-
-    source_contracts: dict[str, tuple[int, dict[str, Any]]] = {}
-    for index, contract in enumerate(snapshot["contracts"], start=1):
-        identifier = str(
-            contract.get("conId") or contract.get("localSymbol") or index
-        )
-        if identifier in source_contracts:
-            raise ValueError(f"{source_file}: duplicate quote id {identifier}")
-        source_contracts[identifier] = (index, contract)
+    source_contracts = source_contract_index(snapshot["contracts"])
 
     with tempfile.TemporaryDirectory(prefix="cal-c1-") as temp_name:
         temp = Path(temp_name)
@@ -233,6 +241,7 @@ def fit_snapshot(
     tick_values = [
         finite_number(contract.get("tick_time"))
         for contract in snapshot["contracts"]
+        if isinstance(contract, dict)
     ]
     observed_ticks = [value for value in tick_values if value is not None]
     min_tick = min(observed_ticks) if observed_ticks else None

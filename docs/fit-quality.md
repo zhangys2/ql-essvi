@@ -14,6 +14,8 @@ From the repository root, with the Release binary built:
 python3 scripts/analyze_fit_quality.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit
 ```
 
+The command prints JSON to stdout. This checked-in Markdown report is transcribed from that output and is not overwritten by the runner.
+
 The runner reads only `ibit/chain_20261012.jsonl.gz`, `chain_20261013.jsonl.gz`, and `chain_20261014.jsonl.gz`. For each usable snapshot it writes a temporary normalized CSV using `convert_ibit_snapshots.HEADER`, then invokes:
 
 ```text
