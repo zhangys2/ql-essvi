@@ -2,10 +2,10 @@
 
 ## State
 
-- Current: `reviewing`
-- Last transition: `implemented` → `reviewing`
-- At: `2026-10-17T20:20:12Z`
-- Reason/evidence: The accepted round-two P3 coverage gap is closed in commit `e7c71220a9a6c10fb36343d1f8d71a3fc485dd7e`. The focused C++ regression and configured full suite pass; the corrected full base-to-HEAD range is entering round-three review.
+- Current: `review-approved`
+- Last transition: `reviewing` → `review-approved`
+- At: `2026-10-17T20:32:59Z`
+- Reason/evidence: Final round-three spec, standards, and verification review approved the frozen range `fdf70b8b80ce6c9b617141293bda99a560be3e07..9ac1c7f612d4786180ff04be6b083d45353755c0`. The configured Release build, CTest 5/5, and pytest 33/33 passed; the full snapshot SHA-256 is recorded below.
 - Blocker: None.
 
 ## State history
@@ -26,6 +26,7 @@
 | `changes-requested` | `implementing` | `2026-10-17T20:18:50Z` | Added a `2junk` included-weight CSV fixture and rejection assertion; the focused C++ calibrator regression passed 1/1. Full verification remained pending. |
 | `implementing` | `implemented` | `2026-10-17T20:19:49Z` | Regression committed as `e7c71220a9a6c10fb36343d1f8d71a3fc485dd7e`; configured Release build, CTest 5/5, and pytest 33/33 passed. |
 | `implemented` | `reviewing` | `2026-10-17T20:20:12Z` | Final round-two correction evidence is recorded; the corrected base-to-HEAD range is entering the third and final review round. |
+| `reviewing` | `review-approved` | `2026-10-17T20:32:59Z` | Round-three spec and standards axes found no issues; verification ran the configured full suite successfully. Frozen range and SHA-256 are recorded below. |
 
 ## Claim
 
@@ -41,7 +42,7 @@
 
 - Review base: `fdf70b8b80ce6c9b617141293bda99a560be3e07` (the exact C9 implementation base after WP-C5).
 - Original fixed C9 deliverable: `1dac3aa1ca3239397f4b5eeee8ceab6cb1ab0cd5`, including the expiry-parity correction `43b3fca89339d2385415bb0845fe1716a6833a4e` and the blocked-state record for the original ticket.
-- Round 1 reviewed the full base-to-HEAD diff ending at `f9b777c02e91bc43cd213f06c3c24b19f26373b9`. Round 2 reviewed the corrected range ending at `ade0d6e43f029879524243b53ea0dd84751e03ce`. The next review keeps the same base and adds only the accepted parser-boundary test and ticket evidence.
+- Round 1 reviewed the full base-to-HEAD diff ending at `f9b777c02e91bc43cd213f06c3c24b19f26373b9`; round 2 ended at `ade0d6e43f029879524243b53ea0dd84751e03ce`; round 3 ended at `9ac1c7f612d4786180ff04be6b083d45353755c0`. All rounds use the same base and frozen full-range snapshots.
 
 ## What to accept
 
@@ -101,6 +102,7 @@ The user-facing result is `docs/fit-quality.md`. Review the shared expiry and we
 | 2026-10-17T18:50:05Z | Review round 2 | Frozen base-to-HEAD snapshot `fdf70b8b80ce6c9b617141293bda99a560be3e07..ade0d6e43f029879524243b53ea0dd84751e03ce`; SHA-256 `36dc45bbf4e9b8a87e9c7933a8bbbca26b41599786fc66d40e5caf659c64a631` | `/home/zhangy/git/ql-essvi` | `ade0d6e43f029879524243b53ea0dd84751e03ce` | changes requested | Spec and standards axes approved. Configured verification passed (CTest 5/5, pytest 33/33) and identified one P3 untested partial-numeric-weight rejection branch; accepted for correction. |
 | 2026-10-17T20:18:50Z | Focused C++ CSV regression | `export PATH="$PWD/.venv/bin:$PATH"; cmake --build build --target essvi_calibrator_regression_tests -j2 && ctest --test-dir build -R essvi_calibrator_regression_tests --output-on-failure` | `/home/zhangy/git/ql-essvi` | working tree | passed | `essvi_calibrator_regression_tests` rebuilt; CTest 1/1 passed, including rejection of an included weight `2junk`. |
 | 2026-10-17T20:19:49Z | Final round-two correction verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `e7c71220a9a6c10fb36343d1f8d71a3fc485dd7e` | passed | Release configure/build succeeded; CTest 5/5 passed; pytest 33/33 passed. |
+| 2026-10-17T20:32:59Z | Review round 3 | Frozen range `fdf70b8b80ce6c9b617141293bda99a560be3e07..9ac1c7f612d4786180ff04be6b083d45353755c0`; snapshot SHA-256 `1ad112b97ec9a48a55f048fddc8e021277dfa8d4d015eb03908c57af85e78bc6`; `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | repository root | `9ac1c7f612d4786180ff04be6b083d45353755c0` | approved | Independent spec and standards reviews found no issues. Verification command exit 0; Release configure/build passed, CTest 5/5, pytest 33/33. No false claims, untested changed parser boundary, or unproven load-bearing facts. Real-data C5/A-B was not rerun in this review; previous training-only evidence remains recorded. |
 
 ## Review dispositions
 
@@ -111,6 +113,7 @@ The user-facing result is `docs/fit-quality.md`. Review the shared expiry and we
 | 1 | P2: A/B per-snapshot report entries and assembled report metrics lack behavioral assertions. | accepted for correction | Real-binary integration test now asserts all three per-snapshot entries and fit-objective/quality consistency; focused suite passed. |
 | 1 | P2: executable fit stub emits fixed diagnostics/fits; assertions verify weights forwarded to the stub, not real weighted A/B outcomes. | accepted for correction | Replaced the stub with `build/essvi_fit`; test verifies distinct real fit objectives and matching objective/quality aggregates. |
 | 2 | P3: C++ CSV parser numeric-prefix rejection (`2junk`) lacks direct regression coverage. | accepted for correction | Added `partial-numeric-weight.csv` with `2junk`; calibration rejects it with the included-weight error. Focused CTest and final configured suite pass. |
+| 3 | No blocking findings across independent spec, standards, and verification axes. | approved | Frozen round-three range passed all three axes; full configured suite passed. |
 
 ## Review record
 
@@ -196,3 +199,43 @@ No standards findings. No weakened checks found. Gate candidates: none.
 
 - Test commit: `e7c71220a9a6c10fb36343d1f8d71a3fc485dd7e`.
 - `tests/test_calibrator_regression.cpp` writes an included weight `2junk`, reads the CSV, and asserts calibration rejects it with `included quote weight must be finite and positive`; the existing nonnumeric `invalid` conversion-exception case remains covered. Focused CTest passed 1/1. The final configured Release build passed; CTest 5/5 and pytest 33/33 passed.
+
+### Round 3 — frozen commit `9ac1c7f612d4786180ff04be6b083d45353755c0`
+
+- **Reviewed range:** `fdf70b8b80ce6c9b617141293bda99a560be3e07..9ac1c7f612d4786180ff04be6b083d45353755c0`.
+- **Frozen snapshot:** `/tmp/cal-c9-review-round3.patch`, SHA-256 `1ad112b97ec9a48a55f048fddc8e021277dfa8d4d015eb03908c57af85e78bc6` (19 files, +1437/-62; no untracked files at freeze).
+
+#### Spec review — isolated
+
+No findings. The reviewer compared the complete frozen range with the external C9 requirements and confirmed mandatory normalized vega weighting in the cold/warm paths, legacy unit-weight compatibility, unchanged diagnostics schema, required error metrics, and report-only cleaned-IBIT A/B. Same-day/past-expiry exclusion and shared converter/replay dates match the source brief. Oct 12–14 IBIT remains the only A/B scope; SPY, Oct 15–16, mid-centering, live-collector changes, and WP-C2 remain out of scope.
+
+#### Standards review — isolated
+
+No findings. No weakened checks, verification-command changes, suppressions, unfinished behavior, or unapproved exceptions were found. The optional weight column preserves legacy 13-column CSV compatibility; regression coverage checks weight validation and the unchanged six-column diagnostics schema. No root `CONSTRAINTS.md` or configured linter exists. Gate candidates: none.
+
+#### Verification review — isolated
+
+- The independent verifier read the documented `DELIVERY.md` command and ran only the exact configured full-suite command from the repository root; exit 0. Release configure/build passed, CTest 5/5 (including the calibrator regression target), and pytest 33/33.
+- No false claims, untested changed parser boundaries, or unproven load-bearing facts were found. The `2junk` row remains present and calibration rejects it; legacy and blank weights default to 1.0; explicit weight 2 scales the cold objective by 4. Those behaviors are covered at rung 4 (Ran).
+- Real-data C5/A-B evaluations were not independently rerun in round 3; prior Oct 12–14 training-only runs remain recorded at lines 97–98. The verifier did not access holdout or SPY data.
+
+**Independent round-three verdict: approved.** Spec and standards found no issues; verification passed. No gate candidates.
+
+### Checkpoint disposition
+
+- Red checkpoint: not applicable to this test-only correction. `cpp/calibrator.cpp:942–945` already converts numeric-prefix junk such as `2junk` to an invalid weight, and fit ingress rejects it; the accepted round-two finding was missing permanent regression coverage, not a production behavior defect. The regression now asserts the retained row and expected rejection.
+- Refactor checkpoint: not applicable. No production code changed in the review-only correction; only the missing behavioral test was added.
+
+## Delivery record
+
+- Ticket: `CAL-C9-REVIEW`, re-accepting the complete C9 deliverable after the original ticket reached its review cap.
+- Review base: `fdf70b8b80ce6c9b617141293bda99a560be3e07`.
+- Reviewed deliverable HEAD: `9ac1c7f612d4786180ff04be6b083d45353755c0` (round-three reviewed endpoint; full configured verification passed there).
+- Branch: `delivery/calibrator-speedup-addendum-c/CAL-C9-REVIEW`.
+- Implemented code commits: original fixed C9 `1dac3aa1ca3239397f4b5eeee8ceab6cb1ab0cd5`; round-one corrections `8c5a6983048dde8bf9d917e0bbb54a08b13208cf`; round-two parser-boundary regression `e7c71220a9a6c10fb36343d1f8d71a3fc485dd7e`.
+- Review round-three snapshot: `/tmp/cal-c9-review-round3.patch`, SHA-256 `1ad112b97ec9a48a55f048fddc8e021277dfa8d4d015eb03908c57af85e78bc6`.
+- Final configured command at review endpoint: `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q`; passed (Release configure/build, CTest 5/5, pytest 33/33).
+- Training-only C5/A-B reruns on IBIT Oct 12–14 are recorded above and match `docs/fit-quality.md`; round-three verification did not rerun these data evaluations. Oct 15–16 and SPY were not used.
+- Learning capture: none. No new durable repository-specific learning met the capture bar; no learning-store file is present.
+- Follow-up: reconcile the five review rounds configured in `docs/delivery/DELIVERY.md` with the three-round hard cap in the review workflow. This policy mismatch blocked the original CAL-C9 ticket; this fresh review ticket resolved acceptance without changing that out-of-scope policy.
+- Product follow-up: none; WP-C2 was not started.
