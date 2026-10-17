@@ -2,11 +2,11 @@
 
 ## State
 
-- Current: `reviewing`
-- Last transition: `changes-requested` → `reviewing`
-- At: `2026-10-17T14:31:18Z`
-- Reason/evidence: round 1's accepted P2 test-coverage finding was corrected in commit `72b4b427fa50e9e6d2c5ad76a154565927796175`. The new synthetic analyzer-output regression passed; configured verification passed (CTest 5/5, pytest 16/16); the real IBIT training run remains 212/212 and matches the report. Requesting fresh round 2 review of the complete deliverable.
-- Blocker: None external. WP-C5 remains gated on explicit cleaning-threshold approval.
+- Current: `changes-requested`
+- Last transition: `reviewing` → `changes-requested`
+- At: `2026-10-17T14:37:22Z`
+- Reason/evidence: round 2 approved the spec and standards axes and closed round 1's analyzer-output gap. Verification found a new P2 permanent-test gap: `fit_snapshot()`'s handling of fit diagnostics, fitted rows, and construction of observations has no deterministic adapter regression. See round 2 review record; add controlled fit-output coverage and request the final permitted round.
+- Blocker: None external. Round 2 verification finding is corrected; correction evidence is recorded below.
 
 ## State history
 
@@ -19,7 +19,8 @@
 | `implementing` | `implemented` | `2026-10-17T14:17:41Z` | Review-only full-deliverable scope confirmed; current committed deliverable passed fresh configured verification at `bfe35f735fd007f137368e6e9326085d1dea553b`. No code edits are in this ticket. |
 | `implemented` | `reviewing` | `2026-10-17T14:19:02Z` | Fresh three-axis review requested on the full C1 deliverable after configured verification passed. |
 | `reviewing` | `changes-requested` | `2026-10-17T14:25:33Z` | Round 1 found a P2 permanent-test gap for the analyzer's aggregate/JSON output path; see Review round 1 and disposition. |
-| `changes-requested` | `reviewing` | `2026-10-17T14:31:18Z` | Accepted correction committed in `72b4b427fa50e9e6d2c5ad76a154565927796175`; focused analyzer tests 6/6, Release build passed, CTest 5/5, pytest 16/16, and the real-data C1 recheck passed. A fresh full-deliverable review is requested. |
+| `changes-requested` | `reviewing` | `2026-10-17T14:31:18Z` | Accepted round-1 correction committed in `72b4b427fa50e9e6d2c5ad76a154565927796175`; focused analyzer tests 6/6, Release build passed, CTest 5/5, pytest 16/16, and the real-data C1 recheck passed. Round 2 review requested. |
+| `reviewing` | `changes-requested` | `2026-10-17T14:37:22Z` | Round 2 found a P2 permanent-test gap for the snapshot-to-fit adapter; see Review round 2 and disposition. |
 
 ## Claim
 
@@ -52,11 +53,12 @@ Re-accept the complete C1 deliverable against the full diff from the original ba
 
 ## Test plan
 
-This ticket re-accepts a completed implementation; production-code TDD is not applicable. Red/Green evidence for the analyzer and its F1 correction remains recorded in CAL-C1 and CAL-C1-F1. The round-1 verification correction adds permanent synthetic coverage for analyzer aggregation and zero-total JSON output, without changing production behavior.
+This ticket re-accepts a completed implementation; production-code TDD is not applicable. Red/Green evidence for the analyzer and its F1 correction remains recorded in CAL-C1 and CAL-C1-F1. Review corrections add permanent synthetic coverage for the analyzer/report path and the snapshot-to-fit adapter without changing production behavior.
 
 - Run the configured full verification command at this ticket boundary.
 - Run the real IBIT training diagnosis on Oct 12–14 and compare with the checked-in report; do not read Oct 15–16.
-- Add a synthetic fixture that exercises `analyze()` with zero total excess, serializes contributions as JSON `null`, and demonstrates only Oct 12–14 files are consumed.
+- Keep a synthetic fixture that exercises `analyze()` with zero total excess, JSON `null` contributions, and the Oct 12–14 training-file boundary.
+- Add deterministic `fit_snapshot()` adapter coverage using a real prepared snapshot and controlled fit diagnostics/fitted rows; assert identity mapping, raw position, derived observation metrics, and failed-fit handling.
 - Freeze the full diff from `ef6c788b8e2479b9aa74a1b595fc9844d9094082` through this ticket's HEAD, then run the three independent review axes.
 
 ## Expected seam
@@ -88,35 +90,51 @@ This ticket re-accepts a completed implementation; production-code TDD is not ap
 | 2026-10-17T14:17:41Z | Final verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `bfe35f735fd007f137368e6e9326085d1dea553b` | passed | Release build succeeded; CTest 5/5 passed; pytest 15/15 passed. |
 | 2026-10-17T14:19:02Z | Review round 1 start | `review-delivery-diff`; base-to-HEAD `ef6c788b8e2479b9aa74a1b595fc9844d9094082..9004baa22953b70aecf9dc7e782966279e4a4098`; three isolated axes | `/home/zhangy/git/ql-essvi` | `9004baa22953b70aecf9dc7e782966279e4a4098` | reviewing | Frozen snapshot `/tmp/cal-c1-review-round1.diff`, SHA-256 `8b02dfba2bc0712a29488386280322d2b7fd257b1659acbde5bdcabedac51ddc`; no untracked files. |
 | 2026-10-17T14:25:33Z | Review round 1 | Same full base-to-HEAD range; three isolated axes | `/home/zhangy/git/ql-essvi` | `9004baa22953b70aecf9dc7e782966279e4a4098` | changes required | Spec: approved, no findings. Standards: no findings. Verification: P2 UNTESTED at `scripts/analyze_fit_quality.py:388–425`; no permanent analyzer aggregation/JSON-output test. Reviewer did not run the configured command due a higher-priority restriction. Implementer full verification passed at `bfe35f7`; the real-data JSON artifact was inspected and matches the report at displayed precision. Snapshot SHA-256 `8b02dfba2bc0712a29488386280322d2b7fd257b1659acbde5bdcabedac51ddc`. |
-| 2026-10-17 | Review correction regression | `.venv/bin/python -m pytest -q tests/test_analyze_fit_quality.py` | `/home/zhangy/git/ql-essvi` | working tree | passed | 6/6 passed. The new synthetic test drives `analysis.main()` over temporary Oct 12–14 inputs plus holdout sentinels; all grouped contributions serialize as JSON `null`, and only the three training files are consumed. No production behavior changed. |
+| 2026-10-17 | Review correction regression | `.venv/bin/python -m pytest -q tests/test_analyze_fit_quality.py` | `/home/zhangy/git/ql-essvi` | working tree | passed | 6/6 passed. The synthetic test drives `analysis.main()` over temporary Oct 12–14 inputs plus holdout sentinels; all grouped contributions serialize as JSON `null`, and only the three training files are consumed. No production behavior changed. |
 | 2026-10-17 | Final verification after review correction | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | working tree | passed | Release build succeeded; CTest 5/5 passed; pytest 16/16 passed. |
 | 2026-10-17 | Real-data recheck after review correction | `python3 scripts/analyze_fit_quality.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit > /tmp/cal-c1-review.json` | `/home/zhangy/git/ql-essvi` | working tree | passed | Saved JSON confirms 212/212 cold fits, 113,965 valid quotes, and only training files for Oct 12–14. Overall and width-group metrics match the report at displayed precision; Oct 15–16 were not read. |
+| 2026-10-17T14:31:18Z | Review round 2 start | `review-delivery-diff`; base-to-HEAD `ef6c788b8e2479b9aa74a1b595fc9844d9094082..44c1d300d222a64464959221a232c860ea303f9f`; three isolated axes | `/home/zhangy/git/ql-essvi` | `44c1d300d222a64464959221a232c860ea303f9f` | reviewing | Frozen snapshot `/tmp/cal-c1-review-round2.diff`, SHA-256 `5593589145519f4c474c78aa7f4ac667266d917d33e53c5fe71864458474893e`; no untracked files. |
+| 2026-10-17T14:37:22Z | Review round 2 | Same full base-to-HEAD range; three isolated axes | `/home/zhangy/git/ql-essvi` | `44c1d300d222a64464959221a232c860ea303f9f` | changes required | Spec: no findings; source WP-C5 permits a strike window such as delta bounds. Standards: no findings; round-1 P2 corrected. Verification: new P2 UNTESTED at `scripts/analyze_fit_quality.py:244–362`; `fit_snapshot()` has no deterministic regression for handling diagnostics, fitted-row identity mapping, and observation construction. Reviewer did not run the configured command due a higher-priority restriction. Implementer verification at `72b4b42` passed; saved real-data JSON remains consistent. Snapshot SHA-256 `5593589145519f4c474c78aa7f4ac667266d917d33e53c5fe71864458474893e`. |
+| 2026-10-17 | Review correction — fit adapter | `.venv/bin/python -m pytest -q tests/test_analyze_fit_quality.py` | `/home/zhangy/git/ql-essvi` | working tree | passed | 9/9 passed. New tests exercise `fit_snapshot()` with real `prepare_snapshot` output and controlled, reordered fit CSV rows; verify ID mapping, raw source/tick positions, excess calculations, convergence failure, and missing fitted ID. |
+| 2026-10-17 | Final verification after adapter coverage | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | working tree | passed | Release build succeeded; CTest 5/5 passed; pytest 19/19 passed. |
+| 2026-10-17 | Real-data recheck after adapter coverage | `python3 scripts/analyze_fit_quality.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit > /tmp/cal-c1-review.json` | `/home/zhangy/git/ql-essvi` | working tree | passed | Output JSON confirms 212/212 cold fits, 113,965 valid quotes, only Oct 12–14 training files, and metrics matching the checked-in report at displayed precision. Oct 15–16 were not read. |
 
 ## Review record
 
-### Spec review — isolated
+### Round 1 — isolated three-axis review
 
-Approved. No findings. C1 uses IBIT cold fits on Oct 12–14 only; reports the required breakdowns, relative total-variance width, fetch-position and underlying-move checks, ranked diagnosis, and unselected cleaning candidates. Oct 15–16 remain reserved for WP-C7, SPY is deferred, and production behavior is unchanged.
+Spec approved; standards found no issues. Verification required a permanent synthetic analyzer-output test for zero-total JSON and training-file selection. The reviewer did not run the configured suite due a higher-priority restriction. See the recorded correction and round-2 disposition.
 
-### Standards review — isolated
+### Round 2 — isolated three-axis review
 
-No findings. Metric and bucket counts were internally consistent; source quote identity and raw positions follow existing converter/replay conventions. No weakened checks, suppressions, or configured-command changes. Gate candidates: None.
+#### Spec review — isolated
 
-### Verification review — isolated
+No findings. Source WP-C5 line 56 explicitly permits a strike window expressed as delta bounds (for example `|delta|` from 0.05 to 0.95), so the proposed delta-window candidates are within scope. The remaining C1 scope matches the source and decisions; the round-1 zero-total test correction meets the ticket criteria.
 
-**Changes required.** P2 UNTESTED — add a permanent synthetic regression through `analyze()` and the report JSON serialization path for zero total excess, and assert the fixed Oct 12–14 training-file selection. Evidence: `scripts/analyze_fit_quality.py:388–425` aggregates the public report from training files; existing `tests/test_analyze_fit_quality.py` only covers helper functions and does not exercise `analyze()` or its report output. The reviewer inspected the recorded real-data JSON but did not execute the configured command due a higher-priority restriction. Implementer-run full verification passed; no false claim or confirmed behavior failure.
+#### Standards review — isolated
 
-Load-bearing facts graded rung 4 from implementer-recorded real-data execution and F1 tests/JSON smoke; not independently executed by the reviewer. The all-in-band analyzer output path remains the permanent-test gap to correct.
+No findings. The round-1 test calls `analysis.main()`, checks output JSON and the training-file boundary; it exercises the corrected aggregation behavior. Metrics and ID/index mapping follow existing conventions. No weakened checks, suppressions, or configured-command changes. Gate candidates: None.
+
+#### Verification review — isolated
+
+**Changes required.** P2 UNTESTED — add a deterministic `fit_snapshot()` adapter regression with controlled fit diagnostics and fitted rows. Evidence: `scripts/analyze_fit_quality.py:244–362` prepares a snapshot, writes fit inputs, invokes the CLI, checks convergence, joins output rows by quote ID, and constructs observations; the existing synthetic analyzer test substitutes `fit_snapshot` at `tests/test_analyze_fit_quality.py:159`, leaving that adapter's fit-output handling and observation construction untested. The reviewer did not run the configured full-suite command because its higher-priority review procedure forbids builds/tests; implementer-run verification and real-data analysis remain recorded. No false claim or observed functional failure.
+
+The round-1 analyzer-output gap is closed by `analysis.main()` synthetic coverage. Load-bearing facts grade rung 4 from implementer-recorded test and real-data evidence, not independent command execution. Adapter test correction remains open.
 
 ## Review dispositions
 
 | Round | Finding | Disposition | Evidence |
 | --- | --- | --- | --- |
 | 1 — Verification P2 (UNTESTED) — Analyzer output path lacks a permanent regression | accepted | Add synthetic coverage through `analyze()` for zero-total JSON output and fixed training dates; focused command and correction commit will be recorded in the round-2 correction evidence. |
+| 2 — Verification P2 (UNTESTED) — Snapshot-to-fit adapter lacks deterministic coverage | accepted | Add a `fit_snapshot()` test using real prepared snapshot rows and controlled fit diagnostics/fitted rows; verify quote-ID mapping, raw fetch position and derived observation metrics, plus non-converged handling. Focused command and correction commit will be recorded in the round-3 correction evidence. |
 
 ## Correction evidence — round 1
 
-The accepted finding was a permanent test-coverage gap; the behavior itself already existed in the F1-corrected analyzer. No production edit or Red/Green claim was needed. The synthetic test now covers the public CLI output plus the holdout exclusion; it passed with the configured CTest/pytest suite and the real IBIT training rerun (timeline rows above). Correction commit: `72b4b427fa50e9e6d2c5ad76a154565927796175`.
+The accepted finding was a permanent test-coverage gap; the behavior itself already existed in the F1-corrected analyzer. No production edit or Red/Green claim was needed. The synthetic test covers the public CLI output plus holdout exclusion; it passed with configured CTest/pytest and the real IBIT training rerun. Correction commit: `72b4b427fa50e9e6d2c5ad76a154565927796175`.
+
+## Correction evidence — round 2
+
+The accepted finding was a permanent regression gap around `fit_snapshot()`. No production behavior was changed. The new tests use a real prepared synthetic snapshot and controlled CLI diagnostics/fitted CSVs, including reversed output order, non-convergence, and a missing fitted ID; they passed 9/9. Configured verification passed (CTest 5/5, pytest 19/19), and the real IBIT run remained 212/212 with report metrics unchanged. Correction commit SHA will be recorded after commit.
 
 ## Gate candidates
 
@@ -130,4 +148,5 @@ None.
 - Worktree: primary checkout, `/home/zhangy/git/ql-essvi`
 - Correction commit: `72b4b427fa50e9e6d2c5ad76a154565927796175` (permanent analyzer output regression test; no production behavior changed).
 - Review round 1 snapshot: SHA-256 `8b02dfba2bc0712a29488386280322d2b7fd257b1659acbde5bdcabedac51ddc`.
-- Remaining: fresh round 2 review outcome; DEC-006 threshold approval remains a separate gate before WP-C5.
+- Review round 2 snapshot: SHA-256 `5593589145519f4c474c78aa7f4ac667266d917d33e53c5fe71864458474893e`.
+- Remaining: commit the adapter regression and request final round 3 review; DEC-006 threshold approval remains separate before WP-C5.

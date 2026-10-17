@@ -1,16 +1,124 @@
+import csv
 import gzip
 import json
 import math
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 import scripts.analyze_fit_quality as analysis
+from convert_ibit_snapshots import black_scholes_price
 from scripts.analyze_fit_quality import (
     contribution_percentages,
     grouped_band_width_quality,
     relative_total_variance_band_width,
     source_contract_index,
 )
+
+
+def _fit_adapter_snapshot():
+    expiry = "20261019"
+    time_years = 7.0 / 365.0
+
+    def contract(con_id, right, strike, tick_time, bid_factor=0.95, ask_factor=1.05):
+        mid = black_scholes_price(
+            100.0, strike, time_years, 0.8, is_call=right == "C"
+        )
+        return {
+            "conId": con_id,
+            "expiry": expiry,
+            "strike": strike,
+            "right": right,
+            "bid": mid * bid_factor,
+            "ask": mid * ask_factor,
+            "tick_time": tick_time,
+        }
+
+    call = contract(101, "C", 105.0, 10.0)
+    locked = contract("locked", "C", 110.0, 20.0, 1.0, 1.0)
+    put = contract(202, "P", 95.0, 30.0)
+    return {
+        "iso": "2026-10-12T15:00:00Z",
+        "spot_ref": 100.0,
+        "contracts": [None, call, locked, put],
+    }
+
+
+def _stub_fit_cli(monkeypatch, *, converged, fitted_variances, omitted_ids=()):
+    def fake_run(command, *, check, capture_output, text):
+        assert check and capture_output and text
+        normalized = Path(command[1])
+        parameters = Path(command[2])
+        fitted = Path(command[3])
+        grid = Path(command[4])
+        diagnostics = Path(command[5])
+        with normalized.open(newline="", encoding="utf-8") as stream:
+            input_rows = list(csv.DictReader(stream))
+        included_rows = [row for row in input_rows if row["included"] == "true"]
+        assert [row["quote_id"] for row in included_rows] == ["101", "202"]
+
+        with diagnostics.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(
+                stream,
+                fieldnames=[
+                    "model",
+                    "converged",
+                    "objective",
+                    "iterations",
+                    "runtime_seconds",
+                    "error",
+                ],
+            )
+            writer.writeheader()
+            writer.writerow(
+                {
+                    "model": "eSSVI",
+                    "converged": str(converged).lower(),
+                    "objective": 0.0,
+                    "iterations": 1,
+                    "runtime_seconds": 0.01,
+                    "error": "" if converged else "fixture failure",
+                }
+            )
+        if converged:
+            with fitted.open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.DictWriter(
+                    stream,
+                    fieldnames=[
+                        "quote_id",
+                        "time_to_expiry",
+                        "strike",
+                        "log_moneyness",
+                        "fitted_total_variance",
+                        "fitted_iv",
+                        "status",
+                    ],
+                )
+                writer.writeheader()
+                for row in reversed(included_rows):
+                    quote_id = row["quote_id"]
+                    if quote_id in omitted_ids:
+                        continue
+                    variance = fitted_variances[quote_id]
+                    writer.writerow(
+                        {
+                            "quote_id": quote_id,
+                            "time_to_expiry": row["time_to_expiry"],
+                            "strike": row["strike"],
+                            "log_moneyness": "0",
+                            "fitted_total_variance": format(variance, ".17g"),
+                            "fitted_iv": format(
+                                math.sqrt(variance / float(row["time_to_expiry"])),
+                                ".17g",
+                            ),
+                            "status": "ok",
+                        }
+                    )
+            parameters.write_text("parameters\n", encoding="utf-8")
+            grid.write_text("grid\n", encoding="utf-8")
+
+    monkeypatch.setattr(analysis.subprocess, "run", fake_run)
 
 
 def test_source_contract_index_skips_non_objects_and_preserves_raw_positions():
@@ -81,6 +189,82 @@ def test_contribution_percentages_preserve_positive_total_shares():
     assert contribution_percentages(groups, total_excess=4.0) == {
         "expiry": {"near": 25.0, "far": 75.0}
     }
+
+
+def test_fit_snapshot_maps_reordered_fit_rows_to_source_contracts_and_metrics(
+    tmp_path, monkeypatch
+):
+    snapshot = _fit_adapter_snapshot()
+    source_file = tmp_path / "chain_20261012.jsonl.gz"
+    fitted_variances = {"101": 0.05, "202": 0.001}
+    _stub_fit_cli(
+        monkeypatch, converged=True, fitted_variances=fitted_variances
+    )
+
+    prepared, observations = analysis.fit_snapshot(
+        snapshot, source_file, tmp_path / "essvi_fit", sequence=1
+    )
+
+    assert prepared.valid_quotes == 2
+    assert prepared.excluded_locked == 1
+    assert prepared.excluded_other == 1
+    assert [row["quote_id"] for row in observations] == ["101", "202"]
+    assert [row["source_position"] for row in observations] == pytest.approx(
+        [1.0 / 3.0, 1.0]
+    )
+    assert [row["tick_position"] for row in observations] == [0.0, 1.0]
+    assert [row["expiry_days"] for row in observations] == [7, 7]
+
+    for observation, input_row in zip(observations, prepared.csv_rows):
+        bid_variance = float(input_row[8]) ** 2 * float(input_row[3])
+        ask_variance = float(input_row[9]) ** 2 * float(input_row[3])
+        fitted_variance = fitted_variances[input_row[0]]
+        excess = max(
+            bid_variance - fitted_variance,
+            0.0,
+            fitted_variance - ask_variance,
+        )
+        assert math.isclose(observation["excess"], excess)
+        assert math.isclose(
+            observation["excess_ratio"],
+            excess / max(ask_variance - bid_variance, 1e-6),
+        )
+        assert math.isclose(
+            observation["relative_total_variance_band_width"],
+            (ask_variance - bid_variance)
+            / (0.5 * (ask_variance + bid_variance)),
+        )
+
+
+def test_fit_snapshot_rejects_nonconverged_cli_result(tmp_path, monkeypatch):
+    snapshot = _fit_adapter_snapshot()
+    _stub_fit_cli(monkeypatch, converged=False, fitted_variances={})
+
+    with pytest.raises(RuntimeError, match="cold fit did not converge"):
+        analysis.fit_snapshot(
+            snapshot,
+            tmp_path / "chain_20261012.jsonl.gz",
+            tmp_path / "essvi_fit",
+            sequence=1,
+        )
+
+
+def test_fit_snapshot_rejects_missing_fitted_quote_id(tmp_path, monkeypatch):
+    snapshot = _fit_adapter_snapshot()
+    _stub_fit_cli(
+        monkeypatch,
+        converged=True,
+        fitted_variances={"101": 0.05, "202": 0.001},
+        omitted_ids={"202"},
+    )
+
+    with pytest.raises(ValueError, match="fitted quote missing for id 202"):
+        analysis.fit_snapshot(
+            snapshot,
+            tmp_path / "chain_20261012.jsonl.gz",
+            tmp_path / "essvi_fit",
+            sequence=1,
+        )
 
 
 def test_analyzer_emits_zero_contributions_as_json_null_and_uses_training_files(
