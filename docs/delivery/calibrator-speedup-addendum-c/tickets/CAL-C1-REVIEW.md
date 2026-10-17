@@ -2,11 +2,11 @@
 
 ## State
 
-- Current: `changes-requested`
-- Last transition: `reviewing` → `changes-requested`
-- At: `2026-10-17T14:37:22Z`
-- Reason/evidence: round 2 approved the spec and standards axes and closed round 1's analyzer-output gap. Verification found a new P2 permanent-test gap: `fit_snapshot()`'s handling of fit diagnostics, fitted rows, and construction of observations has no deterministic adapter regression. See round 2 review record; add controlled fit-output coverage and request the final permitted round.
-- Blocker: None external. Round 2 verification finding is corrected; correction evidence is recorded below.
+- Current: `reviewing`
+- Last transition: `changes-requested` → `reviewing`
+- At: `2026-10-17T14:45:08Z`
+- Reason/evidence: round 2's accepted adapter-test finding was corrected in commit `9cc6c0aaf5236931876377f6569f86e49f1567d1`. The focused adapter tests passed 9/9; configured verification passed (CTest 5/5, pytest 19/19); the real IBIT run remains 212/212 and matches the report. Requesting fresh round 3 review, the final permitted round for this ticket.
+- Blocker: None external. WP-C5 remains gated on explicit cleaning-threshold approval.
 
 ## State history
 
@@ -21,6 +21,7 @@
 | `reviewing` | `changes-requested` | `2026-10-17T14:25:33Z` | Round 1 found a P2 permanent-test gap for the analyzer's aggregate/JSON output path; see Review round 1 and disposition. |
 | `changes-requested` | `reviewing` | `2026-10-17T14:31:18Z` | Accepted round-1 correction committed in `72b4b427fa50e9e6d2c5ad76a154565927796175`; focused analyzer tests 6/6, Release build passed, CTest 5/5, pytest 16/16, and the real-data C1 recheck passed. Round 2 review requested. |
 | `reviewing` | `changes-requested` | `2026-10-17T14:37:22Z` | Round 2 found a P2 permanent-test gap for the snapshot-to-fit adapter; see Review round 2 and disposition. |
+| `changes-requested` | `reviewing` | `2026-10-17T14:45:08Z` | Accepted round-2 correction committed in `9cc6c0aaf5236931876377f6569f86e49f1567d1`; focused adapter tests 9/9, Release build passed, CTest 5/5, pytest 19/19, and the real-data C1 recheck passed. Final permitted review round requested. |
 
 ## Claim
 
@@ -134,7 +135,7 @@ The accepted finding was a permanent test-coverage gap; the behavior itself alre
 
 ## Correction evidence — round 2
 
-The accepted finding was a permanent regression gap around `fit_snapshot()`. No production behavior was changed. The new tests use a real prepared synthetic snapshot and controlled CLI diagnostics/fitted CSVs, including reversed output order, non-convergence, and a missing fitted ID; they passed 9/9. Configured verification passed (CTest 5/5, pytest 19/19), and the real IBIT run remained 212/212 with report metrics unchanged. Correction commit SHA will be recorded after commit.
+The accepted finding was a permanent regression gap around `fit_snapshot()`. No production behavior was changed. The new tests use a real prepared synthetic snapshot and controlled CLI diagnostics/fitted CSVs, including reversed output order, non-convergence, and a missing fitted ID; they passed 9/9. Configured verification passed (CTest 5/5, pytest 19/19), and the real IBIT run remained 212/212 with report metrics unchanged. Correction commit: `9cc6c0aaf5236931876377f6569f86e49f1567d1`.
 
 ## Gate candidates
 
@@ -146,7 +147,7 @@ None.
 - Branch: `delivery/calibrator-speedup-addendum-c/CAL-C1-REVIEW`
 - Branch start: finished CAL-C1-F1 branch at `0f625dba8d2cac43efe2cac6c4641f78c6522570`
 - Worktree: primary checkout, `/home/zhangy/git/ql-essvi`
-- Correction commit: `72b4b427fa50e9e6d2c5ad76a154565927796175` (permanent analyzer output regression test; no production behavior changed).
+- Correction commits: `72b4b427fa50e9e6d2c5ad76a154565927796175` (analyzer output regression; no production behavior changed), `9cc6c0aaf5236931876377f6569f86e49f1567d1` (snapshot-fit adapter regression; no production behavior changed).
 - Review round 1 snapshot: SHA-256 `8b02dfba2bc0712a29488386280322d2b7fd257b1659acbde5bdcabedac51ddc`.
 - Review round 2 snapshot: SHA-256 `5593589145519f4c474c78aa7f4ac667266d917d33e53c5fe71864458474893e`.
-- Remaining: commit the adapter regression and request final round 3 review; DEC-006 threshold approval remains separate before WP-C5.
+- Remaining: final permitted round 3 review outcome; DEC-006 threshold approval remains separate before WP-C5.
