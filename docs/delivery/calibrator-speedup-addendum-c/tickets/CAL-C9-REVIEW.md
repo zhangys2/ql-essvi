@@ -2,10 +2,10 @@
 
 ## State
 
-- Current: `implementing`
-- Last transition: `changes-requested` → `implementing`
-- At: `2026-10-17T18:26:56Z`
-- Reason/evidence: Round 1 corrections are implemented: converter locked-quote eligibility now matches replay; parity coverage includes a locked quote; schema tests cover invalid included weights; and the synthetic A/B evaluator test uses the real fitter and asserts report outcomes. Focused vega tests passed 5/5 and configured verification passed; training-only reruns and fresh review remain.
+- Current: `reviewing`
+- Last transition: `implemented` → `reviewing`
+- At: `2026-10-17T18:35:19Z`
+- Reason/evidence: Round-one corrections are committed as `8c5a6983048dde8bf9d917e0bbb54a08b13208cf`. The focused C9 suite, configured full verification, and IBIT Oct 12–14 C5/A-B reruns passed; the corrected full base-to-HEAD range is entering independent round-two review.
 - Blocker: None.
 
 ## State history
@@ -20,6 +20,8 @@
 | `implemented` | `reviewing` | `2026-10-17T18:09:43Z` | Fixed C9 deliverable and final verification are ready; a frozen full-diff snapshot is being sent to independent spec, standards, and verification reviewers. |
 | `reviewing` | `changes-requested` | `2026-10-17T18:16:47Z` | Round 1 found P2 spec/standards and verification gaps on the frozen C9 deliverable; findings are recorded below for correction. |
 | `changes-requested` | `implementing` | `2026-10-17T18:26:56Z` | Accepted round-one corrections are implemented; focused vega tests and configured verification passed. Training-only reruns and fresh review remain. |
+| `implementing` | `implemented` | `2026-10-17T18:32:30Z` | Corrections committed as `8c5a6983048dde8bf9d917e0bbb54a08b13208cf`; the training-only C5/A-B reruns, focused vega suite, and configured full verification passed. Round 2 review is next. |
+| `implemented` | `reviewing` | `2026-10-17T18:35:19Z` | Final evidence is recorded and the corrected base-to-HEAD range is being frozen for independent round-two review. |
 
 ## Claim
 
@@ -88,15 +90,19 @@ The user-facing result is `docs/fit-quality.md`. Review the shared expiry and we
 | 2026-10-17T18:08:22Z | Corrected report-only A/B | `.venv/bin/python scripts/evaluate_vega_weighting.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit > /tmp/cal-c9-review-ab.json` | `/home/zhangy/git/ql-essvi` | `af5d518fc9e09d7e196198b45840bf3e56051ce4` | passed | Both arms completed 212/212 fits on 90,700 quotes. Unit objective `0.3268406267822395`; weighted objective `0.1334024602632656`. Output confirms only Oct 12–14 inputs; no holdout or SPY was read. Metrics match `docs/fit-quality.md`. |
 | 2026-10-17T18:09:01Z | Final | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `af5d518fc9e09d7e196198b45840bf3e56051ce4` | passed | Release configure/build succeeded; CTest 5/5 passed; pytest 33/33 passed. |
 | 2026-10-17T18:16:47Z | Review round 1 | Frozen base-to-HEAD snapshot `fdf70b8b80ce6c9b617141293bda99a560be3e07..f9b777c02e91bc43cd213f06c3c24b19f26373b9`; SHA-256 `19304d5ebd63b1a9c345998bb8dd4e2fd418506d5a5be3a78d2af82927658943` | `/home/zhangy/git/ql-essvi` | `f9b777c02e91bc43cd213f06c3c24b19f26373b9` | changes required | Three isolated axes completed. Configured Release configure/build, CTest 5/5, and pytest 33/33 passed. Spec/standards findings and two untested verification gaps are recorded below. |
+| 2026-10-17T18:26:54Z | Corrected report-only A/B | `.venv/bin/python scripts/evaluate_vega_weighting.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit > /tmp/cal-c9-review-ab-round1-fix.json` | `/home/zhangy/git/ql-essvi` | `8c5a6983048dde8bf9d917e0bbb54a08b13208cf` | passed | Both arms completed 212/212 fits on 90,700 combined-profile quotes. Unit objective `0.3268406267822395`; vega objective `0.1334024602632656`. The report lists only IBIT Oct 12–14 files. |
+| 2026-10-17T18:28:34Z | Corrected C5 training rerun | `.venv/bin/python scripts/evaluate_quote_cleaning.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit > /tmp/cal-c9-review-c5-round1-fix.json` | `/home/zhangy/git/ql-essvi` | `8c5a6983048dde8bf9d917e0bbb54a08b13208cf` | passed | All five profiles completed 212/212 fits on Oct 12–14. Combined: 90,700 included; 22,548 cleaning exclusions; above-cap share 69.10%, RMS ratio 2.1742, max 64.1403. Metrics match the checked-in report. |
+| 2026-10-17T18:31:34Z | Final round-one correction verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `8c5a6983048dde8bf9d917e0bbb54a08b13208cf` | passed | Release configure/build succeeded; CTest 5/5 passed; pytest 33/33 passed. |
+| 2026-10-17T18:31:59Z | Focused round-one regression suite | `.venv/bin/python -m pytest -q tests/test_vega_weighting.py` | `/home/zhangy/git/ql-essvi` | `8c5a6983048dde8bf9d917e0bbb54a08b13208cf` | passed | 5 passed, including locked quote converter/replay parity, invalid included schema weights, and real-binary report-only A/B with per-snapshot coverage and objective/quality consistency. |
 
 ## Review dispositions
 
 | Round | Finding | Disposition | Evidence |
 |---|---|---|---|
-| 1 | P2: converter includes locked quotes that replay excludes, shifting median-normalized weights. | accepted for correction | `python/convert_ibit_snapshots.py:191–205, 275–295`; `python/replay_snapshots.py:162–169`; ticket acceptance criterion at line 52. |
-| 1 | P2: included zero/negative/non-finite weights are not covered through the Python schema validator. | accepted for correction | `python/validate_schema.py:23–36`; `tests/test_vega_weighting.py:122–171`. |
-| 1 | P2: A/B per-snapshot report entries and assembled report metrics lack behavioral assertions. | accepted for correction | `scripts/evaluate_vega_weighting.py:95–131`; ticket acceptance criterion at line 53; `tests/test_vega_weighting.py:237–250`. |
-| 1 | P2: executable fit stub emits fixed diagnostics/fits; assertions verify weights forwarded to the stub, not real weighted A/B outcomes. | accepted for correction | `tests/test_vega_weighting.py:191–250`; repository engineering rule forbids tests of wiring/forwarding/mock echoes. |
+| 1 | P2: converter includes locked quotes that replay excludes, shifting median-normalized weights. | accepted for correction | Corrected by `8c5a6983048dde8bf9d917e0bbb54a08b13208cf`; converter predicate now excludes equality before weighting, with a locked-quote parity fixture. |
+| 1 | P2: included zero/negative/non-finite weights are not covered through the Python schema validator. | accepted for correction | Added included blank, zero, negative, NaN, and ±infinity cases in `tests/test_vega_weighting.py`; focused suite passed. |
+| 1 | P2: A/B per-snapshot report entries and assembled report metrics lack behavioral assertions. | accepted for correction | Real-binary integration test now asserts all three per-snapshot entries and fit-objective/quality consistency; focused suite passed. |
+| 1 | P2: executable fit stub emits fixed diagnostics/fits; assertions verify weights forwarded to the stub, not real weighted A/B outcomes. | accepted for correction | Replaced the stub with `build/essvi_fit`; test verifies distinct real fit objectives and matching objective/quality aggregates. |
 
 ## Review record
 
@@ -137,8 +143,8 @@ The independent spec reviewer found no issues. Owner inspection found one blocki
 - Configured command: `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q`.
 - Result: exit 0; Release configure/build passed, CTest 5/5 passed, pytest 33/33 passed.
 - False claims: none contradicted. The review did not independently rerun the real-data C5/A-B evaluations.
-- **UNTESTED — included-weight schema boundaries.** `python/validate_schema.py:23–36` adds finite-positive validation, but `tests/test_vega_weighting.py:122–171` does not exercise included zero, negative, NaN, or infinity values. Add those validator cases.
-- **UNTESTED — per-snapshot A/B report shape.** `scripts/evaluate_vega_weighting.py:95–131` assembles per-snapshot exclusions and full report metrics, while `tests/test_vega_weighting.py:237–250` asserts only dates, fit counts, aggregate quote counts, and forwarded weights. Assert the three per-snapshot entries and key report fields.
+- **UNTESTED — included-weight schema boundaries.** `python/validate_schema.py:23–36` adds finite-positive validation, but the round-one snapshot's tests did not exercise included zero, negative, NaN, or infinity values.
+- **UNTESTED — per-snapshot A/B report shape.** The round-one snapshot's A/B test asserted only dates, fit counts, aggregate quote counts, and forwarded weights, not the per-snapshot entries or objective/quality aggregates.
 - Load-bearing facts were otherwise rung 4 (Ran): expiry/weight parity cases, C++ invalid-weight ingress and legacy defaults, weighted cold/warm calculations and cap gate, and the executable-stub A/B routing.
 
 #### Gate candidates
@@ -147,3 +153,11 @@ The independent spec reviewer found no issues. Owner inspection found one blocki
 - No deterministic gate is proposed for the judgement finding about the mocked A/B test; replace it with real-fitter behavioral coverage.
 
 **Outcome: changes required.**
+
+### Round-one correction evidence
+
+- Correction commit: `8c5a6983048dde8bf9d917e0bbb54a08b13208cf`.
+- Converter now rejects `ask <= bid` before computing included-row weights; `docs/csv-contract.md` records locked/crossed quote exclusion. The parity test verifies locked quotes are excluded and do not change normalized weights.
+- Python schema tests reject included blank, zero, negative, NaN, and positive/negative infinity weights.
+- The A/B evaluator test now invokes the real `build/essvi_fit` binary on three deterministic synthetic training snapshots; it checks per-snapshot counts, both report objectives against their corresponding quality aggregates, and distinct unit/weighted fit objectives.
+- Focused C9 suite: 5 passed. Configured Release verification: CTest 5/5, pytest 33/33. Corrected C5 and report-only A/B training reruns match the checked-in metrics; only Oct 12–14 IBIT files were read.
