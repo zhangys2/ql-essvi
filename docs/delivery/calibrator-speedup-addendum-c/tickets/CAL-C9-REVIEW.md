@@ -2,10 +2,10 @@
 
 ## State
 
-- Current: `review-approved`
-- Last transition: `reviewing` → `review-approved`
-- At: `2026-10-17T20:32:59Z`
-- Reason/evidence: Final round-three spec, standards, and verification review approved the frozen range `fdf70b8b80ce6c9b617141293bda99a560be3e07..9ac1c7f612d4786180ff04be6b083d45353755c0`. The configured Release build, CTest 5/5, and pytest 33/33 passed; the full snapshot SHA-256 is recorded below.
+- Current: `finished`
+- Last transition: `review-approved` → `finished`
+- At: `2026-10-17T20:36:15Z`
+- Reason/evidence: Finished after the round-three review approval and configured full verification were recorded in commit `d622ad1eb74905e7257f41dcbe7a9e7291053750`. The handoff, review snapshot identity, checkpoint disposition, and learning decision are recorded below.
 - Blocker: None.
 
 ## State history
@@ -27,6 +27,7 @@
 | `implementing` | `implemented` | `2026-10-17T20:19:49Z` | Regression committed as `e7c71220a9a6c10fb36343d1f8d71a3fc485dd7e`; configured Release build, CTest 5/5, and pytest 33/33 passed. |
 | `implemented` | `reviewing` | `2026-10-17T20:20:12Z` | Final round-two correction evidence is recorded; the corrected base-to-HEAD range is entering the third and final review round. |
 | `reviewing` | `review-approved` | `2026-10-17T20:32:59Z` | Round-three spec and standards axes found no issues; verification ran the configured full suite successfully. Frozen range and SHA-256 are recorded below. |
+| `review-approved` | `finished` | `2026-10-17T20:36:15Z` | Completion followed after review approval, verification, checkpoint disposition, and handoff evidence were recorded. Approval evidence commit: `d622ad1eb74905e7257f41dcbe7a9e7291053750`. |
 
 ## Claim
 
@@ -203,7 +204,7 @@ No standards findings. No weakened checks found. Gate candidates: none.
 ### Round 3 — frozen commit `9ac1c7f612d4786180ff04be6b083d45353755c0`
 
 - **Reviewed range:** `fdf70b8b80ce6c9b617141293bda99a560be3e07..9ac1c7f612d4786180ff04be6b083d45353755c0`.
-- **Frozen snapshot:** `/tmp/cal-c9-review-round3.patch`, SHA-256 `1ad112b97ec9a48a55f048fddc8e021277dfa8d4d015eb03908c57af85e78bc6` (19 files, +1437/-62; no untracked files at freeze).
+- **Frozen snapshot:** `/tmp/cal-c9-review-round3.patch`, SHA-256 `1ad112b97ec9a48a55f048fddc8e021277dfa8d4d015eb03908c57af85e78bc6` (19 files, +1437/-62; no untracked files at freeze; snapshot removed after review).
 
 #### Spec review — isolated
 
@@ -232,10 +233,19 @@ No findings. No weakened checks, verification-command changes, suppressions, unf
 - Review base: `fdf70b8b80ce6c9b617141293bda99a560be3e07`.
 - Reviewed deliverable HEAD: `9ac1c7f612d4786180ff04be6b083d45353755c0` (round-three reviewed endpoint; full configured verification passed there).
 - Branch: `delivery/calibrator-speedup-addendum-c/CAL-C9-REVIEW`.
+- Review-approval ticket record commit: `d622ad1eb74905e7257f41dcbe7a9e7291053750`.
 - Implemented code commits: original fixed C9 `1dac3aa1ca3239397f4b5eeee8ceab6cb1ab0cd5`; round-one corrections `8c5a6983048dde8bf9d917e0bbb54a08b13208cf`; round-two parser-boundary regression `e7c71220a9a6c10fb36343d1f8d71a3fc485dd7e`.
-- Review round-three snapshot: `/tmp/cal-c9-review-round3.patch`, SHA-256 `1ad112b97ec9a48a55f048fddc8e021277dfa8d4d015eb03908c57af85e78bc6`.
+- Review round-three snapshot SHA-256: `1ad112b97ec9a48a55f048fddc8e021277dfa8d4d015eb03908c57af85e78bc6`; temporary patch removed after the review.
 - Final configured command at review endpoint: `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q`; passed (Release configure/build, CTest 5/5, pytest 33/33).
 - Training-only C5/A-B reruns on IBIT Oct 12–14 are recorded above and match `docs/fit-quality.md`; round-three verification did not rerun these data evaluations. Oct 15–16 and SPY were not used.
 - Learning capture: none. No new durable repository-specific learning met the capture bar; no learning-store file is present.
 - Follow-up: reconcile the five review rounds configured in `docs/delivery/DELIVERY.md` with the three-round hard cap in the review workflow. This policy mismatch blocked the original CAL-C9 ticket; this fresh review ticket resolved acceptance without changing that out-of-scope policy.
 - Product follow-up: none; WP-C2 was not started.
+
+## Handoff
+
+- Implemented: mandatory snapshot-median-normalized Black–Scholes vega weighting in the bid/ask-band loss and cold/warm gates; legacy CSV compatibility; unchanged six-column diagnostics; converter/replay parity; vega- and price-space metrics; report-only IBIT A/B.
+- Verification: configured Release build, CTest 5/5, pytest 33/33 at reviewed endpoint `9ac1c7f612d4786180ff04be6b083d45353755c0`; independent three-axis review approved.
+- Remaining risks/follow-ups: round-three reviewer did not rerun real-data C5/A-B; prior training-only IBIT Oct 12–14 results are recorded and match `docs/fit-quality.md`. Reconcile the configured five-round review count with the workflow's three-round cap separately.
+- Merge danger: two-way door, blast radius `consumers`: incorrect weighting would change calibrated surfaces and downstream reports for users of the C++ calibrator; reverting the code restores prior behavior.
+- Learning captured: none. No gate candidates.
