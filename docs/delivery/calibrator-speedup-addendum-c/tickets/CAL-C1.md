@@ -2,11 +2,11 @@
 
 ## State
 
-- Current: `changes-requested`
-- Last transition: `reviewing` → `changes-requested`
-- At: `2026-10-17T12:43:30Z`
-- Reason/evidence: round 2 spec review found a missing breakdown of relative total-variance band width; see the frozen review snapshot and disposition below. The correction is implemented and verified; awaiting commit and fresh review.
-- Blocker: None for CAL-C1. WP-C5 remains gated on the user's threshold approval.
+- Current: `blocked`
+- Last transition: `changes-requested` → `blocked`
+- At: `2026-10-17T12:54:43Z`
+- Reason/evidence: the third and final review round found a P2 zero-total-excess division in `scripts/analyze_fit_quality.py:490`. The finding remains open and the review workflow's three-round cap is exhausted.
+- Blocker: unresolved review finding after the final permitted round; do not finish CAL-C1 or start dependent WP-C5 under this ticket.
 
 ## State history
 
@@ -21,6 +21,9 @@
 | `reviewing` | `changes-requested` | `2026-10-17T12:31:07Z` | Isolated round 1 review: spec approved; standards requested two P2 corrections and one P3 clarification; verification passed the configured command. |
 | `changes-requested` | `reviewing` | `2026-10-17T12:37:59Z` | Corrections committed in `cdbdfc3`; focused regression and configured full verification passed; fresh round 2 requested. |
 | `reviewing` | `changes-requested` | `2026-10-17T12:43:30Z` | Isolated round 2 review found the required relative total-variance band-width breakdown missing; see review disposition. |
+| `changes-requested` | `reviewing` | `2026-10-17T12:50:40Z` | Added relative total-variance width decomposition in `97e901f`; focused tests, real-data diagnosis, and configured full verification passed; round 3 requested. |
+| `reviewing` | `changes-requested` | `2026-10-17T12:54:43Z` | Round 3 spec axis approved; standards found a P2 divide-by-zero when total squared excess is zero; verification reviewer did not run the configured command. |
+| `changes-requested` | `blocked` | `2026-10-17T12:54:43Z` | Review round cap reached with the round-3 P2 unresolved; no further review round is permitted by the review workflow. |
 
 ## Claim
 
@@ -57,7 +60,7 @@ Produce a reproducible read-only diagnosis of cold-fit misses on the IBIT traini
 
 ## Blocked by
 
-None for CAL-C1.
+The final permitted review round found P2 at `scripts/analyze_fit_quality.py:490`: the contribution calculation divides by `total_excess` without handling the valid zero-total-excess case. The third review round is complete and no further round is available under the review workflow. The issue requires a zero-total-excess behavior and regression test before this ticket can finish.
 
 ## Expected seam
 
@@ -75,7 +78,7 @@ The user-visible result is `docs/fit-quality.md`, with reproducible JSON output 
 ## Verification timeline
 
 | At | Phase | Command | CWD | Commit | Result | Evidence |
-| --- | --- | --- | --- | --- | --- | --- |
+|---|---|---|---|---|---|---|
 | 2026-10-17 | Baseline | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `ef6c788b8e2479b9aa74a1b595fc9844d9094082` | passed | Release build succeeded; CTest 5/5 passed; pytest 10/10 passed. |
 | 2026-10-17 | Real-data diagnosis | `python3 scripts/analyze_fit_quality.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit` | `/home/zhangy/git/ql-essvi` | `f15bc16` | passed | 212/212 independent cold fits converged on 2026-10-12–14; 113,965 valid quotes; 259,978 source contracts reconciled; holdout dates not read. Results and methods are in `docs/fit-quality.md`. |
 | 2026-10-17 | Review round 1 start | Base-to-HEAD review `ef6c788b8e2479b9aa74a1b595fc9844d9094082..ad3b8425855cb3001442163951f65c2b2b694ea7`; three isolated axes | `/home/zhangy/git/ql-essvi` | `ad3b8425855cb3001442163951f65c2b2b694ea7` | reviewing | Frozen diff SHA-256 `d8b11f8d4cbf7d5dd22c29174b7a74ddbf5fc1315f663bdf87efead3199e3949`; three independent reviewers. |
@@ -89,7 +92,9 @@ The user-visible result is `docs/fit-quality.md`, with reproducible JSON output 
 | 2026-10-17 | Red | `.venv/bin/python -m pytest -q tests/test_analyze_fit_quality.py` | `/home/zhangy/git/ql-essvi` | working tree | expected failure | The new assertions failed at collection because `grouped_band_width_quality` was not yet implemented. |
 | 2026-10-17 | Green | `.venv/bin/python -m pytest -q tests/test_analyze_fit_quality.py` | `/home/zhangy/git/ql-essvi` | working tree | passed | Added midpoint-normalized total-variance band width and bucket aggregation; tests verify the formula, bucket assignment, quote counts, cap share, and RMS. Focused suite passed 3/3. |
 | 2026-10-17 | Corrected real-data diagnosis | `python3 scripts/analyze_fit_quality.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit > /tmp/cal-c1-round3.json` | `/home/zhangy/git/ql-essvi` | working tree | passed | 212/212 cold fits converged; 113,965 quotes reconciled. New band-width groups account for 110,355 / 3,597 / 13 quotes (all included quotes); the JSON records the definition and per-group quality metrics. Holdout dates were not read. |
-| 2026-10-17 | Final verification after round-2 correction | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | working tree | passed | Release build succeeded; CTest 5/5 passed; pytest 13/13 passed. |
+| 2026-10-17 | Final verification after round-2 correction | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `97e901f` | passed | Release build succeeded; CTest 5/5 passed; pytest 13/13 passed. |
+| 2026-10-17T12:50:40Z | Review round 3 start | Base-to-HEAD review `ef6c788b8e2479b9aa74a1b595fc9844d9094082..97e901f172abfc9ecd334ac67f9e08ed032f83cb`; three isolated axes | `/home/zhangy/git/ql-essvi` | `97e901f172abfc9ecd334ac67f9e08ed032f83cb` | reviewing | Frozen diff `/tmp/cal-c1-round3.diff`, SHA-256 `37ed769dce23bf4fd4cd4e6beda052b182cf0449bf39004fbcfb5990359d852e`; three independent reviewers. |
+| 2026-10-17T12:54:43Z | Review round 3 | Base-to-HEAD snapshot `ef6c788b8e2479b9aa74a1b595fc9844d9094082..97e901f172abfc9ecd334ac67f9e08ed032f83cb`; three isolated axes | `/home/zhangy/git/ql-essvi` | `97e901f172abfc9ecd334ac67f9e08ed032f83cb` | changes required | Spec: approved, no findings. Standards: P2 mechanical, `total_excess == 0` makes the contribution calculation divide by zero at `scripts/analyze_fit_quality.py:490`. Verification: reviewer did not run the configured command (reported a higher-priority restriction); implementer-run verification for this commit passed Release build, CTest 5/5, pytest 13/13. Real-data analyzer remained implementer-reported at 212/212. Frozen diff SHA-256 `37ed769dce23bf4fd4cd4e6beda052b182cf0449bf39004fbcfb5990359d852e`. |
 
 ## Review dispositions
 
@@ -99,6 +104,7 @@ The user-visible result is `docs/fit-quality.md`, with reproducible JSON output 
 | 1 — Standards P2 (mechanical) | Added `# noqa: E402` suppressions have no ticket waiver or configured linter. | Resolved | Removed both new `noqa` comments; no linter or suppression check was added. |
 | 1 — Standards P3 (judgement) | Ticket says the runner emits the Markdown report, but it prints JSON to stdout. | Resolved | Ticket and report now state that the runner prints JSON and the checked-in Markdown report is transcribed from it. |
 | 2 — Spec P2 (mechanical) | Addendum C §5 WP-C1 requires a breakdown by relative band width; the report only groups by relative option-price spread `(ask-bid)/mid`. | Resolved | Added a separate relative total-variance width `(ask variance - bid variance) / midpoint variance` breakdown with quote counts, above-cap share, RMS, maxima, and summed-excess contribution. The analyzer and report both distinguish this from option-price spread. The test passed, and the real-data runner produced 3,597, 13, and 110,355 quotes in the observed width buckets, totaling 113,965. |
+| 3 — Standards P2 (mechanical) | With zero squared total-variance excess, the analyzer divides each bucket contribution by `total_excess == 0` and raises `ZeroDivisionError`. | Open — blocked by review cap | `scripts/analyze_fit_quality.py:490`; review round 3 was the final allowed round. A zero-total-excess regression and a defined contribution behavior are still required; no fourth review round is available under this ticket. |
 
 ## Gate candidates
 
@@ -111,7 +117,7 @@ The user-visible result is `docs/fit-quality.md`, with reproducible JSON output 
 - Baseline verification: configured Release build, CTest 5/5, pytest 10/10 at base.
 - Branch: `delivery/calibrator-speedup-addendum-c/CAL-C1`
 - Worktree: primary checkout, `/home/zhangy/git/ql-essvi`
-- Commits: `f15bc16` (C1 diagnosis), `ad3b842` (implementation verification record), `cdbdfc3` (round-1 corrections); round-2 correction awaiting commit and final review.
+- Commits: `f15bc16` (C1 diagnosis), `ad3b842` (implementation verification record), `cdbdfc3` (round-1 corrections), `97e901f` (round-2 width-breakdown correction).
 - GitHub Issue: none (local tracker)
 - Tests: C1 analyzer-focused tests passed 3/3; real-data analysis passed on 212/212 training snapshots; configured CTest 5/5 and pytest 13/13 passed after the round-2 correction.
-- Diff review: round 1 findings corrected; round 2 spec finding corrected; third and final review pending.
+- Diff review: spec and width-breakdown findings resolved; third and final review found a new P2 and did not approve the ticket. Ticket blocked at the three-round cap.
