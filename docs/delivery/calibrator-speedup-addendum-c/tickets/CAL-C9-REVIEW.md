@@ -2,17 +2,20 @@
 
 ## State
 
-- Current: `ready`
-- Last transition: `draft` → `ready`
-- At: `2026-10-17T18:03:07Z`
-- Reason/evidence: The user approved C9 (“c9 approved”). This review-only ticket re-accepts the corrected full C9 deliverable on its fixed branch after the original ticket exhausted its review rounds.
-- Blocker: None for this review ticket.
+- Current: `implementing`
+- Last transition: `baseline-passed` → `implementing`
+- At: `2026-10-17T18:05:52Z`
+- Reason/evidence: Review-only scope confirmed after the new review branch passed configured Release verification (CTest 5/5, pytest 33/33). Production code is already fixed and committed; no production edits are planned in this ticket.
+- Blocker: None.
 
 ## State history
 
 | From | To | At | Evidence |
 | --- | --- | --- | --- |
 | `draft` | `ready` | `2026-10-17T18:03:07Z` | User approved C9; the complete implementation and review scope are recorded here. |
+| `ready` | `baseline-checking` | `2026-10-17T18:03:38Z` | Claimed by `omp coding assistant`; review branch created from fixed C9 commit `1dac3aa1ca3239397f4b5eeee8ceab6cb1ab0cd5`. |
+| `baseline-checking` | `baseline-passed` | `2026-10-17T18:05:45Z` | New branch configured Release build passed; CTest 5/5 and pytest 33/33. |
+| `baseline-passed` | `implementing` | `2026-10-17T18:05:52Z` | Review-only scope confirmed; code is unchanged from the fixed C9 deliverable. Focused expiry-parity test passed 1/1. |
 
 ## Claim
 
@@ -75,6 +78,8 @@ The user-facing result is `docs/fit-quality.md`. Review the shared expiry and we
 
 | At | Phase | Command | CWD | Commit | Result | Evidence |
 |---|---|---|---|---|---|---|
+| 2026-10-17T18:05:45Z | Baseline | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `9866e5502c2e49649e5dd29d0e0ae7893ff1469d` | passed | Release configure/build succeeded; CTest 5/5 passed; pytest 33/33 passed. |
+| 2026-10-17T18:05:52Z | Focused expiry-parity check | `.venv/bin/python -m pytest -q tests/test_vega_weighting.py::test_converter_and_replay_emit_identical_vega_weights` | `/home/zhangy/git/ql-essvi` | working tree | passed | Cross-UTC-midnight fixture verifies the shared New York date, same-day/past exclusion, next-session inclusion, and matching converter/replay weights; 1 passed. |
 
 ## Review dispositions
 
