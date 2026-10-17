@@ -2,10 +2,10 @@
 
 ## State
 
-- Current: `review-approved`
-- Last transition: `reviewing` → `review-approved`
-- At: `2026-10-17T14:50:43Z`
-- Reason/evidence: Final round 3 independently approved the full C1 range across spec, standards, and verification; the configured full suite passed. See the round-3 review record and verification timeline.
+- Current: `finished`
+- Last transition: `review-approved` → `finished`
+- At: `2026-10-17T14:52:32Z`
+- Reason/evidence: Final round 3 review approved the full C1 range; configured verification passed at reviewed HEAD `998d5a56af2ab58907d1f64a68701ffc422c3659`; the handoff and learning decision are recorded in the completion summary. Review-approval ticket record committed as `eff8ca55e3687c74ba2a577c79019a1d2c3f07db`.
 - Blocker: None for C1. DEC-006 threshold approval remains a separate gate before WP-C5.
 
 ## State history
@@ -23,6 +23,7 @@
 | `reviewing` | `changes-requested` | `2026-10-17T14:37:22Z` | Round 2 found a P2 permanent-test gap for the snapshot-to-fit adapter; see Review round 2 and disposition. |
 | `changes-requested` | `reviewing` | `2026-10-17T14:45:08Z` | Accepted round-2 correction committed in `9cc6c0aaf5236931876377f6569f86e49f1567d1`; focused adapter tests 9/9, Release build passed, CTest 5/5, pytest 19/19, and the real-data C1 recheck passed. Final permitted round 3 review requested. |
 | `reviewing` | `review-approved` | `2026-10-17T14:50:43Z` | Final round-3 spec, standards, and verification review approved the full range; configured full suite passed. |
+| `review-approved` | `finished` | `2026-10-17T14:52:32Z` | Completed after round-3 approval and configured verification; no new durable learning met the capture bar. See reviewed HEAD, branch, residual DEC-006 gate, and handoff details below and in the completion summary. |
 
 ## Claim
 
@@ -163,6 +164,8 @@ None.
 ## Delivery record
 
 - Review base: `ef6c788b8e2479b9aa74a1b595fc9844d9094082`
+- Reviewed deliverable HEAD: `998d5a56af2ab58907d1f64a68701ffc422c3659` (round-3 review range endpoint; full configured verification passed here).
+- Review-approval ticket record commit: `eff8ca55e3687c74ba2a577c79019a1d2c3f07db`.
 - Branch: `delivery/calibrator-speedup-addendum-c/CAL-C1-REVIEW`
 - Branch start: finished CAL-C1-F1 branch at `0f625dba8d2cac43efe2cac6c4641f78c6522570`
 - Worktree: primary checkout, `/home/zhangy/git/ql-essvi`
@@ -170,4 +173,5 @@ None.
 - Review round 1 snapshot: SHA-256 `8b02dfba2bc0712a29488386280322d2b7fd257b1659acbde5bdcabedac51ddc`.
 - Review round 2 snapshot: SHA-256 `5593589145519f4c474c78aa7f4ac667266d917d33e53c5fe71864458474893e`.
 - Review round 3 snapshot: SHA-256 `9d0d8deb93daa62ec70c98f6e47ed7bc2b8015c1f26d16e4640c320c86cc89df`.
+- Learning capture: None; no new durable repository-specific learning met the capture bar.
 - Remaining: None for C1 acceptance. DEC-006 threshold approval remains separate before WP-C5.
