@@ -2,10 +2,10 @@
 
 ## State
 
-- Current: `implementing`
-- Last transition: `baseline-passed` → `implementing`
-- At: `2026-10-17T14:14:50Z`
-- Reason/evidence: exact-base baseline passed at `ef6c788b8e2479b9aa74a1b595fc9844d9094082`; the current branch holds the complete C1 deliverable and F1 correction for fresh review. This is a review-only replacement ticket; no source code changes are planned.
+- Current: `implemented`
+- Last transition: `implementing` → `implemented`
+- At: `2026-10-17T14:17:41Z`
+- Reason/evidence: review-only deliverable is committed at `bfe35f735fd007f137368e6e9326085d1dea553b`; final configured verification passed at this HEAD. The original C1 analysis and F1 zero-excess correction are included for whole-deliverable review.
 - Blocker: None for this replacement ticket. WP-C5 remains gated on explicit cleaning-threshold approval.
 
 ## State history
@@ -16,6 +16,7 @@
 | `ready` | `baseline-checking` | `2026-10-17` | Claimed by `omp coding assistant`; branch `delivery/calibrator-speedup-addendum-c/CAL-C1-REVIEW` created from the finished CAL-C1-F1 branch. |
 | `baseline-checking` | `baseline-passed` | `2026-10-17T14:12:18Z` | Reused exact-base baseline evidence at `ef6c788b8e2479b9aa74a1b595fc9844d9094082` from CAL-C1: Release build passed, CTest 5/5, pytest 10/10. |
 | `baseline-passed` | `implementing` | `2026-10-17T14:14:50Z` | Review-only scope confirmed; source code already exists on the fixed branch. Fresh configured verification, real-data recheck, and full-diff review are being performed. |
+| `implementing` | `implemented` | `2026-10-17T14:17:41Z` | Review-only full-deliverable scope confirmed; current committed deliverable passed fresh configured verification at `bfe35f735fd007f137368e6e9326085d1dea553b`. No code edits are in this ticket. |
 
 ## Claim
 
@@ -71,6 +72,7 @@ This ticket replaces a completed implementation with a fresh whole-deliverable r
 | 2026-10-17 | Spec-copy checksum | `sha256sum /home/zhangy/work/ql-essvi-addendum-c.md docs/calibrator-speedup-addendum-c.md` | `/home/zhangy/git/ql-essvi` | `0f625dba8d2cac43efe2cac6c4641f78c6522570` | passed | Both files have SHA-256 `e504c545c1e7b8074c9149e297bd14df1fd581d89327597b0f09076a8621010a`. |
 | 2026-10-17T14:16:23Z | Full verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `0f625dba8d2cac43efe2cac6c4641f78c6522570` | passed | Release build succeeded; CTest 5/5 passed; pytest 15/15 passed. |
 | 2026-10-17 | Real-data C1 recheck | `python3 scripts/analyze_fit_quality.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit > /tmp/cal-c1-review.json` | `/home/zhangy/git/ql-essvi` | `0f625dba8d2cac43efe2cac6c4641f78c6522570` | passed | 212/212 cold fits converged on Oct 12–14; 113,965 valid quotes reconciled against 259,978 source contracts. Overall above-cap share 71.71%, RMS 2.410. Relative total-variance width groups contain 110,355 / 3,597 / 13 quotes; Oct 15–16 were not read. |
+| 2026-10-17T14:17:41Z | Final verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `bfe35f735fd007f137368e6e9326085d1dea553b` | passed | Release build succeeded; CTest 5/5 passed; pytest 15/15 passed. |
 
 ## Delivery record
 
