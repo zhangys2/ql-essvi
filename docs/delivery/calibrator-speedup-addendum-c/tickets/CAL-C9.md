@@ -2,10 +2,10 @@
 
 ## State
 
-- Current: `changes-requested`
-- Last transition: `reviewing` → `changes-requested`
-- At: `2026-10-17T16:45:59+00:00`
-- Reason/evidence: Round 1 standards review found invalid included-weight ingress gaps and excluded-row schema validation gaps; verification review identified missing blank-weight, IBIT-exclusion parity, and warm-local-equation coverage. Spec review approved. Findings and accepted dispositions are recorded below.
+- Current: `reviewing`
+- Last transition: `changes-requested` → `reviewing`
+- At: `2026-10-17T16:52:32Z`
+- Reason/evidence: Round 1 corrections are committed as `438d073`; focused regressions, configured Release/CTest/pytest verification, and the training-only IBIT A/B smoke passed. Correction evidence is appended below; a new frozen snapshot is entering round 2 review.
 - Blocker: None.
 
 ## State history
@@ -19,6 +19,7 @@
 | `implementing` | `implemented` | `2026-10-17T16:33:30+00:00` | C9 implementation commit `a2621b4c6fb7c71a040827b810e2af34705a61f2` recorded; acceptance behavior, configured verification, and training-only A/B are complete. |
 | `implemented` | `reviewing` | `2026-10-17T16:34:31+00:00` | Final verification passed and the implementation commit is fixed; independent review is starting. |
 | `reviewing` | `changes-requested` | `2026-10-17T16:45:59+00:00` | Round 1 review accepted five findings for correction: validate included weights at C++ fit ingress and reject invalid weighted rows; reject excluded-row weights; cover blank current-schema defaults; cover IBIT excluded-row parity; exercise warm local weighted equations. |
+| `changes-requested` | `reviewing` | `2026-10-17T16:52:32Z` | Corrections committed as `438d073`; focused regression, configured full verification, and training-only IBIT A/B smoke passed. The updated fixed snapshot is entering round 2 review. |
 
 ## Claim
 
@@ -95,6 +96,7 @@ Compute normalized per-quote vega sensitivity in the IBIT quote preparation and 
 | 2026-10-17T16:52:08Z | Review-gap Green extension | `export PATH="$PWD/.venv/bin:$PATH"; cmake --build build --target essvi_calibrator_regression_tests -j2 && ctest --test-dir build --output-on-failure -R essvi_calibrator_regression_tests` | `/home/zhangy/git/ql-essvi` | working tree | passed | Added malformed textual weight CSV coverage; the row is retained and fit ingress rejects it with the finite-positive error. CTest 1/1. |
 | 2026-10-17T16:52:08Z | Final correction verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | working tree | passed | Release configure/build succeeded; CTest 5/5 passed; pytest 33/33 passed. |
 | 2026-10-17T16:52:08Z | A/B correction smoke | `.venv/bin/python scripts/evaluate_vega_weighting.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit > /tmp/cal-c9-review-fix-evaluation.json` | `/home/zhangy/git/ql-essvi` | working tree | passed | Training-only IBIT Oct 12–14: 212/212 fits per arm, 90,954 quotes. Summed objective 0.3268896906491981 unit versus 0.13466688189465315 vega-weighted; no holdout dates or SPY used. Existing report-only comparison remains unchanged. |
+| 2026-10-17T16:52:32Z | Round 1 correction commit | `git commit -m "Validate C9 vega weights at fit ingress"` | `/home/zhangy/git/ql-essvi` | `438d073` | committed | Corrected included-weight ingress/parser handling, normalized-schema exclusion semantics, and all five review coverage gaps. |
 
 ## Evidence and decision references
 
@@ -115,6 +117,20 @@ Compute normalized per-quote vega sensitivity in the IBIT quote preparation and 
 | 1 | P3: add coverage that blank weight in a current 14-column CSV defaults to 1.0. | accepted | Missing coverage verified in the C++ CRLF fixtures; correction evidence will be appended before round 2. |
 | 1 | P3: cover excluded-row blank weight parity in the IBIT converter and replay paths. | accepted | Existing converter/replay parity fixture contains included rows only; correction evidence will be appended before round 2. |
 | 1 | P3: test the weighted warm local objective/Jacobian path when the cap gate does not force fallback. | accepted | Existing warm test covers cap fallback only; correction evidence will be appended before round 2. |
+
+## Correction evidence — round 1
+
+Correction commit: `438d073` (`Validate C9 vega weights at fit ingress`).
+
+| Finding | Correction evidence |
+| --- | --- |
+| P2 included weight validation and invalid CSV retention | `cpp/calibrator.cpp::hasInvalidIncludedWeight` rejects nonfinite/nonpositive included weights from both `calibrate` and `calibrateWarm`. `readQuotes` retains zero and malformed textual weights as invalid values instead of omitting rows. `essvi_calibrator_regression_tests` passed on 2026-10-17T16:52:08Z; covers direct zero/negative/NaN cold and warm inputs, zero and malformed CSV weights, and fit-ingress error. |
+| P3 excluded-row schema weight | `python/validate_schema.py::validate` now rejects nonempty weight on `included=false`. `test_normalized_schema_accepts_legacy_and_weighted_files` passed with the excluded-row rejection regression on 2026-10-17T16:49:16Z. |
+| P3 blank 14-column default | `legacyAndWeightedCsvControlColdObjective` verifies blank `weight` on the current 14-column header loads as 1.0; `essvi_calibrator_regression_tests` passed on 2026-10-17T16:52:08Z. |
+| P3 IBIT excluded-row parity | `test_converter_and_replay_emit_identical_vega_weights` now includes an excluded ATM call and proves both paths emit matching rows with blank excluded weight; passed on 2026-10-17T16:49:16Z. |
+| P3 weighted warm local equations | `weightedWarmLocalFitUsesWeightedEquations` forces the warm local solver with cap gate passing, checks objective against the weighted band-loss formula, and observes a parameter change under nonuniform weight; `essvi_calibrator_regression_tests` passed on 2026-10-17T16:52:08Z. |
+
+Configured correction verification passed on 2026-10-17T16:52:08Z: Release configure/build, CTest 5/5, pytest 33/33. The training-only IBIT A/B reran on the same scope; 212/212 snapshots per arm and 90,954 quotes; unit summed objective `0.3268896906491981`, weighted `0.13466688189465315`.
 
 ## Review record
 
