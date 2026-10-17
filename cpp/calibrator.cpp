@@ -904,6 +904,14 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
   out.converged = out.error.empty();
   return out;
 }
+bool hasInvalidIncludedWeight(const std::vector<Quote>& quotes) {
+  for (const auto& quote : quotes)
+    if (quote.included &&
+        (!std::isfinite(quote.weight) || quote.weight <= 0.0))
+      return true;
+  return false;
+}
+
 void finishResult(CalibrationResult& result, Clock::time_point started,
                   std::uint64_t bound_calls) {
   result.objective_evaluations = static_cast<std::uint64_t>(result.iterations);
@@ -929,8 +937,14 @@ std::vector<Quote> readQuotes(const std::string& path) {
       double weight = 1.0;
       if (weight_column != ix.end() && weight_column->second < v.size() &&
           !v[weight_column->second].empty()) {
-        weight = val(v[weight_column->second]);
-        if (!std::isfinite(weight) || weight <= 0.0) continue;
+        const auto& weight_text = v[weight_column->second];
+        try {
+          std::size_t parsed = 0;
+          weight = std::stod(weight_text, &parsed);
+          if (parsed != weight_text.size()) weight = NAN;
+        } catch (...) {
+          weight = NAN;
+        }
       }
       out.push_back({v[ix["quote_id"]], val(v[ix["time_to_expiry"]]),
                      val(v[ix["forward"]]), val(v[ix["discount_factor"]]),
@@ -949,6 +963,11 @@ CalibrationResult calibrate(const std::vector<Quote>& quotes) {
   const auto started = Clock::now();
   std::uint64_t bound_calls = 0;
   detail::MmBoundCallScope bound_call_scope(&bound_calls);
+  if (hasInvalidIncludedWeight(quotes)) {
+    out.error = "included quote weight must be finite and positive";
+    finishResult(out, started, bound_calls);
+    return out;
+  }
   const auto grouping_started = Clock::now();
   const auto groups = groupQuotes(quotes);
   out.timings.quote_grouping_seconds = secondsSince(grouping_started);
@@ -1002,6 +1021,11 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
   if (!std::isfinite(options.quote_tol) || options.quote_tol < 0.0 ||
       !std::isfinite(options.quote_cap) || options.quote_cap < 0.0) {
     out.error = "invalid warm calibration options";
+    finish();
+    return out;
+  }
+  if (hasInvalidIncludedWeight(current_quotes)) {
+    out.error = "included quote weight must be finite and positive";
     finish();
     return out;
   }

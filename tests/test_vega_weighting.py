@@ -79,6 +79,7 @@ def test_converter_and_replay_emit_identical_vega_weights(tmp_path):
             _contract("near", 101.0),
             _contract("mid", 115.0),
             _contract("wing", 150.0),
+            _contract("excluded", 100.0),
         ]
     )
     replay = prepare_snapshot(snapshot, "IBIT")
@@ -89,14 +90,25 @@ def test_converter_and_replay_emit_identical_vega_weights(tmp_path):
     )
 
     assert output_path is not None
-    assert row_count == included_count == replay.valid_quotes == 3
+    assert row_count == 4
+    assert included_count == replay.valid_quotes == 3
     with output_path.open(newline="", encoding="utf-8") as stream:
         converted_rows = list(csv.DictReader(stream))
     assert converter.HEADER[-1] == "weight"
-    converted_weights = {row["quote_id"]: float(row["weight"]) for row in converted_rows}
-    replay_weights = {row[0]: float(row[13]) for row in replay.csv_rows}
-    assert converted_weights.keys() == replay_weights.keys()
-    assert converted_weights == replay_weights
+    converted_by_id = {row["quote_id"]: row for row in converted_rows}
+    replay_by_id = {row[0]: row for row in replay.csv_rows}
+    assert converted_by_id.keys() == replay_by_id.keys()
+    for quote_id, converted in converted_by_id.items():
+        replay_row = replay_by_id[quote_id]
+        assert converted["included"] == replay_row[11]
+        assert converted["weight"] == replay_row[13]
+    assert converted_by_id["excluded"]["included"] == "false"
+    assert converted_by_id["excluded"]["weight"] == ""
+    assert all(
+        float(row["weight"]) > 0.0
+        for row in converted_rows
+        if row["included"] == "true"
+    )
 
 
 def test_normalized_schema_accepts_legacy_and_weighted_files(tmp_path):
@@ -132,6 +144,23 @@ def test_normalized_schema_accepts_legacy_and_weighted_files(tmp_path):
             text=True,
         )
         assert result.returncode == 0, result.stderr
+
+    excluded = row.copy()
+    excluded[8:11] = ["", "", ""]
+    excluded[11] = "false"
+    excluded[12] = "not_out_of_the_money"
+    path = tmp_path / "excluded-weighted.csv"
+    with path.open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(converter.HEADER)
+        writer.writerow(excluded + ["1.25"])
+    result = subprocess.run(
+        [sys.executable, str(validator), "normalized", str(path)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "excluded quote weight must be empty" in result.stderr
 
 
 def test_vega_ab_runs_unit_and_weighted_cold_arms_on_training_only(

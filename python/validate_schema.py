@@ -72,6 +72,8 @@ def validate(kind, rows):
             if row["option_type"] not in {"C", "P"}:
                 fail(f"row {i}: option_type must be C/P")
             included = boolean(row["included"], "included", i)
+            if "weight" in row and not included and row["weight"] != "":
+                fail(f"row {i}: excluded quote weight must be empty")
             fields = ("bid_iv", "ask_iv", "mid_iv")
             if "weight" in row:
                 fields += ("weight",)
