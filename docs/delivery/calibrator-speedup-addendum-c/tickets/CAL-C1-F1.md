@@ -2,11 +2,11 @@
 
 ## State
 
-- Current: `implementing`
-- Last transition: `baseline-passed` → `implementing`
-- At: `2026-10-17T14:00:59Z`
-- Reason/evidence: baseline passed at declared base `e4c76784a1a788e8f4b44dc0f3d7fd703d28382b`; contribution aggregation is the approved, bounded test seam.
-- Blocker: None for CAL-C1-F1. CAL-C1 remains blocked until this follow-up is implemented and independently reviewed.
+- Current: `implemented`
+- Last transition: `implementing` → `implemented`
+- At: `2026-10-17T14:03:54Z`
+- Reason/evidence: committed as `bc611413d699c5370007eba88fc6773f0cc2a1a4`; Red/Green, JSON smoke, real-data recheck, and configured full verification are recorded below.
+- Blocker: None for CAL-C1-F1. CAL-C1 remains blocked until this follow-up is independently reviewed and reconciled.
 
 ## State history
 
@@ -16,6 +16,7 @@
 | `ready` | `baseline-checking` | `2026-10-17` | Claimed by `omp coding assistant`; branch `delivery/calibrator-speedup-addendum-c/CAL-C1-F1` created from the preceding ticket's commit in the primary checkout. |
 | `baseline-checking` | `baseline-passed` | `2026-10-17T14:00:42Z` | Configured Release build passed; CTest 5/5 and pytest 13/13 passed at base `e4c76784a1a788e8f4b44dc0f3d7fd703d28382b`. |
 | `baseline-passed` | `implementing` | `2026-10-17T14:00:59Z` | Baseline evidence and the focused contribution-aggregation test seam confirmed before the first red run. |
+| `implementing` | `implemented` | `2026-10-17T14:03:54Z` | Commit `bc611413d699c5370007eba88fc6773f0cc2a1a4`; focused tests 5/5, zero-excess JSON smoke passed, real-data diagnosis passed 212/212, and configured full verification passed CTest 5/5 and pytest 15/15. |
 
 ## Claim
 
@@ -74,5 +75,6 @@ None for CAL-C1-F1. Completion of this ticket does not by itself change CAL-C1's
 - Base commit: `e4c76784a1a788e8f4b44dc0f3d7fd703d28382b`
 - Branch: `delivery/calibrator-speedup-addendum-c/CAL-C1-F1`
 - Worktree: primary checkout, `/home/zhangy/git/ql-essvi`
+- Commit: `bc611413d699c5370007eba88fc6773f0cc2a1a4`
 - GitHub Issue: none (local tracker)
 - Review: one fresh standard review required for this ticket; CAL-C1's three review rounds are not reopened here.
