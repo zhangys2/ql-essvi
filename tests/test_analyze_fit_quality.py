@@ -191,6 +191,31 @@ def test_contribution_percentages_preserve_positive_total_shares():
     }
 
 
+def test_fit_snapshot_keeps_c1_default_unfiltered(tmp_path, monkeypatch):
+    snapshot = _fit_adapter_snapshot()
+    call = snapshot["contracts"][1]
+    mid = 0.5 * (call["bid"] + call["ask"])
+    call["bid"] = mid * 0.6
+    call["ask"] = mid * 1.4
+    _stub_fit_cli(
+        monkeypatch,
+        converged=True,
+        fitted_variances={"101": 0.05, "202": 0.001},
+    )
+
+    prepared, observations = analysis.fit_snapshot(
+        snapshot,
+        tmp_path / "chain_20261012.jsonl.gz",
+        tmp_path / "essvi_fit",
+        sequence=1,
+    )
+
+    assert prepared.valid_quotes == 2
+    assert prepared.cleaning_exclusions["relative_spread"] == 0
+    assert prepared.excluded_cleaning_combined == 0
+    assert len(observations) == 2
+
+
 def test_fit_snapshot_maps_reordered_fit_rows_to_source_contracts_and_metrics(
     tmp_path, monkeypatch
 ):

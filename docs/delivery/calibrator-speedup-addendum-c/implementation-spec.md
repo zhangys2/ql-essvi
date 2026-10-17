@@ -3,7 +3,7 @@
 - Intake: decision-only
 - Base commit: `ef6c788b8e2479b9aa74a1b595fc9844d9094082`
 - Source handoff: `docs/calibrator-speedup-addendum-c.md`
-- Approval: the user instructed “copy the file to this repo and implement” after confirming mandatory vega weighting, IBIT-first scope, vega error aggregation, WP-C7 approval, and report-only A/B. Treat that instruction as approval of this implementation scope. User approval remains required for the WP-C5 cleaning thresholds after WP-C1.
+- Approval: the user instructed “copy the file to this repo and implement” after confirming mandatory vega weighting, IBIT-first scope, vega error aggregation, WP-C7 approval, and report-only A/B. Treat that instruction as approval of this implementation scope. The user explicitly approved the less-restrictive WP-C5 cleaning policy under DEC-006 on 2026-10-17; the approved thresholds are recorded below.
 
 ## Source handoff
 
@@ -38,12 +38,13 @@ The C++ calibrator currently minimizes unweighted squared total-variance excess 
 - **DEC-003 — A/B is report-only.** Compare unweighted and vega-weighted cold fits on cleaned IBIT data, report both sets of metrics, and keep vega weighting as the default regardless of the result.
 - **DEC-004 — WP-C7 approved.** Re-base quality criteria on cleaned IBIT data; retain the specified cold-latency limits of 250 ms p99 for 40×100 and 100 ms p99 for the real replay. The placeholder quality values are to be replaced by measured criteria in WP-C7.
 - **DEC-005 — holdout protocol.** Derive thresholds using Oct 12–14; evaluate once on Oct 15–16. Do not use holdout results to choose filters or tune weights.
-- **DEC-006 — filter selection approval.** WP-C1 proposes minimum bid, minimum premium, maximum relative spread, and strike-window rules from the IBIT training-day distributions. The user approves the final thresholds before WP-C5 implements them.
+- **DEC-006 — approved less-restrictive filter policy.** The user explicitly approved this combined policy on 2026-10-17 before WP-C5: raw bid `> $0`; raw mid premium `(bid+ask)/2 >= $0.05` per option share; raw relative price spread `(ask-bid)/((bid+ask)/2) <= 0.6666666667`; and absolute European Black–Scholes delta from the existing mid IV in the inclusive range `[0.02, 0.95]`. The C1 report's post-hoc cap/RMS values are worse than the unfiltered fit; WP-C5 must measure refitted effects rather than claim the policy improves fit quality.
 
 ## Implementation decisions and inferences
 
 - Run the tickets in this dependency order: WP-C1 → WP-C5 → WP-C9 → WP-C2 → WP-C3 → WP-C4 → WP-C6 → WP-C7 → WP-C8. The later tickets use the preceding ticket's committed output as their base; do not branch every ticket from the original base.
 - WP-C1 is IBIT-only for threshold development. Report the prescribed expiry, moneyness, premium, relative-band-width, option-type, and fetch-position breakdowns on Oct 12–14; reserve Oct 15–16 for WP-C7's one-time holdout evaluation.
+- WP-C5 applies the approved DEC-006 policy consistently in the converter and replay; per-rule counts are independent (overlaps are allowed), and combined exclusions count each quote once. Delta uses the current European mid-IV/forward until WP-C4.
 - For WP-C9, interpret `weight` as the per-quote scale `u_i` in the specified squared loss, `sum((u_i * dw_i)^2)`. Use median-one normalization per snapshot (the spec's concrete example) and retain raw sensitivity separately for price-space reporting. Missing `weight` means 1.0. Unweighted cap metrics remain visible as required; the A/B does not choose the production objective.
 - Keep the existing European inversion until WP-C4, as the specified work-package order requires an apples-to-apples baseline. At WP-C4, derive/document pricing inputs from the cleaned parity/forward results where possible; if the data cannot determine a defensible rate/carry input for the American model, stop that ticket and request the missing decision rather than inventing it.
 - WP-C3 may implement offline timestamp filtering/adjustment in the replay path. Any live collector change remains a separate approval gate.
@@ -75,7 +76,7 @@ The C++ calibrator currently minimizes unweighted squared total-variance excess 
 
 ## Risks and blockers
 
-- **Next approval gate:** WP-C5 cannot start until the user approves WP-C1's proposed cleaning thresholds (DEC-006).
+- **DEC-006 threshold gate:** resolved by the user's explicit approval of the less-restrictive policy on 2026-10-17; CAL-C5 is unblocked. WP-C5 must still measure refitted outcomes and must not claim post-hoc masked metrics predict them.
 - **American-model inputs:** WP-C4 is blocked if cleaned parity data and available repository inputs cannot provide defensible rates/carry for the specified American inversion; do not substitute guessed assumptions.
 - **Holdout leakage:** report only the planned one-time Oct 15–16 evaluation; do not use those days to select cleaning or loss parameters.
 - **Performance portability:** report the host/compiler/load for the 250 ms and 100 ms cold-p99 criteria; no cross-host comparison is implied.

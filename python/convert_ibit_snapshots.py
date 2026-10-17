@@ -29,6 +29,16 @@ HEADER = [
     "included",
     "filter_reason",
 ]
+CLEANING_RULES = (
+    "minimum_bid",
+    "minimum_premium",
+    "relative_spread",
+    "delta_window",
+)
+MINIMUM_PREMIUM = 0.05
+MAXIMUM_RELATIVE_SPREAD = 0.6666666667
+MINIMUM_ABS_DELTA = 0.02
+MAXIMUM_ABS_DELTA = 0.95
 UTC = dt.timezone.utc
 
 
@@ -97,7 +107,59 @@ def implied_volatility(price, forward, strike, time_years, is_call):
     return 0.5 * (low + high)
 
 
-def quote_row(contract, quote_index, effective_date, expiry_value, time_years, forward):
+def cleaning_reasons(
+    bid,
+    ask,
+    mid_iv,
+    forward,
+    strike,
+    time_years,
+    option_type,
+    *,
+    rules=CLEANING_RULES,
+):
+    selected = set(rules)
+    unknown = selected.difference(CLEANING_RULES)
+    if unknown:
+        raise ValueError(f"unknown cleaning rules: {sorted(unknown)}")
+    premium = 0.5 * (bid + ask)
+    relative_spread = (ask - bid) / premium if premium > 0.0 else math.inf
+    sigma_root_t = mid_iv * math.sqrt(time_years)
+    d1 = (math.log(forward / strike) + 0.5 * sigma_root_t**2) / sigma_root_t
+    call_delta = norm_cdf(d1)
+    abs_delta = abs(call_delta if option_type == "C" else call_delta - 1.0)
+    failed = {
+        "minimum_bid": bid <= 0.0,
+        "minimum_premium": premium < MINIMUM_PREMIUM,
+        "relative_spread": relative_spread > MAXIMUM_RELATIVE_SPREAD,
+        "delta_window": not MINIMUM_ABS_DELTA <= abs_delta <= MAXIMUM_ABS_DELTA,
+    }
+    return tuple(rule for rule in CLEANING_RULES if rule in selected and failed[rule])
+
+
+def empty_cleaning_counts():
+    return {**{rule: 0 for rule in CLEANING_RULES}, "combined": 0}
+
+
+def add_cleaning_exclusions(counts, reason):
+    labels = set(reason.split(";"))
+    matched = [rule for rule in CLEANING_RULES if rule in labels]
+    for rule in matched:
+        counts[rule] += 1
+    if matched:
+        counts["combined"] += 1
+
+
+def quote_row(
+    contract,
+    quote_index,
+    effective_date,
+    expiry_value,
+    time_years,
+    forward,
+    *,
+    cleaning_rules=CLEANING_RULES,
+):
     identifier = contract.get("conId") or contract.get("localSymbol") or quote_index
     right = str(contract.get("right") or "").upper()
     option_type = right if right in ("C", "P") else ""
@@ -123,6 +185,20 @@ def quote_row(contract, quote_index, effective_date, expiry_value, time_years, f
         ask_iv = implied_volatility(ask, forward, strike, time_years, is_call)
         if bid_iv is None or ask_iv is None:
             reason = "iv_inversion_failed"
+        else:
+            mid_iv = 0.5 * (bid_iv + ask_iv)
+            failed_rules = cleaning_reasons(
+                bid,
+                ask,
+                mid_iv,
+                forward,
+                strike,
+                time_years,
+                option_type,
+                rules=cleaning_rules,
+            )
+            if failed_rules:
+                reason = ";".join(failed_rules)
 
     included = not reason
     if not included:
@@ -146,7 +222,9 @@ def quote_row(contract, quote_index, effective_date, expiry_value, time_years, f
     ], included
 
 
-def convert_snapshot(snapshot, output_dir, source_name, line_number):
+def convert_snapshot(
+    snapshot, output_dir, source_name, line_number, *, cleaning_rules=CLEANING_RULES
+):
     timestamp = snapshot_time(snapshot)
     effective_date = timestamp.date()
     stamp_ms = int(timestamp.timestamp() * 1000.0)
@@ -167,6 +245,7 @@ def convert_snapshot(snapshot, output_dir, source_name, line_number):
 
     rows = []
     valid_quotes = 0
+    cleaning_counts = empty_cleaning_counts()
     for index, contract in enumerate(contracts, start=1):
         raw_expiry = contract.get("expiry")
         expiry_text = ""
@@ -187,21 +266,25 @@ def convert_snapshot(snapshot, output_dir, source_name, line_number):
             expiry_text,
             time_years,
             spot,
+            cleaning_rules=cleaning_rules,
         )
         rows.append(row)
+        add_cleaning_exclusions(cleaning_counts, row[12])
         valid_quotes += included
 
     if valid_quotes == 0:
-        return None, len(rows), valid_quotes
+        return None, len(rows), valid_quotes, cleaning_counts
 
     with output_path.open("x", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream)
         writer.writerow(HEADER)
         writer.writerows(rows)
-    return output_path, len(rows), valid_quotes
+    return output_path, len(rows), valid_quotes, cleaning_counts
 
 
-def convert_directory(input_dir, output_dir, snapshot_limit=None):
+def convert_directory(
+    input_dir, output_dir, snapshot_limit=None, *, cleaning_rules=CLEANING_RULES
+):
     paths = sorted(input_dir.glob("chain_*.jsonl.gz"))
     if not paths:
         raise FileNotFoundError(f"no chain_*.jsonl.gz files in {input_dir}")
@@ -213,19 +296,28 @@ def convert_directory(input_dir, output_dir, snapshot_limit=None):
                 if not line.strip():
                     continue
                 snapshot = json.loads(line)
-                output_path, rows, valid = convert_snapshot(
-                    snapshot, output_dir, path, line_number
+                output_path, rows, valid, cleaning_counts = convert_snapshot(
+                    snapshot, output_dir, path, line_number, cleaning_rules=cleaning_rules
+                )
+                exclusion_text = " ".join(
+                    f"excluded_{rule}={cleaning_counts[rule]}"
+                    for rule in CLEANING_RULES
+                )
+                exclusion_text += (
+                    f" excluded_cleaning_combined={cleaning_counts['combined']}"
                 )
                 if output_path is None:
                     print(
                         f"{path}:{line_number} -> skipped: "
                         "no valid OTM two-sided quotes; "
+                        f"{exclusion_text}; "
                         "Black-Scholes European stand-in for American IVs"
                     )
                 else:
                     print(
                         f"{path}:{line_number} -> {output_path}: "
                         f"{valid}/{rows} valid OTM two-sided quotes; "
+                        f"{exclusion_text}; "
                         "Black-Scholes European stand-in for American IVs"
                     )
                 converted += 1

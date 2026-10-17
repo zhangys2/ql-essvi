@@ -112,7 +112,7 @@ The signed residual is fitted total variance minus the midpoint of the bid/ask t
 
 The underlying move is the log return from the start to end underlying midpoint of each collection; the response is that snapshot's median signed residual. Across 212 snapshots, the regression slope is 0.01442 and R² is 0.0465. Collection duration was 98.155 s p10, 102.164 s median, 106.175 s p90, and 106.429 s maximum. The signed log-move p10/median/p90 was -0.000651 / 0 / 0.000649, with maximum absolute move 0.002368. The low explanatory power is descriptive evidence, not proof that asynchrony has no effect; these regressions do not establish causality.
 
-## Cleaning candidates for approval (WP-C5 gate)
+## C1 post-hoc cleaning candidates (not refits)
 
 The candidate population is the 113,965 currently included quotes. Counts below are per-rule effects on the training split. Snapshot exclusion quantiles are p10 / median / p90, followed by the maximum snapshot count. `Retained share / RMS` are the post-hoc full-data-fit metrics described above; they do not predict the result of refitting after cleaning.
 
@@ -137,11 +137,31 @@ The minimum observed positive bid is `$0.01`. The existing European IV inversion
 4. **Near-forward and put buckets have high miss rates.** `0 < k <= 0.05` has 92.44% above cap and 28.69% of summed excess². Puts have a higher above-cap share than calls (76.08% vs 66.46%), while calls contribute more total squared excess because of their counts and premium mix.
 5. **Fetch-order gradients are weak in this sample.** Within-snapshot fetch-position R² is 0.00418; the snapshot-move regression R² is 0.0465. Collection takes about 100 seconds, but the recorded linear relationships do not explain most of the signed residual variation.
 
-## Decision required before WP-C5
+## DEC-006 — approved policy for WP-C5
 
-No cleaning thresholds are selected by this analysis. The candidate data support two combined policies for explicit approval:
+The user approved the less-restrictive policy on 2026-10-17: bid `> $0`, raw mid premium `(bid+ask)/2 >= $0.05` per option share, raw relative spread `(ask-bid)/mid <= 0.6666666667`, and absolute European Black–Scholes delta in `[0.02, 0.95]`. The delta uses the existing mid-IV, forward, strike, and expiry. The more-restrictive `0.05` delta-floor candidate above was not selected.
 
-- **Less restrictive:** `bid > 0`, mid premium `>= $0.05`, relative spread `<= 0.6666666667`, and `0.02 <= |BS delta| <= 0.95`; excludes 20.19% of training quotes.
-- **More restrictive delta window:** same rules, with `0.05 <= |BS delta| <= 0.95`; excludes 27.04%.
+All cap/RMS values in the preceding table are post-hoc evaluations against the full-data unfiltered fit, not refit results. They are preserved as C1 historical evidence; WP-C5 measures actual cold-fit effects under the approved profiles.
 
-Either policy's masked cap/RMS figures are worse than the unfiltered fit. Cleaning may still be justified for input quality, but the actual fit effect must be measured after refitting in WP-C5. Await explicit threshold approval before implementing that ticket.
+## WP-C5 refitted cleaning profiles
+
+Reproduce from the repository root after building the Release fitter:
+
+```sh
+python3 scripts/evaluate_quote_cleaning.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit
+```
+
+The runner refits all 212 IBIT snapshots from Oct 12–14 independently under each of the four single-rule profiles and the combined profile. It reads only `chain_20261012.jsonl.gz`, `chain_20261013.jsonl.gz`, and `chain_20261014.jsonl.gz`; Oct 15–16 and SPY are not read. JSON output includes per-snapshot counts for all rules and unique combined exclusions, plus refitted unweighted cold-fit metrics. The existing C1 analyzer remains explicitly unfiltered.
+
+| Refit profile | Excluded by rule: bid / premium / spread / delta | Unique cleaning exclusions | Included quotes | Above-cap share | RMS excess ratio | Maximum ratio |
+|---|---:|---:|---:|---:|---:|---:|
+| Unfiltered C1 baseline | — | 0 | 113,965 | 71.71% | 2.410 | 64.134 |
+| Minimum bid only | 0 / 0 / 0 / 0 | 0 | 113,965 | 71.71% | 2.410 | 64.134 |
+| Mid premium >= $0.05 | 0 / 22,913 / 0 / 0 | 22,913 | 91,052 | 70.71% | 2.327 | 64.133 |
+| Relative spread <= 0.6666666667 | 0 / 0 / 3,253 / 0 | 3,253 | 110,712 | 73.25% | 2.437 | 64.134 |
+| Absolute delta [0.02, 0.95] | 0 / 0 / 0 / 11,212 | 11,212 | 102,753 | 69.30% | 2.295 | 64.140 |
+| Combined approved policy | 0 / 22,913 / 3,253 / 11,212 | 23,011 | 90,954 | 70.64% | 2.322 | 64.140 |
+
+Per-rule counts are independent and overlap; the combined count is unique. The minimum-bid rule adds no exclusions because the existing European IV inversion already rejects zero bid prices in this OTM sample. All five profiles completed 212/212 cold fits. Raw source size was 259,978 contracts per profile; the replay's existing locked/crossed/other categories still reconcile, with cleaning exclusions reported as a diagnostic subset of `excluded_other`.
+
+The refits show modest reductions in share-above-cap and RMS for the premium, delta, and combined profiles; the spread-only profile worsens both. The combined maximum ratio is slightly higher than baseline. This is a measured effect of the explicitly approved data policy, not a claim that every quality metric improves. Vega-weighted fitting and its report-only A/B belong to WP-C9, not these C5 measurements.

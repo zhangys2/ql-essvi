@@ -242,9 +242,16 @@ def source_contract_index(
 
 
 def fit_snapshot(
-    snapshot: dict[str, Any], source_file: Path, fit_binary: Path, sequence: int
+    snapshot: dict[str, Any],
+    source_file: Path,
+    fit_binary: Path,
+    sequence: int,
+    *,
+    cleaning_rules: tuple[str, ...] = (),
 ) -> tuple[Any, list[dict[str, Any]]]:
-    prepared = prepare_snapshot(snapshot, "IBIT", str(source_file))
+    prepared = prepare_snapshot(
+        snapshot, "IBIT", str(source_file), cleaning_rules=cleaning_rules
+    )
     if not prepared.valid_quotes:
         return prepared, []
     source_contracts = source_contract_index(snapshot["contracts"])
