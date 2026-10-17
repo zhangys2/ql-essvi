@@ -199,6 +199,23 @@ def grouped_band_width_quality(
     )
 
 
+def contribution_percentages(
+    groups: dict[str, dict[str, dict[str, Any]]], total_excess: float
+) -> dict[str, dict[str, float | None]]:
+    if total_excess == 0.0:
+        return {
+            dimension: {key: None for key in metrics}
+            for dimension, metrics in groups.items()
+        }
+    return {
+        dimension: {
+            key: 100.0 * metrics["sum_squared_total_variance_excess"] / total_excess
+            for key, metrics in buckets.items()
+        }
+        for dimension, buckets in groups.items()
+    }
+
+
 def underlying_mid(value: dict[str, Any]) -> float | None:
     bid = finite_number(value.get("bid"))
     ask = finite_number(value.get("ask"))
@@ -485,13 +502,7 @@ def analyze(data_root: Path, fit_binary: Path) -> dict[str, Any]:
         "option_type": grouped_quality(rows, lambda row: row["option_type"]),
     }
     total_excess = base_quality["sum_squared_total_variance_excess"]
-    contributions = {
-        dimension: {
-            key: 100.0 * metrics["sum_squared_total_variance_excess"] / total_excess
-            for key, metrics in groups.items()
-        }
-        for dimension, groups in grouped.items()
-    }
+    contributions = contribution_percentages(grouped, total_excess)
     move_regression = linear_regression(residual_move_x, residual_move_y)
     return {
         "coverage": coverage,
