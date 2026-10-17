@@ -2,10 +2,10 @@
 
 ## State
 
-- Current: `implemented`
-- Last transition: `implementing` → `implemented`
-- At: `2026-10-17T15:29:55Z`
-- Reason/evidence: Shared cleaning, per-snapshot reporting, all five real IBIT refit profiles, focused regression tests, and configured full verification are complete; the implementation commit is being prepared before formal review.
+- Current: `review-approved`
+- Last transition: `reviewing` → `review-approved`
+- At: `2026-10-17T15:36:05Z`
+- Reason/evidence: Spec, standards, and verification reviewers approved the frozen base-to-HEAD range with no findings; the isolated verifier passed the configured full suite (CTest 5/5, pytest 25/25).
 - Blocker: None.
 
 ## State history
@@ -17,6 +17,8 @@
 | `baseline-checking` | `baseline-passed` | `2026-10-17T15:05:35Z` | Exact-base configured full suite passed: Release configure/build, CTest 5/5, pytest 19/19. |
 | `baseline-passed` | `implementing` | `2026-10-17T15:06:47Z` | Baseline is green; user-approved policy and shared converter/replay evaluation seam are confirmed. |
 | `implementing` | `implemented` | `2026-10-17T15:29:55Z` | Approved shared classifier and reports are complete; 212/212 fits passed in each of five training-only profiles, focused tests passed 19/19, and configured verification passed (CTest 5/5, pytest 25/25). |
+| `implemented` | `reviewing` | `2026-10-17T15:31:22Z` | Implementation commit `b501822865cd0652ed1f9d66809a658cbfbd94ae` is under three isolated review axes; the frozen base-to-HEAD snapshot hash is recorded in the review record. |
+| `reviewing` | `review-approved` | `2026-10-17T15:36:05Z` | Round 1's isolated spec, standards, and verification axes found no issues; verification passed CTest 5/5 and pytest 25/25 on reviewed HEAD `b501822865cd0652ed1f9d66809a658cbfbd94ae`. |
 
 ## Claim
 
@@ -86,17 +88,48 @@ Apply the approved quote-cleaning policy consistently to the shared IBIT convers
 | 2026-10-17T15:29:55Z | Real-data evaluation | `.venv/bin/python scripts/evaluate_quote_cleaning.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit > /tmp/cal-c5-evaluation.json` | `/home/zhangy/git/ql-essvi` | `55442966a4c6b881b4dca50eb5605240f296172f` + C5 working tree | passed | IBIT Oct 12–14 only: 212/212 cold fits for each of minimum-bid, minimum-premium, relative-spread, delta-window, and combined profiles. 259,978 raw contracts/profile; combined excludes 23,011 uniquely. Results recorded in `docs/fit-quality.md`; holdout and SPY not read. |
 | 2026-10-17T15:29:55Z | Refactor | `.venv/bin/python -m pytest -q tests/test_quote_cleaning.py tests/test_quote_cleaning_evaluation.py tests/test_analyze_fit_quality.py tests/test_snapshot_replay.py` | `/home/zhangy/git/ql-essvi` | `55442966a4c6b881b4dca50eb5605240f296172f` + C5 working tree | passed | 19 passed after making the cleaning-profile argument keyword-only and completing the report schema. |
 | 2026-10-17T15:29:55Z | Final | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `55442966a4c6b881b4dca50eb5605240f296172f` + C5 working tree | passed | Release configure/build succeeded; CTest 5/5 passed; pytest 25/25 passed. |
+| 2026-10-17T15:36:05Z | Review round 1 | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `b501822865cd0652ed1f9d66809a658cbfbd94ae` | approved | Three isolated review axes: no findings; verification reviewer independently passed CTest 5/5 and pytest 25/25. Snapshot SHA-256: `374558af8a7491df28a7eebb3147f42dc4a09fbdd84220641d7883ebb7ea52ee`. |
+
+## Review record
+
+### Round 1 — isolated three-axis review
+
+Reviewed range: `55442966a4c6b881b4dca50eb5605240f296172f..b501822865cd0652ed1f9d66809a658cbfbd94ae`. Frozen snapshot: `/tmp/cal-c5-review-snapshot.tar.gz`, SHA-256 `374558af8a7491df28a7eebb3147f42dc4a09fbdd84220641d7883ebb7ea52ee`.
+
+#### Spec review — isolated
+
+**Approved; no findings.** The external WP-C5 and DEC-006 requirements match the implementation: exact thresholds, the four individual profiles plus combined, IBIT Oct 12–14 only, preserved unfiltered C1 baseline, and separated refit results. Review agent: `FormalSpecAxis`.
+
+#### Standards review — isolated
+
+**Approved; no findings.** No weakened checks, suppressions, scope creep, or repository-standard violations. Review agent: `FormalStandardsAxis`.
+
+#### Verification review — isolated
+
+**Approved; no findings.** The isolated verifier ran the configured DELIVERY.md full-suite command on reviewed HEAD; Release configure/build succeeded, CTest 5/5 passed, and pytest 25/25 passed. Load-bearing facts for shared filtering/counting, unfiltered C1 behavior, profile isolation, and reconciliation are rung 4. Real-data results were reviewed from the recorded run, not rerun by the reviewer. Review agent: `FormalVerificationAxis`.
+
+## Review dispositions
+
+| Round | Finding | Disposition | Evidence |
+| --- | --- | --- | --- |
+| 1 | None | No corrections required | All three isolated axes approved the frozen range. |
+
+## Gate candidates
+
+None.
 
 ## Delivery record
 
-- Baseline commit: `55442966a4c6b881b4dca50eb5605240f296172f`
-- Baseline status: passed
-- Baseline verification: configured full command passed; Release build, CTest 5/5, pytest 19/19.
-- Baseline failure evidence: None.
-- Unconfirmed commands: None; the configured full suite is recorded as proven able to fail.
-- Branch: `delivery/calibrator-speedup-addendum-c/CAL-C5`
-- Worktree: primary checkout, `/home/zhangy/git/ql-essvi`
-- Blocked by: None; C1 complete and DEC-006 approved.
-- Commit: pending
-- Residual risks: Cleaning may not improve fit quality; the approved policy is accepted as the input-cleaning baseline, and WP-C9 onward measures subsequent effects. No holdout evaluation in this ticket.
-- GitHub Issue: none (local tracker)
+- Baseline commit: `55442966a4c6b881b4dca50eb5605240f296172f` — Release build, CTest 5/5, pytest 19/19.
+- Implementation commit: `b501822865cd0652ed1f9d66809a658cbfbd94ae`.
+- Reviewed HEAD: `b501822865cd0652ed1f9d66809a658cbfbd94ae`; reviewed range: `55442966a4c6b881b4dca50eb5605240f296172f..b501822865cd0652ed1f9d66809a658cbfbd94ae`.
+- Review snapshot SHA-256: `374558af8a7491df28a7eebb3147f42dc4a09fbdd84220641d7883ebb7ea52ee`.
+- Final verification: configured command passed; Release build, CTest 5/5, pytest 25/25. The independent verification reviewer repeated that command successfully.
+- Real-data result: 212/212 cold fits per profile for four individual rules plus combined; only Oct 12–14 IBIT inputs were read. Detailed metrics are in `docs/fit-quality.md`.
+- Branch: `delivery/calibrator-speedup-addendum-c/CAL-C5`.
+- Worktree: primary checkout, `/home/zhangy/git/ql-essvi`.
+- Learning capture: None; no new repository-specific learning met the capture bar.
+- Remaining: No WP-C5 blockers. Continue with WP-C9 on the cleaned IBIT baseline; do not read Oct 15–16 until WP-C7.
+- Residual risk: The approved policy is input cleaning, not a guarantee of lower error. Combined refits modestly improve share-above-cap/RMS while the maximum ratio is slightly worse; vega-weighted loss is WP-C9.
+- Review-approval record commit: pending.
+- GitHub Issue: none (local tracker).
