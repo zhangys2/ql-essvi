@@ -2,10 +2,11 @@
 
 ## State
 
-- Current: `changes-requested`
-- Last transition: `reviewing` → `changes-requested`
-- At: `2026-10-17T17:03:22Z`
-- Reason/evidence: Round 2 approved the spec and standards axes and approved verification with one non-blocking suggestion: the synthetic A/B evaluator test monkeypatches `subprocess.run` instead of using the executable stub specified in the ticket test plan. This is accepted for correction; other axes have no findings.
+- Current: `reviewing`
+- Last transition: `changes-requested` → `reviewing`
+- At: `2026-10-17T17:05:49Z`
+- Reason/evidence: Round-two verification suggestion corrected in commit `28d7b85`; the focused executable-stub A/B test and configured Release/CTest/pytest verification passed. Round-three independent review is starting.
+- Blocker: None.
 
 ## State history
 
@@ -20,6 +21,7 @@
 | `reviewing` | `changes-requested` | `2026-10-17T16:45:59+00:00` | Round 1 review accepted five findings for correction: validate included weights at C++ fit ingress and reject invalid weighted rows; reject excluded-row weights; cover blank current-schema defaults; cover IBIT excluded-row parity; exercise warm local weighted equations. |
 | `changes-requested` | `reviewing` | `2026-10-17T16:52:32Z` | Corrections committed as `438d073`; focused regression, configured full verification, and training-only IBIT A/B smoke passed. The updated fixed snapshot is entering round 2 review. |
 | `reviewing` | `changes-requested` | `2026-10-17T17:03:22Z` | Round 2 spec and standards axes approved; verification approved with one accepted non-blocking suggestion to exercise the synthetic A/B through a real executable stub rather than monkeypatching `subprocess.run`. |
+| `changes-requested` | `reviewing` | `2026-10-17T17:05:49Z` | Test-plan suggestion corrected in `28d7b85`; focused executable-stub test and configured full verification passed. The updated fixed snapshot is entering round 3 review. |
 
 ## Claim
 
@@ -99,7 +101,8 @@ Compute normalized per-quote vega sensitivity in the IBIT quote preparation and 
 | 2026-10-17T16:52:32Z | Round 1 correction commit | `git commit -m "Validate C9 vega weights at fit ingress"` | `/home/zhangy/git/ql-essvi` | `438d073` | committed | Corrected included-weight ingress/parser handling, normalized-schema exclusion semantics, and all five review coverage gaps. |
 | 2026-10-17T17:03:22Z | Review round 2 | Frozen base-to-HEAD `fdf70b8b80ce6c9b617141293bda99a560be3e07..8f69b30862cc2ca4ede3e444a25fdf05127ad7d4`; archive `/tmp/cal-c9-8f69b30-review-snapshot.tar.gz` (SHA-256 `231b118e0de03091b68a1321f23bc33ea2a4895c1367d04808ca77f6d737448b`), patch SHA-256 `bb22d5bdabf9ac9b0d6ce987f55999ed0ecce5cd80e8b40d93f3909e4054478a` | `/home/zhangy/git/ql-essvi` | `8f69b30862cc2ca4ede3e444a25fdf05127ad7d4` | approved with suggestion | Spec axis approved; standards axis approved with no findings; verification axis approved with one non-blocking suggestion. Independent verification ran configured Release configure/build, CTest 5/5, pytest 33/33. No real holdout or SPY source files were opened. |
 | 2026-10-17T17:05:24Z | Executable-stub Green | `.venv/bin/python -m pytest -q tests/test_vega_weighting.py::test_vega_ab_runs_unit_and_weighted_cold_arms_on_training_only` | `/home/zhangy/git/ql-essvi` | working tree | passed | The deterministic three-date synthetic A/B now invokes a temporary executable fit stub for all six cold fits; the stub emits diagnostics and fitted quote rows and records unit versus normalized-vega inputs. 1 passed. |
-| 2026-10-17T17:05:24Z | Final round-two correction verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | working tree | passed | Release configure/build succeeded; CTest 5/5 passed; pytest 33/33 passed.
+| 2026-10-17T17:05:24Z | Final round-two correction verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | working tree | passed | Release configure/build succeeded; CTest 5/5 passed; pytest 33/33 passed. |
+| 2026-10-17T17:05:49Z | Round 2 correction commit | `git commit -m "Exercise vega A/B with executable fit stub"` | `/home/zhangy/git/ql-essvi` | `28d7b85` | committed | Replaced the monkeypatched subprocess with an executable temporary fit stub matching the accepted test-plan suggestion. |
 
 ## Evidence and decision references
 
@@ -135,6 +138,13 @@ Correction commit: `438d073` (`Validate C9 vega weights at fit ingress`).
 | P3 weighted warm local equations | `weightedWarmLocalFitUsesWeightedEquations` forces the warm local solver with cap gate passing, checks objective against the weighted band-loss formula, and observes a parameter change under nonuniform weight; `essvi_calibrator_regression_tests` passed on 2026-10-17T16:52:08Z. |
 
 Configured correction verification passed on 2026-10-17T16:52:08Z: Release configure/build, CTest 5/5, pytest 33/33. The training-only IBIT A/B reran on the same scope; 212/212 snapshots per arm and 90,954 quotes; unit summed objective `0.3268896906491981`, weighted `0.13466688189465315`.
+
+## Correction evidence — round 2
+
+Correction commit: `28d7b85` (`Exercise vega A/B with executable fit stub`).
+
+- `tests/test_vega_weighting.py::test_vega_ab_runs_unit_and_weighted_cold_arms_on_training_only` writes an executable temporary fit stub, invokes the actual evaluator subprocess boundary six times on three deterministic synthetic IBIT dates, emits the diagnostics/fitted CSV artifacts the analyzer consumes, and checks unit versus normalized-vega weights. Focused test passed 1/1 at 2026-10-17T17:05:24Z.
+- Configured verification passed at 2026-10-17T17:05:24Z: Release configure/build, CTest 5/5, pytest 33/33.
 
 ## Review record
 
