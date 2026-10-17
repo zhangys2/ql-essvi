@@ -2,10 +2,10 @@
 
 ## State
 
-- Current: `implemented`
-- Last transition: `implementing` → `implemented`
-- At: `2026-10-17T18:09:01Z`
-- Reason/evidence: Review-only re-acceptance passed the configured Release build, CTest 5/5, pytest 33/33, focused expiry-parity coverage, and training-only C5/A-B reruns. The fixed production implementation remains unchanged.
+- Current: `reviewing`
+- Last transition: `implemented` → `reviewing`
+- At: `2026-10-17T18:09:43Z`
+- Reason/evidence: Review-only deliverable passed final configured verification, focused parity, and training-only data reruns. The fixed review range starts at `fdf70b8b80ce6c9b617141293bda99a560be3e07`; an immutable base-to-HEAD snapshot is being prepared for independent review.
 - Blocker: None.
 
 ## State history
@@ -17,6 +17,7 @@
 | `baseline-checking` | `baseline-passed` | `2026-10-17T18:05:45Z` | New branch configured Release build passed; CTest 5/5 and pytest 33/33. |
 | `baseline-passed` | `implementing` | `2026-10-17T18:05:52Z` | Review-only scope confirmed; code is unchanged from the fixed C9 deliverable. Focused expiry-parity test passed 1/1. |
 | `implementing` | `implemented` | `2026-10-17T18:09:01Z` | Review-only scope complete; corrected C5/A-B results match the checked-in report and configured verification passed. No source behavior was changed. |
+| `implemented` | `reviewing` | `2026-10-17T18:09:43Z` | Fixed C9 deliverable and final verification are ready; a frozen full-diff snapshot is being sent to independent spec, standards, and verification reviewers. |
 
 ## Claim
 
