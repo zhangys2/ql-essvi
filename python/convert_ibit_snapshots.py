@@ -14,6 +14,8 @@ import json
 import math
 from pathlib import Path
 
+import vega_weights
+
 HEADER = [
     "quote_id",
     "effective_date",
@@ -28,6 +30,7 @@ HEADER = [
     "mid_iv",
     "included",
     "filter_reason",
+    "weight",
 ]
 CLEANING_RULES = (
     "minimum_bid",
@@ -278,7 +281,7 @@ def convert_snapshot(
     with output_path.open("x", newline="", encoding="utf-8") as stream:
         writer = csv.writer(stream)
         writer.writerow(HEADER)
-        writer.writerows(rows)
+        writer.writerows(vega_weights.normalize_snapshot_weights(rows))
     return output_path, len(rows), valid_quotes, cleaning_counts
 
 

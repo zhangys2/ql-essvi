@@ -6,7 +6,12 @@
 #include <vector>
 
 namespace essvi {
-struct Quote { std::string id; double expiry, forward, discount_factor, strike, bid_iv, ask_iv, mid_iv; bool included; };
+struct Quote {
+  std::string id;
+  double expiry, forward, discount_factor, strike, bid_iv, ask_iv, mid_iv;
+  bool included;
+  double weight{1.0};
+};
 
 enum class CalibrationPath { cold, warm, fallback, degraded };
 

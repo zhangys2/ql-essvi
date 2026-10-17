@@ -165,3 +165,34 @@ The runner refits all 212 IBIT snapshots from Oct 12–14 independently under ea
 Per-rule counts are independent and overlap; the combined count is unique. The minimum-bid rule adds no exclusions because the existing European IV inversion already rejects zero bid prices in this OTM sample. All five profiles completed 212/212 cold fits. Raw source size was 259,978 contracts per profile; the replay's existing locked/crossed/other categories still reconcile, with cleaning exclusions reported as a diagnostic subset of `excluded_other`.
 
 The refits show modest reductions in share-above-cap and RMS for the premium, delta, and combined profiles; the spread-only profile worsens both. The combined maximum ratio is slightly higher than baseline. This is a measured effect of the explicitly approved data policy, not a claim that every quality metric improves. Vega-weighted fitting and its report-only A/B belong to WP-C9, not these C5 measurements.
+
+## WP-C9 mandatory vega-weighted fit and report-only A/B
+
+Reproduce the report from the repository root with the Release fitter:
+
+```sh
+.venv/bin/python scripts/evaluate_vega_weighting.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit
+```
+
+The evaluator reads only IBIT `chain_20261012.jsonl.gz`, `chain_20261013.jsonl.gz`, and `chain_20261014.jsonl.gz`. It runs an independent cold fit under unit weights and another under per-snapshot median-normalized raw \(dC/dw\) weights for each snapshot. Both arms use the approved C5 combined cleaning profile. The JSON output carries per-snapshot contract and exclusion counts; both arms completed 212/212 snapshots with 90,954 included quotes from 259,978 input contracts. Combined cleaning excluded 23,011 quotes (22,913 minimum-premium, 3,253 relative-spread, 11,212 delta-window, 0 minimum-bid; rule counts overlap). Each arm also had 5 locked contracts, 0 crossed contracts, and 169,019 `excluded_other` contracts; the 23,011 cleaning exclusions are included in `excluded_other`. Oct 15–16 and SPY were not read.
+
+| Fit arm | Fits / snapshots | Included quotes | Combined cleaning exclusions | Share above unweighted cap | RMS excess ratio | Maximum ratio | Summed fit objective |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Unit weights | 212 / 212 | 90,954 | 23,011 | 70.64% | 2.3220 | 64.1404 | 0.326890 |
+| Vega weights | 212 / 212 | 90,954 | 23,011 | 70.77% | 2.2402 | 43.9209 | 0.134667 |
+
+The cap share, RMS ratio, and maximum ratio remain the original unweighted per-quote metrics. The summed objective is \(\sum e_i^2\) for the unit arm and \(\sum (u_i e_i)^2\) for the vega arm, where \(e_i\) is total-variance band excess and \(u_i\) is normalized raw sensitivity.
+
+| Fit arm | Sum of squared vega-weighted excess | Vega-weighted RMS | Vega-weighted maximum |
+|---|---:|---:|---:|
+| Unit weights | 0.144535 | 0.00126059 | 0.0123871 |
+| Vega weights | 0.134667 | 0.00121680 | 0.0125697 |
+
+Price-space excess is the first-order equivalent \(dC/dw\) times absolute total-variance band excess; it is not a direct repricing error. One tick is `$0.01` per option share. Contract-dollar values multiply by 100 shares, the standard OCC equity-option unit; the source snapshots contain no multiplier field.
+
+| Fit arm | Price excess ticks RMS | Maximum ticks | Dollars/share RMS | Maximum dollars/share | Dollars/100-share contract RMS | Maximum dollars/contract |
+|---|---:|---:|---:|---:|---:|---:|
+| Unit weights | 7.0421 | 71.3250 | $0.070421 | $0.713250 | $7.0421 | $71.3250 |
+| Vega weights | 6.7925 | 72.3768 | $0.067925 | $0.723768 | $6.7925 | $72.3768 |
+
+The A/B is report-only: mandatory vega weighting remains the production objective regardless of the comparison. In this sample it lowers the weighted objective, the unweighted RMS excess ratio, and the price-space RMS, while slightly increasing the unweighted share above cap and the maximum price-space excess. These competing outcomes are not a gate or a claim that every quality metric improves. The 100-share assumption follows the [OCC Equity Options Product Specifications](https://www.theocc.com/clearance-and-settlement/clearing/equity-options-product-specifications).

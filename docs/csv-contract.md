@@ -7,10 +7,12 @@ All files are UTF-8 CSV, comma-delimited, with an exact header and decimal float
 One row per raw quote:
 
 ```text
-quote_id,effective_date,expiry_date,time_to_expiry,forward,discount_factor,strike,option_type,bid_iv,ask_iv,mid_iv,included,filter_reason
+quote_id,effective_date,expiry_date,time_to_expiry,forward,discount_factor,strike,option_type,bid_iv,ask_iv,mid_iv,included,filter_reason,weight
 ```
 
 `option_type` is `C` or `P`; IVs are decimal volatilities (not percentage points). Excluded values remain present with empty numeric fields and `included=false`.
+
+Current converters emit the trailing `weight` column; readers accept both this 14-column schema and the legacy 13-column schema, which means unit weights. For included quotes, `weight` is the finite positive Black–Scholes price sensitivity per unit total variance, `D*F*phi(d1)/(2*sigma*sqrt(T))`, divided by the median sensitivity among included quotes in that snapshot. Excluded rows have an empty weight. Missing or blank weights mean 1.0 for C++ compatibility; schema validation requires each included weight to be finite and positive.
 
 `filter_reason` is empty for included rows. Existing input-quality failures use one stable reason code. Cleaning exclusions contain every failed selected rule in this stable order: `minimum_bid`, `minimum_premium`, `relative_spread`, `delta_window`, separated by semicolons. Cleaning applies only after the existing contract, market, OTM, and IV-inversion checks pass. The approved thresholds use raw option prices: bid `> $0`; mid premium `(bid+ask)/2 >= $0.05` per option share; relative spread `(ask-bid)/mid <= 0.6666666667`; and absolute European Black–Scholes delta from the existing mid-IV, forward, strike, and expiry in the inclusive range `[0.02, 0.95]`.
 

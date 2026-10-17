@@ -37,6 +37,9 @@ std::vector<std::string> split(const std::string& s) {
   std::stringstream x(s);
   std::string v;
   while (std::getline(x, v, ',')) r.push_back(v);
+  if (!r.empty() && !r.back().empty() && r.back().back() == '\r')
+    r.back().pop_back();
+  if (!s.empty() && s.back() == ',') r.emplace_back();
   return r;
 }
 double val(const std::string& s) { return s.empty() ? NAN : std::stod(s); }
@@ -239,7 +242,7 @@ bool quoteGroupReusable(const std::vector<const Quote*>& current,
     const auto& b = *previous[i];
     if (a.id != b.id || !sameValue(a.expiry, b.expiry) ||
         !sameValue(a.forward, b.forward) || !sameValue(a.strike, b.strike) ||
-        !sameValue(a.mid_iv, b.mid_iv) ||
+        !sameValue(a.mid_iv, b.mid_iv) || !sameValue(a.weight, b.weight) ||
         !movementBelowTolerance(a.bid_iv, b.bid_iv, quote_tol) ||
         !movementBelowTolerance(a.ask_iv, b.ask_iv, quote_tol))
       return false;
@@ -271,6 +274,7 @@ double meanAbsoluteMidIvMove(const QuoteGroups& current,
 
 struct PreparedQuote {
   double k{};
+  double weight{1.0};
   double bid_variance{};
   double ask_variance{};
   double mid_iv{};
@@ -287,7 +291,7 @@ std::vector<PreparedQuote> prepareQuotes(const std::vector<const Quote*>& quotes
                           std::isfinite(q.ask_iv);
     const bool has_mid = q.included && std::isfinite(q.mid_iv);
     const double k = has_band || has_mid ? std::log(q.strike / q.forward) : 0.0;
-    prepared.push_back({k, q.expiry * q.bid_iv * q.bid_iv,
+    prepared.push_back({k, q.weight, q.expiry * q.bid_iv * q.bid_iv,
                         q.expiry * q.ask_iv * q.ask_iv, q.mid_iv,
                         has_band, has_mid});
   }
@@ -301,7 +305,7 @@ double bandLossScale(const std::vector<PreparedQuote>& quotes) {
     if (!quote.has_band) continue;
     const double width =
         std::max(quote.ask_variance - quote.bid_variance, 1e-6);
-    scale += width * width;
+    scale += quote.weight * quote.weight * width * width;
   }
   return scale;
 }
@@ -311,7 +315,7 @@ double bandLoss(const Slice& s, const std::vector<PreparedQuote>& quotes) {
     if (!q.has_band) continue;
     const double w = sliceTotalVariance(s, q.k);
     const double d = w - std::clamp(w, q.bid_variance, q.ask_variance);
-    z += d * d;
+    z += q.weight * q.weight * d * d;
   }
   return z;
 }
@@ -330,7 +334,7 @@ bool passesQuoteCap(const Slice& slice,
                     const std::vector<PreparedQuote>& quotes, double cap) {
   for (const auto& quote : quotes) {
     if (!quote.has_band) continue;
-    const double ratio = quoteExcessRatio(slice, quote);
+    const double ratio = quote.weight * quoteExcessRatio(slice, quote);
     if (!std::isfinite(ratio) || ratio > cap) return false;
   }
   return true;
@@ -341,8 +345,8 @@ bool passesAdaptiveQuoteCap(const Slice& candidate, const Slice& cold,
                             double cap) {
   for (const auto& quote : quotes) {
     if (!quote.has_band) continue;
-    const double candidate_ratio = quoteExcessRatio(candidate, quote);
-    const double cold_ratio = quoteExcessRatio(cold, quote);
+    const double candidate_ratio = quote.weight * quoteExcessRatio(candidate, quote);
+    const double cold_ratio = quote.weight * quoteExcessRatio(cold, quote);
     if (!std::isfinite(candidate_ratio) || !std::isfinite(cold_ratio) ||
         candidate_ratio > std::max(cap, cold_ratio + 0.01))
       return false;
@@ -610,6 +614,7 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
       double maximum_excess_ratio = 0.0;
       for (const auto& quote : qs) {
         if (!quote.has_band) continue;
+        const double weight_squared = quote.weight * quote.weight;
         const double theta = slice.theta;
         const double rho = slice.rho;
         const double psi = slice.psi;
@@ -628,20 +633,20 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
         const double variance = sliceTotalVariance(slice, k);
         const double residual =
             variance - std::clamp(variance, quote.bid_variance, quote.ask_variance);
-        loss += residual * residual;
+        loss += weight_squared * residual * residual;
         const double quote_width =
             std::max(quote.ask_variance - quote.bid_variance, 1e-6);
-        const double excess_ratio = std::abs(residual) / quote_width;
+        const double excess_ratio = quote.weight * std::abs(residual) / quote_width;
         maximum_excess_ratio =
             std::isfinite(excess_ratio)
                 ? std::max(maximum_excess_ratio, excess_ratio)
                 : INFINITY;
         if (residual == 0.0) continue;
         for (int row = 0; row < 3; ++row) {
-          gradient[row] += scaled_jacobian[row] * residual;
+          gradient[row] += weight_squared * scaled_jacobian[row] * residual;
           for (int column = 0; column < 3; ++column)
-            normal[row][column] +=
-                scaled_jacobian[row] * scaled_jacobian[column];
+            normal[row][column] += weight_squared * scaled_jacobian[row] *
+                                   scaled_jacobian[column];
         }
       }
       return std::pair<double, double>{loss, maximum_excess_ratio};
@@ -914,14 +919,24 @@ std::vector<Quote> readQuotes(const std::string& path) {
   auto h = split(line);
   std::unordered_map<std::string, size_t> ix;
   for (size_t i = 0; i < h.size(); ++i) ix[h[i]] = i;
+  const auto weight_column = ix.find("weight");
   std::vector<Quote> out;
   while (std::getline(f, line)) {
     auto v = split(line);
     if (v.size() < h.size()) continue;
     try {
-      out.push_back({v[ix["quote_id"]], val(v[ix["time_to_expiry"]]), val(v[ix["forward"]]),
-                     val(v[ix["discount_factor"]]), val(v[ix["strike"]]), val(v[ix["bid_iv"]]),
-                     val(v[ix["ask_iv"]]), val(v[ix["mid_iv"]]), v[ix["included"]] == "true"});
+      const bool included = v[ix["included"]] == "true";
+      double weight = 1.0;
+      if (weight_column != ix.end() && weight_column->second < v.size() &&
+          !v[weight_column->second].empty()) {
+        weight = val(v[weight_column->second]);
+        if (!std::isfinite(weight) || weight <= 0.0) continue;
+      }
+      out.push_back({v[ix["quote_id"]], val(v[ix["time_to_expiry"]]),
+                     val(v[ix["forward"]]), val(v[ix["discount_factor"]]),
+                     val(v[ix["strike"]]), val(v[ix["bid_iv"]]),
+                     val(v[ix["ask_iv"]]), val(v[ix["mid_iv"]]), included,
+                     weight});
     } catch (...) {
     }
   }

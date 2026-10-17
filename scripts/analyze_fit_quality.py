@@ -20,7 +20,7 @@ from typing import Any, Callable
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 
-from convert_ibit_snapshots import HEADER, expiry_date, finite_number
+from convert_ibit_snapshots import HEADER, expiry_date, finite_number, vega_weights
 from replay_snapshots import prepare_snapshot
 
 TRAINING_DATES = ("20261012", "20261013", "20261014")
@@ -38,7 +38,7 @@ def percentile(values: list[float], p: float) -> float:
     return ordered[low] + fraction * (ordered[high] - ordered[low])
 
 
-def quality(rows: list[dict[str, Any]]) -> dict[str, float | int]:
+def quality(rows: list[dict[str, Any]]) -> dict[str, Any]:
     ratios = [row["excess_ratio"] for row in rows]
     count = len(ratios)
     if not count:
@@ -49,7 +49,30 @@ def quality(rows: list[dict[str, Any]]) -> dict[str, float | int]:
             "rms_excess_ratio": 0.0,
             "maximum_excess_ratio": 0.0,
             "sum_squared_total_variance_excess": 0.0,
+            "sum_squared_vega_weighted_excess": 0.0,
+            "vega_weighted_excess_rms": 0.0,
+            "vega_weighted_excess_maximum": 0.0,
+            "price_excess_ticks_rms": 0.0,
+            "price_excess_ticks_maximum": 0.0,
+            "price_excess_dollars_per_share_rms": 0.0,
+            "price_excess_dollars_per_share_maximum": 0.0,
+            "price_excess_dollars_per_contract_rms": 0.0,
+            "price_excess_dollars_per_contract_maximum": 0.0,
         }
+
+    excesses = [row["excess"] for row in rows]
+    weighted_excesses = [
+        row.get("weight", 1.0) * excess
+        for row, excess in zip(rows, excesses)
+    ]
+    price_excesses = [
+        row.get("raw_price_sensitivity", 0.0) * excess
+        for row, excess in zip(rows, excesses)
+    ]
+    price_ticks = [value / vega_weights.TICK_SIZE for value in price_excesses]
+    price_contracts = [
+        value * vega_weights.CONTRACT_MULTIPLIER for value in price_excesses
+    ]
     return {
         "quote_count": count,
         "above_cap_count": sum(value > CAP for value in ratios),
@@ -57,8 +80,27 @@ def quality(rows: list[dict[str, Any]]) -> dict[str, float | int]:
         "rms_excess_ratio": math.sqrt(sum(value * value for value in ratios) / count),
         "maximum_excess_ratio": max(ratios),
         "sum_squared_total_variance_excess": sum(
-            row["excess"] ** 2 for row in rows
+            value * value for value in excesses
         ),
+        "sum_squared_vega_weighted_excess": sum(
+            value * value for value in weighted_excesses
+        ),
+        "vega_weighted_excess_rms": math.sqrt(
+            sum(value * value for value in weighted_excesses) / count
+        ),
+        "vega_weighted_excess_maximum": max(weighted_excesses),
+        "price_excess_ticks_rms": math.sqrt(
+            sum(value * value for value in price_ticks) / count
+        ),
+        "price_excess_ticks_maximum": max(price_ticks),
+        "price_excess_dollars_per_share_rms": math.sqrt(
+            sum(value * value for value in price_excesses) / count
+        ),
+        "price_excess_dollars_per_share_maximum": max(price_excesses),
+        "price_excess_dollars_per_contract_rms": math.sqrt(
+            sum(value * value for value in price_contracts) / count
+        ),
+        "price_excess_dollars_per_contract_maximum": max(price_contracts),
     }
 
 
@@ -248,6 +290,7 @@ def fit_snapshot(
     sequence: int,
     *,
     cleaning_rules: tuple[str, ...] = (),
+    weight_mode: str = "unit",
 ) -> tuple[Any, list[dict[str, Any]]]:
     prepared = prepare_snapshot(
         snapshot, "IBIT", str(source_file), cleaning_rules=cleaning_rules
@@ -267,7 +310,9 @@ def fit_snapshot(
         with normalized.open("w", newline="", encoding="utf-8") as stream:
             writer = csv.writer(stream)
             writer.writerow(HEADER)
-            writer.writerows(prepared.csv_rows)
+            writer.writerows(
+                vega_weights.rows_for_weight_mode(prepared.csv_rows, weight_mode)
+            )
         subprocess.run(
             [
                 str(fit_binary),
@@ -362,6 +407,11 @@ def fit_snapshot(
                 "signed_residual": residual,
                 "excess": excess,
                 "excess_ratio": excess / max(width, 1e-6),
+                "weight": float(row[13]),
+                "raw_price_sensitivity": vega_weights.raw_price_sensitivity(
+                    mid_iv, forward, strike, time_years, float(row[5])
+                ),
+                "fit_objective": float(diagnostic_rows[0]["objective"]),
             }
         )
     if len(observations) != prepared.valid_quotes:

@@ -28,6 +28,7 @@ from convert_ibit_snapshots import (
     finite_number,
     quote_row,
     snapshot_time,
+    vega_weights,
 )
 
 
@@ -219,7 +220,7 @@ def prepare_snapshot(snapshot, asset, source_file="", *, cleaning_rules=CLEANING
         timestamp=timestamp,
         session_date=session_day.isoformat(),
         quotes=quotes,
-        csv_rows=rows,
+        csv_rows=vega_weights.normalize_snapshot_weights(rows),
         excluded_locked=locked,
         excluded_crossed=crossed,
         excluded_other=other,

@@ -27,8 +27,12 @@ def number(value, field, row, *, allow_empty=False):
         result = float(value)
     except (TypeError, ValueError):
         fail(f"row {row}: {field} is not numeric: {value!r}")
-    if not math.isfinite(result):
-        fail(f"row {row}: {field} is not finite")
+    if not math.isfinite(result) or (field == "weight" and result <= 0.0):
+        fail(
+            f"row {row}: {field} is not finite"
+            if not math.isfinite(result)
+            else f"row {row}: weight must be positive"
+        )
     return result
 
 
@@ -68,7 +72,10 @@ def validate(kind, rows):
             if row["option_type"] not in {"C", "P"}:
                 fail(f"row {i}: option_type must be C/P")
             included = boolean(row["included"], "included", i)
-            for field in ("bid_iv", "ask_iv", "mid_iv"):
+            fields = ("bid_iv", "ask_iv", "mid_iv")
+            if "weight" in row:
+                fields += ("weight",)
+            for field in fields:
                 number(row[field], field, i, allow_empty=not included)
             if included and row["filter_reason"]:
                 fail(f"row {i}: included quote cannot have filter_reason")
@@ -127,7 +134,10 @@ def main():
     try:
         with open(args.file, newline="", encoding="utf-8") as handle:
             reader = csv.DictReader(handle)
-            if reader.fieldnames != SCHEMAS[args.kind]:
+            if reader.fieldnames != SCHEMAS[args.kind] and not (
+                args.kind == "normalized"
+                and reader.fieldnames == SCHEMAS[args.kind] + ["weight"]
+            ):
                 fail(f"header mismatch: {reader.fieldnames}")
             rows = list(reader)
         if not rows:

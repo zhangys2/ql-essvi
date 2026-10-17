@@ -1,4 +1,5 @@
 import csv, json, subprocess, sys
+import pytest
 from pathlib import Path
 
 ROOT=Path(__file__).parents[1]
@@ -8,6 +9,21 @@ def test_pipeline(tmp_path):
     dfs.write_text('T,DF\n0,1\n1,0.98\n')
     subprocess.run([sys.executable,str(ROOT/'python/prepare_inputs.py'),str(chain),str(dfs),str(out)],check=True)
     rows=list(csv.DictReader(out.open())); assert len(rows)==2; assert all(r['quote_id'] for r in rows); assert all(r['filter_reason'] or r['included']=='true' for r in rows)
+
+def test_prepare_inputs_emits_median_normalized_weights(tmp_path):
+    chain=tmp_path/'chain.csv'; dfs=tmp_path/'dfs.csv'; out=tmp_path/'normalized.csv'
+    chain.write_text('Effective Date,Expiry Date,Last Trade Date,Option Type,Strike,Bid,Ask\n11-11-2024,11-18-2024,11-11-2024,Call,6000,100,110\n11-11-2024,11-18-2024,11-11-2024,Put,6000,100,110\n11-11-2024,11-18-2024,11-11-2024,Call,6100,45,55\n11-11-2024,11-18-2024,11-11-2024,Put,5900,45,55\n')
+    dfs.write_text('T,DF\n0,1\n1,0.98\n')
+    subprocess.run([sys.executable,str(ROOT/'python/prepare_inputs.py'),str(chain),str(dfs),str(out)],check=True)
+    rows=list(csv.DictReader(out.open()))
+    included=[r for r in rows if r['included']=='true']
+    excluded=[r for r in rows if r['included']=='false']
+    assert len(included)==2 and len(excluded)==2
+    weights=[float(r['weight']) for r in included]
+    assert all(weight>0 for weight in weights)
+    assert sorted(weights)[0]+sorted(weights)[1] == pytest.approx(2.0)
+    assert all(r['weight']=='' for r in excluded)
+
 
 def test_every_contract_schema_has_a_valid_example():
     kinds={'normalized':'normalized_quotes','fitted':'fitted_quotes','grid':'surface_grid','parameters':'parameters','diagnostics':'diagnostics'}
