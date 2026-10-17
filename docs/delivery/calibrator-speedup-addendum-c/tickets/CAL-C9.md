@@ -2,10 +2,11 @@
 
 ## State
 
-- Current: `changes-requested`
-- Last transition: `reviewing` → `changes-requested`
-- At: `2026-10-17T17:13:17Z`
-- Reason/evidence: Round-three spec review found a P2 converter/replay mismatch for same-day or past expiries: their time-to-expiry conventions can change the included quote set and snapshot median before weight normalization. Standards and verification axes approved. The mismatch is reproduced by the parity fixture and accepted for correction.
+- Current: `blocked`
+- Last transition: `changes-requested` → `blocked`
+- At: `2026-10-17T17:36:40Z`
+- Reason/evidence: Round three ended with a blocking P2 converter/replay expiry mismatch. The correction is committed as `43b3fca89339d2385415bb0845fe1716a6833a4e` and locally verified, but no fresh independent review is available under the three-round review limit. The configured repository value of five rounds conflicts with that workflow limit.
+- Blocker: Required fresh independent review of the corrected snapshot cannot be requested without exceeding the review workflow's three-round maximum; no fourth review was run.
 
 ## State history
 
@@ -22,6 +23,7 @@
 | `reviewing` | `changes-requested` | `2026-10-17T17:03:22Z` | Round 2 spec and standards axes approved; verification approved with one accepted non-blocking suggestion to exercise the synthetic A/B through a real executable stub rather than monkeypatching `subprocess.run`. |
 | `changes-requested` | `reviewing` | `2026-10-17T17:05:49Z` | Test-plan suggestion corrected in `28d7b85`; focused executable-stub test and configured full verification passed. The updated fixed snapshot is entering round 3 review. |
 | `reviewing` | `changes-requested` | `2026-10-17T17:13:17Z` | Round-three spec review found a P2 same-day/past-expiry converter/replay eligibility mismatch that changes median-one weights; accepted for correction. Standards and verification axes approved. |
+| `changes-requested` | `blocked` | `2026-10-17T17:36:40Z` | The round-three correction is committed as `43b3fca89339d2385415bb0845fe1716a6833a4e` and locally verified. A fresh independent review cannot be run within the three-round limit; `DELIVERY.md` specifies five rounds, so the local configuration and workflow limit conflict. |
 
 ## Claim
 
@@ -109,6 +111,7 @@ Compute normalized per-quote vega sensitivity in the IBIT quote preparation and 
 | 2026-10-17T17:16:52Z | Expiry/timezone-parity Green | `.venv/bin/python -m pytest -q tests/test_vega_weighting.py::test_converter_and_replay_emit_identical_vega_weights tests/test_quote_cleaning.py::test_converter_and_replay_share_cleaning_reasons_and_counts tests/test_snapshot_replay.py::test_strict_preparation_excludes_locked_crossed_and_other_quotes tests/test_snapshot_replay.py::test_iv_changes_match_contract_identity_not_source_row_order` | `/home/zhangy/git/ql-essvi` | working tree | passed | Converter and replay now share the New York session date and raw calendar-day year fraction. Cross-UTC-midnight fixture verifies same-day/past exclusions, next-session inclusion, equal date/time/inclusion/weight fields, and median weights; 4 focused tests passed. |
 | 2026-10-17T17:32:42Z | Final correction verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | working tree | passed | Release configure/build succeeded; CTest 5/5 passed; pytest 33/33 passed. |
 | 2026-10-17T17:32:42Z | Corrected C5/A/B evidence recorded | `.venv/bin/python scripts/evaluate_quote_cleaning.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit` and `.venv/bin/python scripts/evaluate_vega_weighting.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit` | `/home/zhangy/git/ql-essvi` | working tree | passed | Updated training-only outputs: combined C5 90,700 included / 22,548 cleaning exclusions; A/B 212/212 fits per arm, same 90,700 quotes, summed objective 0.3268406267822395 unit versus 0.1334024602632656 weighted. Oct 15–16 and SPY were not read. |
+| 2026-10-17T17:36:40Z | Round 3 correction commit | `git commit -m "fix: align expiry handling for vega weights"` | `/home/zhangy/git/ql-essvi` | `43b3fca89339d2385415bb0845fe1716a6833a4e` | committed | Shared New York session-date/raw-calendar-day expiry handling, parity test and C5/C9 report updates committed after configured verification passed. |
 
 ## Evidence and decision references
 
@@ -182,9 +185,11 @@ Correction commit: `28d7b85` (`Exercise vega A/B with executable fit stub`).
 
 ## Correction evidence — round 3
 
+Correction commit: `43b3fca89339d2385415bb0845fe1716a6833a4e` (`fix: align expiry handling for vega weights`).
+
 - `python/convert_ibit_snapshots.py` defines shared `trading_session_date` and `date_based_year_fraction` helpers. Converter and replay both use the New York session date and raw calendar-day difference divided by 365; same-day and past-expiry contracts are excluded before normalization, matching Addendum C §3's stated same-day exclusion. `docs/csv-contract.md` records the shared contract.
 - `tests/test_vega_weighting.py::test_converter_and_replay_emit_identical_vega_weights` uses a timestamp at 2026-10-13 00:15 UTC (2026-10-12 in New York), verifies converter/replay date, time, inclusion and weights row-by-row, excludes same-day/past expiries, and includes the next-session expiry. The parity test plus three related converter/replay behavior tests passed 4/4 at 2026-10-17T17:16:52Z.
 - Configured Release verification passed at 2026-10-17T17:32:42Z: CTest 5/5 and pytest 33/33.
 - Corrected training-only IBIT C5 refits completed all 212 snapshots per profile. The combined profile has 90,700 included quotes, 22,548 unique cleaning exclusions, 22,450 minimum-premium exclusions, 3,253 relative-spread exclusions, and 11,212 delta-window exclusions. Updated C5 results are in `docs/fit-quality.md`.
 - Corrected report-only A/B completed 212/212 fits per arm on 90,700 included quotes. The unit arm's summed objective is `0.3268406267822395`; the vega-weighted arm's is `0.1334024602632656`. Updated cap, vega-error, price-space, and coverage metrics are in `docs/fit-quality.md`. Only IBIT Oct 12–14 was read; Oct 15–16 and SPY were not read.
-- The correction is not independently reviewed: the third review round already ended with a blocking spec finding. No fourth review is recorded.
+- Independent review is not complete: the third review round ended with a blocking spec finding. The corrected snapshot is locally verified but was not reviewed again because the workflow limit of three rounds has been reached. `docs/delivery/DELIVERY.md` currently says five rounds, a configuration conflict left for project policy reconciliation.
