@@ -2,10 +2,10 @@
 
 ## State
 
-- Current: `implementing`
-- Last transition: `baseline-passed` → `implementing`
-- At: `2026-10-17T18:05:52Z`
-- Reason/evidence: Review-only scope confirmed after the new review branch passed configured Release verification (CTest 5/5, pytest 33/33). Production code is already fixed and committed; no production edits are planned in this ticket.
+- Current: `implemented`
+- Last transition: `implementing` → `implemented`
+- At: `2026-10-17T18:09:01Z`
+- Reason/evidence: Review-only re-acceptance passed the configured Release build, CTest 5/5, pytest 33/33, focused expiry-parity coverage, and training-only C5/A-B reruns. The fixed production implementation remains unchanged.
 - Blocker: None.
 
 ## State history
@@ -16,6 +16,7 @@
 | `ready` | `baseline-checking` | `2026-10-17T18:03:38Z` | Claimed by `omp coding assistant`; review branch created from fixed C9 commit `1dac3aa1ca3239397f4b5eeee8ceab6cb1ab0cd5`. |
 | `baseline-checking` | `baseline-passed` | `2026-10-17T18:05:45Z` | New branch configured Release build passed; CTest 5/5 and pytest 33/33. |
 | `baseline-passed` | `implementing` | `2026-10-17T18:05:52Z` | Review-only scope confirmed; code is unchanged from the fixed C9 deliverable. Focused expiry-parity test passed 1/1. |
+| `implementing` | `implemented` | `2026-10-17T18:09:01Z` | Review-only scope complete; corrected C5/A-B results match the checked-in report and configured verification passed. No source behavior was changed. |
 
 ## Claim
 
@@ -80,6 +81,9 @@ The user-facing result is `docs/fit-quality.md`. Review the shared expiry and we
 |---|---|---|---|---|---|---|
 | 2026-10-17T18:05:45Z | Baseline | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `9866e5502c2e49649e5dd29d0e0ae7893ff1469d` | passed | Release configure/build succeeded; CTest 5/5 passed; pytest 33/33 passed. |
 | 2026-10-17T18:05:52Z | Focused expiry-parity check | `.venv/bin/python -m pytest -q tests/test_vega_weighting.py::test_converter_and_replay_emit_identical_vega_weights` | `/home/zhangy/git/ql-essvi` | working tree | passed | Cross-UTC-midnight fixture verifies the shared New York date, same-day/past exclusion, next-session inclusion, and matching converter/replay weights; 1 passed. |
+| 2026-10-17T18:08:22Z | Corrected C5 training rerun | `.venv/bin/python scripts/evaluate_quote_cleaning.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit > /tmp/cal-c9-review-c5.json` | `/home/zhangy/git/ql-essvi` | `af5d518fc9e09d7e196198b45840bf3e56051ce4` | passed | All five profiles completed 212/212 fits on Oct 12–14 only. Combined: 90,700 quotes; 22,548 unique cleaning exclusions (22,450 premium, 3,253 spread, 11,212 delta); share above cap 69.10%, RMS ratio 2.1742, max 64.1403. Metrics match `docs/fit-quality.md`. |
+| 2026-10-17T18:08:22Z | Corrected report-only A/B | `.venv/bin/python scripts/evaluate_vega_weighting.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit > /tmp/cal-c9-review-ab.json` | `/home/zhangy/git/ql-essvi` | `af5d518fc9e09d7e196198b45840bf3e56051ce4` | passed | Both arms completed 212/212 fits on 90,700 quotes. Unit objective `0.3268406267822395`; weighted objective `0.1334024602632656`. Output confirms only Oct 12–14 inputs; no holdout or SPY was read. Metrics match `docs/fit-quality.md`. |
+| 2026-10-17T18:09:01Z | Final | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `af5d518fc9e09d7e196198b45840bf3e56051ce4` | passed | Release configure/build succeeded; CTest 5/5 passed; pytest 33/33 passed. |
 
 ## Review dispositions
 
