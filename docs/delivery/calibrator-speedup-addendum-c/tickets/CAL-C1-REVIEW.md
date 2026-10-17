@@ -2,11 +2,11 @@
 
 ## State
 
-- Current: `changes-requested`
-- Last transition: `reviewing` → `changes-requested`
-- At: `2026-10-17T14:25:33Z`
-- Reason/evidence: isolated round 1 review approved the spec and standards axes, but the verification axis found a P2 permanent-test gap: the zero-total output behavior is tested only at the helper boundary, not through analyzer aggregation/JSON output. See the round 1 review record. Add a synthetic analyzer-path regression, rerun verification, then request a fresh review.
-- Blocker: None external. Round 1 verification finding is open; the correction and checks are now recorded below.
+- Current: `reviewing`
+- Last transition: `changes-requested` → `reviewing`
+- At: `2026-10-17T14:31:18Z`
+- Reason/evidence: round 1's accepted P2 test-coverage finding was corrected in commit `72b4b427fa50e9e6d2c5ad76a154565927796175`. The new synthetic analyzer-output regression passed; configured verification passed (CTest 5/5, pytest 16/16); the real IBIT training run remains 212/212 and matches the report. Requesting fresh round 2 review of the complete deliverable.
+- Blocker: None external. WP-C5 remains gated on explicit cleaning-threshold approval.
 
 ## State history
 
@@ -19,6 +19,7 @@
 | `implementing` | `implemented` | `2026-10-17T14:17:41Z` | Review-only full-deliverable scope confirmed; current committed deliverable passed fresh configured verification at `bfe35f735fd007f137368e6e9326085d1dea553b`. No code edits are in this ticket. |
 | `implemented` | `reviewing` | `2026-10-17T14:19:02Z` | Fresh three-axis review requested on the full C1 deliverable after configured verification passed. |
 | `reviewing` | `changes-requested` | `2026-10-17T14:25:33Z` | Round 1 found a P2 permanent-test gap for the analyzer's aggregate/JSON output path; see Review round 1 and disposition. |
+| `changes-requested` | `reviewing` | `2026-10-17T14:31:18Z` | Accepted correction committed in `72b4b427fa50e9e6d2c5ad76a154565927796175`; focused analyzer tests 6/6, Release build passed, CTest 5/5, pytest 16/16, and the real-data C1 recheck passed. A fresh full-deliverable review is requested. |
 
 ## Claim
 
@@ -115,7 +116,7 @@ Load-bearing facts graded rung 4 from implementer-recorded real-data execution a
 
 ## Correction evidence — round 1
 
-The accepted finding was a permanent test-coverage gap; the behavior itself already existed in the F1-corrected analyzer. No production edit or Red/Green claim was needed. The synthetic test now covers the public CLI output plus the holdout exclusion, and the focused test, configured suite, and real-data rerun all pass (timeline rows above). The correction commit SHA will be recorded in the delivery record after commit.
+The accepted finding was a permanent test-coverage gap; the behavior itself already existed in the F1-corrected analyzer. No production edit or Red/Green claim was needed. The synthetic test now covers the public CLI output plus the holdout exclusion; it passed with the configured CTest/pytest suite and the real IBIT training rerun (timeline rows above). Correction commit: `72b4b427fa50e9e6d2c5ad76a154565927796175`.
 
 ## Gate candidates
 
@@ -127,5 +128,6 @@ None.
 - Branch: `delivery/calibrator-speedup-addendum-c/CAL-C1-REVIEW`
 - Branch start: finished CAL-C1-F1 branch at `0f625dba8d2cac43efe2cac6c4641f78c6522570`
 - Worktree: primary checkout, `/home/zhangy/git/ql-essvi`
+- Correction commit: `72b4b427fa50e9e6d2c5ad76a154565927796175` (permanent analyzer output regression test; no production behavior changed).
 - Review round 1 snapshot: SHA-256 `8b02dfba2bc0712a29488386280322d2b7fd257b1659acbde5bdcabedac51ddc`.
-- Remaining: record the correction commit, request a fresh round 2 review, and resolve review findings before handoff.
+- Remaining: fresh round 2 review outcome; DEC-006 threshold approval remains a separate gate before WP-C5.
