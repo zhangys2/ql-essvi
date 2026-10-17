@@ -2,11 +2,11 @@
 
 ## State
 
-- Current: `reviewing`
-- Last transition: `changes-requested` → `reviewing`
-- At: `2026-10-17T14:45:08Z`
-- Reason/evidence: round 2's accepted adapter-test finding was corrected in commit `9cc6c0aaf5236931876377f6569f86e49f1567d1`. The focused adapter tests passed 9/9; configured verification passed (CTest 5/5, pytest 19/19); the real IBIT run remains 212/212 and matches the report. Requesting fresh round 3 review, the final permitted round for this ticket.
-- Blocker: None external. WP-C5 remains gated on explicit cleaning-threshold approval.
+- Current: `review-approved`
+- Last transition: `reviewing` → `review-approved`
+- At: `2026-10-17T14:50:43Z`
+- Reason/evidence: Final round 3 independently approved the full C1 range across spec, standards, and verification; the configured full suite passed. See the round-3 review record and verification timeline.
+- Blocker: None for C1. DEC-006 threshold approval remains a separate gate before WP-C5.
 
 ## State history
 
@@ -21,7 +21,8 @@
 | `reviewing` | `changes-requested` | `2026-10-17T14:25:33Z` | Round 1 found a P2 permanent-test gap for the analyzer's aggregate/JSON output path; see Review round 1 and disposition. |
 | `changes-requested` | `reviewing` | `2026-10-17T14:31:18Z` | Accepted round-1 correction committed in `72b4b427fa50e9e6d2c5ad76a154565927796175`; focused analyzer tests 6/6, Release build passed, CTest 5/5, pytest 16/16, and the real-data C1 recheck passed. Round 2 review requested. |
 | `reviewing` | `changes-requested` | `2026-10-17T14:37:22Z` | Round 2 found a P2 permanent-test gap for the snapshot-to-fit adapter; see Review round 2 and disposition. |
-| `changes-requested` | `reviewing` | `2026-10-17T14:45:08Z` | Accepted round-2 correction committed in `9cc6c0aaf5236931876377f6569f86e49f1567d1`; focused adapter tests 9/9, Release build passed, CTest 5/5, pytest 19/19, and the real-data C1 recheck passed. Final permitted review round requested. |
+| `changes-requested` | `reviewing` | `2026-10-17T14:45:08Z` | Accepted round-2 correction committed in `9cc6c0aaf5236931876377f6569f86e49f1567d1`; focused adapter tests 9/9, Release build passed, CTest 5/5, pytest 19/19, and the real-data C1 recheck passed. Final permitted round 3 review requested. |
+| `reviewing` | `review-approved` | `2026-10-17T14:50:43Z` | Final round-3 spec, standards, and verification review approved the full range; configured full suite passed. |
 
 ## Claim
 
@@ -99,6 +100,8 @@ This ticket re-accepts a completed implementation; production-code TDD is not ap
 | 2026-10-17 | Review correction — fit adapter | `.venv/bin/python -m pytest -q tests/test_analyze_fit_quality.py` | `/home/zhangy/git/ql-essvi` | working tree | passed | 9/9 passed. New tests exercise `fit_snapshot()` with real `prepare_snapshot` output and controlled, reordered fit CSV rows; verify ID mapping, raw source/tick positions, excess calculations, convergence failure, and missing fitted ID. |
 | 2026-10-17 | Final verification after adapter coverage | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | working tree | passed | Release build succeeded; CTest 5/5 passed; pytest 19/19 passed. |
 | 2026-10-17 | Real-data recheck after adapter coverage | `python3 scripts/analyze_fit_quality.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit > /tmp/cal-c1-review.json` | `/home/zhangy/git/ql-essvi` | working tree | passed | Output JSON confirms 212/212 cold fits, 113,965 valid quotes, only Oct 12–14 training files, and metrics matching the checked-in report at displayed precision. Oct 15–16 were not read. |
+| 2026-10-17T14:45:08Z | Review round 3 start | `review-delivery-diff`; base-to-HEAD `ef6c788b8e2479b9aa74a1b595fc9844d9094082..998d5a56af2ab58907d1f64a68701ffc422c3659`; three isolated axes | `/home/zhangy/git/ql-essvi` | `998d5a56af2ab58907d1f64a68701ffc422c3659` | reviewing | Frozen snapshot `/tmp/cal-c1-review-round3.diff`, SHA-256 `9d0d8deb93daa62ec70c98f6e47ed7bc2b8015c1f26d16e4640c320c86cc89df`; no untracked files. |
+| 2026-10-17T14:50:43Z | Review round 3 | Same full base-to-HEAD range; three isolated axes | `/home/zhangy/git/ql-essvi` | `998d5a56af2ab58907d1f64a68701ffc422c3659` | approved | Spec: no findings. Standards: no findings; gate candidates none. Verification: configured full suite passed (Release configure/build, CTest 5/5, pytest 19/19); no false claims, UNTESTED gaps, or UNPROVEN facts. Snapshot SHA-256 `9d0d8deb93daa62ec70c98f6e47ed7bc2b8015c1f26d16e4640c320c86cc89df`. |
 
 ## Review record
 
@@ -122,12 +125,28 @@ No findings. The round-1 test calls `analysis.main()`, checks output JSON and th
 
 The round-1 analyzer-output gap is closed by `analysis.main()` synthetic coverage. Load-bearing facts grade rung 4 from implementer-recorded test and real-data evidence, not independent command execution. Adapter test correction remains open.
 
+### Round 3 — isolated three-axis review
+
+#### Spec review — isolated
+
+No findings. The report/analyzer satisfy C1's IBIT training-split decomposition and holdout boundary; SPY is deferred and cleaning policies remain proposals pending DEC-006. The supplied source spec copy's checksum and both prior review corrections are recorded and verified.
+
+#### Standards review — isolated
+
+No findings. The round-1 and round-2 regression additions do not weaken checks; no new suppression, unapproved exception, or verification-command change. Gate candidates: None.
+
+#### Verification review — isolated
+
+**Approved; no findings.** The isolated reviewer ran the configured full-suite command from `docs/delivery/DELIVERY.md` with the documented `.venv/bin` PATH prefix; exit code 0, Release configure/build succeeded, CTest 5/5, pytest 19/19. It did not rerun real-data analysis.
+
+Load-bearing facts: zero-total/positive-total contribution behavior — rung 4; Oct 12–14 training and Oct 15–16 holdout boundary — rung 4; snapshot-to-fit mapping and failure handling — rung 4. Real-data diagnosis — rung 4 based on implementer-recorded command/evidence, not independently rerun in this review. No facts below rung 4, false claims, or test-coverage gaps.
+
 ## Review dispositions
 
 | Round | Finding | Disposition | Evidence |
 | --- | --- | --- | --- |
 | 1 — Verification P2 (UNTESTED) — Analyzer output path lacks a permanent regression | accepted | Add synthetic coverage through `analyze()` for zero-total JSON output and fixed training dates; focused command and correction commit will be recorded in the round-2 correction evidence. |
-| 2 — Verification P2 (UNTESTED) — Snapshot-to-fit adapter lacks deterministic coverage | accepted | Add a `fit_snapshot()` test using real prepared snapshot rows and controlled fit diagnostics/fitted rows; verify quote-ID mapping, raw fetch position and derived observation metrics, plus non-converged handling. Focused command and correction commit will be recorded in the round-3 correction evidence. |
+| 2 — Verification P2 (UNTESTED) — Snapshot-to-fit adapter lacks deterministic coverage | accepted | Add a `fit_snapshot()` test using real prepared snapshot rows and controlled fit diagnostics/fitted rows; verify quote-ID mapping, raw fetch position and derived observation metrics, plus non-converged handling. Correction commit and focused evidence are recorded under round 2 below; round 3 rechecked the correction. |
 
 ## Correction evidence — round 1
 
@@ -150,4 +169,5 @@ None.
 - Correction commits: `72b4b427fa50e9e6d2c5ad76a154565927796175` (analyzer output regression; no production behavior changed), `9cc6c0aaf5236931876377f6569f86e49f1567d1` (snapshot-fit adapter regression; no production behavior changed).
 - Review round 1 snapshot: SHA-256 `8b02dfba2bc0712a29488386280322d2b7fd257b1659acbde5bdcabedac51ddc`.
 - Review round 2 snapshot: SHA-256 `5593589145519f4c474c78aa7f4ac667266d917d33e53c5fe71864458474893e`.
-- Remaining: final permitted round 3 review outcome; DEC-006 threshold approval remains separate before WP-C5.
+- Review round 3 snapshot: SHA-256 `9d0d8deb93daa62ec70c98f6e47ed7bc2b8015c1f26d16e4640c320c86cc89df`.
+- Remaining: None for C1 acceptance. DEC-006 threshold approval remains separate before WP-C5.
