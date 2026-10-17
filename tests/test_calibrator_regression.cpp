@@ -245,6 +245,13 @@ void weightedWarmLocalFitUsesWeightedEquations() {
          std::abs(unit_slice.rho - weighted_slice.rho) > 1e-10);
 }
 
+void weightedAdaptiveWarmSlackScalesWithQuoteWeight() {
+  assert(essvi::detail::passesAdaptiveWeightedQuoteCap(0.055, 0.05, 0.5, 0.01));
+  assert(!essvi::detail::passesAdaptiveWeightedQuoteCap(0.055001, 0.05, 0.5, 0.01));
+  assert(essvi::detail::passesAdaptiveWeightedQuoteCap(0.22, 0.2, 2.0, 0.01));
+  assert(!essvi::detail::passesAdaptiveWeightedQuoteCap(0.220001, 0.2, 2.0, 0.01));
+}
+
 void weightedWarmGateUsesSensitivityScale() {
   const auto previous_quotes = essvi::bench::syntheticChain(3, 100);
   const auto previous = essvi::calibrate(previous_quotes);
@@ -274,6 +281,8 @@ void weightedWarmGateUsesSensitivityScale() {
       current_quotes, &previous, previous_quotes, options);
 
   assert(warm.converged);
+  assert(warm.quality_checks == 1);
+  assert(warm.restricted_cold_searches == 1);
   assert(warm.fallback_reason_counts.loss_above_gate > 0);
   assert(warm.slices_refit > 0);
   assert(warm.slices_reused < current_quotes.size() / 100);
@@ -286,6 +295,7 @@ int main() {
   legacyAndWeightedCsvControlColdObjective();
   includedWeightsMustBeFiniteAndPositive();
   weightedWarmLocalFitUsesWeightedEquations();
+  weightedAdaptiveWarmSlackScalesWithQuoteWeight();
   weightedWarmGateUsesSensitivityScale();
   return 0;
 }

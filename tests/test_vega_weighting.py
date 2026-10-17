@@ -198,6 +198,64 @@ def test_normalized_schema_accepts_legacy_and_weighted_files(tmp_path):
     assert "excluded quote weight must be empty" in result.stderr
 
 
+def test_normalized_schema_accepts_converter_same_day_and_past_expiries(tmp_path):
+    output_dir = tmp_path / "converted-expiries"
+    output_dir.mkdir()
+    snapshot = _snapshot(
+        [
+            _contract("near", 101.0),
+            _contract("same-day", 101.0, expiry="20261012"),
+            _contract("past", 101.0, expiry="20261011"),
+        ]
+    )
+    output_path, row_count, included_count, _ = converter.convert_snapshot(
+        snapshot, output_dir, "expiry-snapshot.jsonl", 1
+    )
+
+    assert output_path is not None
+    assert row_count == 3
+    assert included_count == 1
+    with output_path.open(newline="", encoding="utf-8") as stream:
+        rows = {row["quote_id"]: row for row in csv.DictReader(stream)}
+    for quote_id in ("same-day", "past"):
+        row = rows[quote_id]
+        assert row["included"] == "false"
+        assert row["filter_reason"] == "expired_or_same_day"
+        assert row["time_to_expiry"] == ""
+        assert row["bid_iv"] == row["ask_iv"] == row["mid_iv"] == ""
+        assert row["weight"] == ""
+
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "python" / "validate_schema.py"), "normalized", str(output_path)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+    for variant in ("wrong-reason", "nonblank-time"):
+        invalid_rows = [row.copy() for row in rows.values()]
+        expired_row = next(row for row in invalid_rows if row["quote_id"] == "same-day")
+        if variant == "wrong-reason":
+            expired_row["filter_reason"] = "stale_quote"
+        else:
+            expired_row["time_to_expiry"] = "0"
+        invalid_path = tmp_path / f"{variant}.csv"
+        with invalid_path.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(stream, fieldnames=converter.HEADER)
+            writer.writeheader()
+            writer.writerows(invalid_rows)
+        invalid_result = subprocess.run(
+            [sys.executable, str(ROOT / "python" / "validate_schema.py"), "normalized", str(invalid_path)],
+            capture_output=True,
+            text=True,
+        )
+        assert invalid_result.returncode != 0
+        if variant == "wrong-reason":
+            assert "expiry_date must be after effective_date" in invalid_result.stderr
+        else:
+            assert "expired quote time_to_expiry must be empty" in invalid_result.stderr
+
+
 def test_vega_ab_runs_real_cold_fits_on_training_only():
     evaluator = importlib.import_module("scripts.evaluate_vega_weighting")
     with tempfile.TemporaryDirectory(prefix="vega-evaluator-") as temp_name:

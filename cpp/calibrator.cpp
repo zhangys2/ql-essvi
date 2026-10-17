@@ -347,9 +347,7 @@ bool passesAdaptiveQuoteCap(const Slice& candidate, const Slice& cold,
     if (!quote.has_band) continue;
     const double candidate_ratio = quote.weight * quoteExcessRatio(candidate, quote);
     const double cold_ratio = quote.weight * quoteExcessRatio(cold, quote);
-    if (!std::isfinite(candidate_ratio) || !std::isfinite(cold_ratio) ||
-        candidate_ratio > std::max(cap, cold_ratio + 0.01))
-      return false;
+    if (!detail::passesAdaptiveWeightedQuoteCap(candidate_ratio, cold_ratio, quote.weight, cap)) return false;
   }
   return true;
 }
