@@ -10,7 +10,7 @@ One row per raw quote:
 quote_id,effective_date,expiry_date,time_to_expiry,forward,discount_factor,strike,option_type,bid_iv,ask_iv,mid_iv,included,filter_reason,weight
 ```
 
-`option_type` is `C` or `P`; IVs are decimal volatilities (not percentage points). Excluded values remain present with empty numeric fields and `included=false`.
+`option_type` is `C` or `P`; IVs are decimal volatilities (not percentage points). Snapshot `effective_date` uses the `America/New_York` session date; `time_to_expiry` is the calendar-day difference from that date divided by 365. Same-day and expired contracts are excluded. Excluded values remain present with empty numeric fields and `included=false`.
 
 Current converters emit the trailing `weight` column; readers accept both this 14-column schema and the legacy 13-column schema, which means unit weights. For included quotes, `weight` is the finite positive Black–Scholes price sensitivity per unit total variance, `D*F*phi(d1)/(2*sigma*sqrt(T))`, divided by the median sensitivity among included quotes in that snapshot. Excluded rows have an empty weight. Missing or blank weights mean 1.0 for C++ compatibility; schema validation requires each included weight to be finite and positive.
 

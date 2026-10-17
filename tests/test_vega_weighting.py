@@ -16,8 +16,7 @@ from convert_ibit_snapshots import black_scholes_price
 from replay_snapshots import prepare_snapshot
 
 
-def _contract(identifier, strike, *, expiry="20281011", iv=0.8):
-    time_years = 2.0
+def _contract(identifier, strike, *, expiry="20281011", iv=0.8, time_years=2.0):
     mid = black_scholes_price(100.0, strike, time_years, iv, is_call=True)
     return {
         "conId": identifier,
@@ -29,8 +28,9 @@ def _contract(identifier, strike, *, expiry="20281011", iv=0.8):
     }
 
 
-def _snapshot(contracts):
-    timestamp = dt.datetime(2026, 10, 12, 16, 0, tzinfo=dt.timezone.utc)
+def _snapshot(contracts, *, timestamp=None):
+    if timestamp is None:
+        timestamp = dt.datetime(2026, 10, 12, 16, 0, tzinfo=dt.timezone.utc)
     return {
         "ts": int(timestamp.timestamp() * 1000),
         "spot_ref": 100.0,
@@ -80,7 +80,11 @@ def test_converter_and_replay_emit_identical_vega_weights(tmp_path):
             _contract("mid", 115.0),
             _contract("wing", 150.0),
             _contract("excluded", 100.0),
-        ]
+            _contract("same-day", 101.0, expiry="20261012", time_years=1 / 365),
+            _contract("past", 101.0, expiry="20261011", time_years=1 / 365),
+            _contract("session-next", 101.0, expiry="20261013", time_years=1 / 365),
+        ],
+        timestamp=dt.datetime(2026, 10, 13, 0, 15, tzinfo=dt.timezone.utc),
     )
     replay = prepare_snapshot(snapshot, "IBIT")
     output_dir = tmp_path / "converted"
@@ -90,8 +94,8 @@ def test_converter_and_replay_emit_identical_vega_weights(tmp_path):
     )
 
     assert output_path is not None
-    assert row_count == 4
-    assert included_count == replay.valid_quotes == 3
+    assert row_count == 7
+    assert included_count == replay.valid_quotes == 4
     with output_path.open(newline="", encoding="utf-8") as stream:
         converted_rows = list(csv.DictReader(stream))
     assert converter.HEADER[-1] == "weight"
@@ -100,10 +104,14 @@ def test_converter_and_replay_emit_identical_vega_weights(tmp_path):
     assert converted_by_id.keys() == replay_by_id.keys()
     for quote_id, converted in converted_by_id.items():
         replay_row = replay_by_id[quote_id]
+        assert converted["effective_date"] == replay_row[1]
+        assert converted["time_to_expiry"] == replay_row[3]
         assert converted["included"] == replay_row[11]
         assert converted["weight"] == replay_row[13]
-    assert converted_by_id["excluded"]["included"] == "false"
-    assert converted_by_id["excluded"]["weight"] == ""
+    assert all(row["effective_date"] == "2026-10-12" for row in converted_rows)
+    for quote_id in ("excluded", "same-day", "past"):
+        assert converted_by_id[quote_id]["included"] == "false"
+        assert converted_by_id[quote_id]["weight"] == ""
     assert all(
         float(row["weight"]) > 0.0
         for row in converted_rows

@@ -16,8 +16,15 @@ from replay_snapshots import (
 from run_snapshot_replay import split_replay_segments
 
 
-def _contract(con_id, *, iv=0.8, bid_factor=0.95, ask_factor=1.05, strike=105.0):
-    expiry = dt.date(2026, 10, 15)
+def _contract(
+    con_id,
+    *,
+    iv=0.8,
+    bid_factor=0.95,
+    ask_factor=1.05,
+    strike=105.0,
+    expiry=dt.date(2026, 10, 16),
+):
     time_years = 1.0 / 365.0
     price = black_scholes_price(100.0, strike, time_years, iv, True)
     return {

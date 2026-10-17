@@ -13,6 +13,7 @@ import gzip
 import json
 import math
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import vega_weights
 
@@ -43,6 +44,7 @@ MAXIMUM_RELATIVE_SPREAD = 0.6666666667
 MINIMUM_ABS_DELTA = 0.02
 MAXIMUM_ABS_DELTA = 0.95
 UTC = dt.timezone.utc
+NEW_YORK = ZoneInfo("America/New_York")
 
 
 def finite_number(value):
@@ -64,6 +66,16 @@ def snapshot_time(snapshot):
     if not value:
         raise ValueError("snapshot has neither a numeric ts nor an iso timestamp")
     return dt.datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(UTC)
+
+
+def trading_session_date(timestamp):
+    """Return the US equity-options trading date for a snapshot timestamp."""
+    return timestamp.astimezone(NEW_YORK).date()
+
+
+def date_based_year_fraction(expiry, session_date):
+    """Convert calendar days from a trading date to a year fraction."""
+    return (expiry - session_date).days / 365.0
 
 
 def expiry_date(value):
@@ -229,7 +241,7 @@ def convert_snapshot(
     snapshot, output_dir, source_name, line_number, *, cleaning_rules=CLEANING_RULES
 ):
     timestamp = snapshot_time(snapshot)
-    effective_date = timestamp.date()
+    effective_date = trading_session_date(timestamp)
     stamp_ms = int(timestamp.timestamp() * 1000.0)
     output_path = output_dir / f"normalized_quotes_{stamp_ms:013d}.csv"
     spot = finite_number(snapshot.get("spot_ref"))
@@ -257,9 +269,7 @@ def convert_snapshot(
             try:
                 expiry = expiry_date(raw_expiry)
                 expiry_text = expiry.isoformat()
-                # Match the repository's date-based year fraction so slices keep
-                # identical expiry keys across snapshots from the same day.
-                time_years = (expiry - effective_date).days / 365.0
+                time_years = date_based_year_fraction(expiry, effective_date)
             except (TypeError, ValueError):
                 pass
         row, included = quote_row(

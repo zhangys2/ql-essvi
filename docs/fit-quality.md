@@ -151,20 +151,20 @@ Reproduce from the repository root after building the Release fitter:
 python3 scripts/evaluate_quote_cleaning.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit
 ```
 
-The runner refits all 212 IBIT snapshots from Oct 12–14 independently under each of the four single-rule profiles and the combined profile. It reads only `chain_20261012.jsonl.gz`, `chain_20261013.jsonl.gz`, and `chain_20261014.jsonl.gz`; Oct 15–16 and SPY are not read. JSON output includes per-snapshot counts for all rules and unique combined exclusions, plus refitted unweighted cold-fit metrics. The existing C1 analyzer remains explicitly unfiltered.
+The runner refits all 212 IBIT snapshots from Oct 12–14 independently under each of the four single-rule profiles and the combined profile. It reads only `chain_20261012.jsonl.gz`, `chain_20261013.jsonl.gz`, and `chain_20261014.jsonl.gz`; Oct 15–16 and SPY are not read. JSON output includes per-snapshot counts for all rules and unique combined exclusions, plus refitted unweighted cold-fit metrics. The C1 diagnosis and its original baseline are preserved as historical results. These C5 refits use the corrected shared expiry convention: New York session date, calendar-day difference divided by 365, and same-day/past expiries excluded in both converter and replay. The minimum-bid-only profile is the current no-cleaning comparator under that convention.
 
 | Refit profile | Excluded by rule: bid / premium / spread / delta | Unique cleaning exclusions | Included quotes | Above-cap share | RMS excess ratio | Maximum ratio |
 |---|---:|---:|---:|---:|---:|---:|
-| Unfiltered C1 baseline | — | 0 | 113,965 | 71.71% | 2.410 | 64.134 |
-| Minimum bid only | 0 / 0 / 0 / 0 | 0 | 113,965 | 71.71% | 2.410 | 64.134 |
-| Mid premium >= $0.05 | 0 / 22,913 / 0 / 0 | 22,913 | 91,052 | 70.71% | 2.327 | 64.133 |
-| Relative spread <= 0.6666666667 | 0 / 0 / 3,253 / 0 | 3,253 | 110,712 | 73.25% | 2.437 | 64.134 |
-| Absolute delta [0.02, 0.95] | 0 / 0 / 0 / 11,212 | 11,212 | 102,753 | 69.30% | 2.295 | 64.140 |
-| Combined approved policy | 0 / 22,913 / 3,253 / 11,212 | 23,011 | 90,954 | 70.64% | 2.322 | 64.140 |
+| Unfiltered C1 baseline (historical) | — | 0 | 113,965 | 71.71% | 2.410 | 64.134 |
+| Minimum bid only | 0 / 0 / 0 / 0 | 0 | 113,248 | 71.22% | 2.248 | 64.133 |
+| Mid premium >= $0.05 | 0 / 22,450 / 0 / 0 | 22,450 | 90,798 | 69.18% | 2.180 | 64.133 |
+| Relative spread <= 0.6666666667 | 0 / 0 / 3,253 / 0 | 3,253 | 109,995 | 72.76% | 2.272 | 64.133 |
+| Absolute delta [0.02, 0.95] | 0 / 0 / 0 / 11,212 | 11,212 | 102,036 | 68.50% | 2.103 | 64.140 |
+| Combined approved policy | 0 / 22,450 / 3,253 / 11,212 | 22,548 | 90,700 | 69.10% | 2.174 | 64.140 |
 
-Per-rule counts are independent and overlap; the combined count is unique. The minimum-bid rule adds no exclusions because the existing European IV inversion already rejects zero bid prices in this OTM sample. All five profiles completed 212/212 cold fits. Raw source size was 259,978 contracts per profile; the replay's existing locked/crossed/other categories still reconcile, with cleaning exclusions reported as a diagnostic subset of `excluded_other`.
+Per-rule counts are independent and overlap; the combined count is unique. The minimum-bid rule adds no exclusions because the existing European IV inversion already rejects zero bid prices in this OTM sample. All five current profiles completed 212/212 cold fits. Raw source size was 259,978 contracts per profile; the replay's existing locked/crossed/other categories still reconcile, with cleaning exclusions reported as a diagnostic subset of `excluded_other`.
 
-The refits show modest reductions in share-above-cap and RMS for the premium, delta, and combined profiles; the spread-only profile worsens both. The combined maximum ratio is slightly higher than baseline. This is a measured effect of the explicitly approved data policy, not a claim that every quality metric improves. Vega-weighted fitting and its report-only A/B belong to WP-C9, not these C5 measurements.
+Against the corrected minimum-bid-only comparator, the premium, delta, and combined profiles lower share-above-cap and RMS; the spread-only profile worsens both. The combined maximum ratio is slightly higher than comparator. These are measured effects of the explicitly approved policy, not a claim that every metric improves. Vega-weighted fitting and its report-only A/B belong to WP-C9, not these unweighted C5 measurements.
 
 ## WP-C9 mandatory vega-weighted fit and report-only A/B
 
@@ -174,25 +174,27 @@ Reproduce the report from the repository root with the Release fitter:
 .venv/bin/python scripts/evaluate_vega_weighting.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit
 ```
 
-The evaluator reads only IBIT `chain_20261012.jsonl.gz`, `chain_20261013.jsonl.gz`, and `chain_20261014.jsonl.gz`. It runs an independent cold fit under unit weights and another under per-snapshot median-normalized raw \(dC/dw\) weights for each snapshot. Both arms use the approved C5 combined cleaning profile. The JSON output carries per-snapshot contract and exclusion counts; both arms completed 212/212 snapshots with 90,954 included quotes from 259,978 input contracts. Combined cleaning excluded 23,011 quotes (22,913 minimum-premium, 3,253 relative-spread, 11,212 delta-window, 0 minimum-bid; rule counts overlap). Each arm also had 5 locked contracts, 0 crossed contracts, and 169,019 `excluded_other` contracts; the 23,011 cleaning exclusions are included in `excluded_other`. Oct 15–16 and SPY were not read.
+The evaluator reads only IBIT `chain_20261012.jsonl.gz`, `chain_20261013.jsonl.gz`, and `chain_20261014.jsonl.gz`. It runs independent unit-weight and per-snapshot median-normalized raw \(dC/dw\)-weighted cold fits under the approved C5 combined cleaning profile. Both arms completed 212/212 snapshots with 90,700 included quotes from 259,978 input contracts. Combined cleaning excluded 22,548 quotes (22,450 minimum-premium, 3,253 relative-spread, 11,212 delta-window, 0 minimum-bid; rule counts overlap). Each arm also had 5 locked contracts, 0 crossed contracts, and 169,273 `excluded_other` contracts; combined cleaning exclusions are included in that count. Oct 15–16 and SPY were not read.
+
+The converter and replay use the same New York session date and raw calendar-day year fraction; same-day and past-expiry contracts are excluded before weight normalization. The report below reflects this shared eligibility rule.
 
 | Fit arm | Fits / snapshots | Included quotes | Combined cleaning exclusions | Share above unweighted cap | RMS excess ratio | Maximum ratio | Summed fit objective |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| Unit weights | 212 / 212 | 90,954 | 23,011 | 70.64% | 2.3220 | 64.1404 | 0.326890 |
-| Vega weights | 212 / 212 | 90,954 | 23,011 | 70.77% | 2.2402 | 43.9209 | 0.134667 |
+| Unit weights | 212 / 212 | 90,700 | 22,548 | 69.10% | 2.1742 | 64.1403 | 0.326841 |
+| Vega weights | 212 / 212 | 90,700 | 22,548 | 68.82% | 2.0913 | 43.9205 | 0.133402 |
 
 The cap share, RMS ratio, and maximum ratio remain the original unweighted per-quote metrics. The summed objective is \(\sum e_i^2\) for the unit arm and \(\sum (u_i e_i)^2\) for the vega arm, where \(e_i\) is total-variance band excess and \(u_i\) is normalized raw sensitivity.
 
 | Fit arm | Sum of squared vega-weighted excess | Vega-weighted RMS | Vega-weighted maximum |
 |---|---:|---:|---:|
-| Unit weights | 0.144535 | 0.00126059 | 0.0123871 |
-| Vega weights | 0.134667 | 0.00121680 | 0.0125697 |
+| Unit weights | 0.143387 | 0.00125734 | 0.0124365 |
+| Vega weights | 0.133402 | 0.00121277 | 0.0126194 |
 
 Price-space excess is the first-order equivalent \(dC/dw\) times absolute total-variance band excess; it is not a direct repricing error. One tick is `$0.01` per option share. Contract-dollar values multiply by 100 shares, the standard OCC equity-option unit; the source snapshots contain no multiplier field.
 
 | Fit arm | Price excess ticks RMS | Maximum ticks | Dollars/share RMS | Maximum dollars/share | Dollars/100-share contract RMS | Maximum dollars/contract |
 |---|---:|---:|---:|---:|---:|---:|
-| Unit weights | 7.0421 | 71.3250 | $0.070421 | $0.713250 | $7.0421 | $71.3250 |
-| Vega weights | 6.7925 | 72.3768 | $0.067925 | $0.723768 | $6.7925 | $72.3768 |
+| Unit weights | 7.0010 | 71.3250 | $0.070010 | $0.713250 | $7.0010 | $71.3250 |
+| Vega weights | 6.7489 | 72.3740 | $0.067489 | $0.723740 | $6.7489 | $72.3740 |
 
-The A/B is report-only: mandatory vega weighting remains the production objective regardless of the comparison. In this sample it lowers the weighted objective, the unweighted RMS excess ratio, and the price-space RMS, while slightly increasing the unweighted share above cap and the maximum price-space excess. These competing outcomes are not a gate or a claim that every quality metric improves. The 100-share assumption follows the [OCC Equity Options Product Specifications](https://www.theocc.com/clearance-and-settlement/clearing/equity-options-product-specifications).
+The A/B is report-only: mandatory vega weighting remains the production objective regardless of the comparison. In this sample, vega weighting lowers the summed objective, unweighted share above cap, unweighted RMS excess ratio, and price-space RMS; it raises the maximum price-space excess slightly. These competing outcomes are not a gate or a claim that every quality metric improves. The 100-share assumption follows the [OCC Equity Options Product Specifications](https://www.theocc.com/clearance-and-settlement/clearing/equity-options-product-specifications).

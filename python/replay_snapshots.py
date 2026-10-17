@@ -2,9 +2,9 @@
 """Prepare benchmark-only IBIT/SPY snapshot replay inputs and IV move data.
 
 Prices are inverted with European Black-Scholes as a calibration-path stand-in,
-not as NBBO or American-option pricing estimates. Same-session expiry dates use
-a fixed one-day date-based year fraction so expiry identity stays stable across
-intraday replay snapshots.
+not as NBBO or American-option pricing estimates. Expiry year fractions use
+calendar days from the New York session date; same-day and expired contracts are
+excluded.
 """
 
 import argparse
@@ -17,23 +17,23 @@ import statistics
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 from convert_ibit_snapshots import (
     CLEANING_RULES,
     HEADER,
+    date_based_year_fraction,
     add_cleaning_exclusions,
     empty_cleaning_counts,
     expiry_date,
     finite_number,
     quote_row,
     snapshot_time,
+    trading_session_date,
     vega_weights,
 )
 
 
 CADENCE_MS = 5 * 60 * 1000
-NEW_YORK = ZoneInfo("America/New_York")
 METRICS = ("level", "tilt", "noise")
 MANIFEST_HEADER = [
     "asset",
@@ -142,15 +142,10 @@ def _spot_reference(snapshot):
     return spot if spot is not None and spot > 0.0 else None
 
 
-def _year_fraction(expiry, session_date):
-    days = (expiry - session_date).days
-    return max(days, 1) / 365.0
-
-
 def prepare_snapshot(snapshot, asset, source_file="", *, cleaning_rules=CLEANING_RULES):
     """Convert one snapshot, applying the selected cleaning rules after IV checks."""
     timestamp = snapshot_time(snapshot)
-    session_day = timestamp.astimezone(NEW_YORK).date()
+    session_day = trading_session_date(timestamp)
     spot = _spot_reference(snapshot)
     contracts = snapshot.get("contracts")
     if not isinstance(contracts, list):
@@ -183,7 +178,7 @@ def prepare_snapshot(snapshot, asset, source_file="", *, cleaning_rules=CLEANING
             try:
                 expiry = expiry_date(raw_expiry)
                 expiry_text = expiry.isoformat()
-                time_years = _year_fraction(expiry, session_day)
+                time_years = date_based_year_fraction(expiry, session_day)
             except (TypeError, ValueError):
                 pass
         row, included = quote_row(
