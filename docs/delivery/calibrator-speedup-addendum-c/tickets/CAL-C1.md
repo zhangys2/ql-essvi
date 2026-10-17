@@ -4,9 +4,9 @@
 
 - Current: `changes-requested`
 - Last transition: `reviewing` → `changes-requested`
-- At: `2026-10-17T12:31:07Z`
-- Reason/evidence: round 1 review approved the spec axis and verification command, but found three standards issues. Corrections and rerun evidence are recorded; a fresh review remains required.
-- Blocker: None; the round-1 corrections are local. WP-C5 remains gated on the user's threshold approval.
+- At: `2026-10-17T12:43:30Z`
+- Reason/evidence: round 2 spec review found a missing breakdown of relative total-variance band width; see the frozen review snapshot and disposition below. The correction is implemented and verified; awaiting commit and fresh review.
+- Blocker: None for CAL-C1. WP-C5 remains gated on the user's threshold approval.
 
 ## State history
 
@@ -19,6 +19,8 @@
 | `implementing` | `implemented` | `2026-10-17T12:26:11Z` | Commit `f15bc16`; real-data runner passed; final configured build and test command passed. The full external dataset is not repository-resident, so the reproducible data run is the acceptance test; no production behavior changed. |
 | `implemented` | `reviewing` | `2026-10-17T12:26:56Z` | Fresh review requested on base `ef6c788b8e2479b9aa74a1b595fc9844d9094082` through committed HEAD `ad3b8425855cb3001442163951f65c2b2b694ea7`; frozen snapshot included the ticket-only review-start update. |
 | `reviewing` | `changes-requested` | `2026-10-17T12:31:07Z` | Isolated round 1 review: spec approved; standards requested two P2 corrections and one P3 clarification; verification passed the configured command. |
+| `changes-requested` | `reviewing` | `2026-10-17T12:37:59Z` | Corrections committed in `cdbdfc3`; focused regression and configured full verification passed; fresh round 2 requested. |
+| `reviewing` | `changes-requested` | `2026-10-17T12:43:30Z` | Isolated round 2 review found the required relative total-variance band-width breakdown missing; see review disposition. |
 
 ## Claim
 
@@ -49,7 +51,7 @@ Produce a reproducible read-only diagnosis of cold-fit misses on the IBIT traini
 
 ## Test plan
 
-- `tests/test_analyze_fit_quality.py` covers malformed raw-contract identity indexing, including preserving original positions. The complete historical dataset is external to the repository, so the analysis runner is also exercised end-to-end on the real IBIT training data.
+- `tests/test_analyze_fit_quality.py` covers malformed raw-contract identity indexing, preserving original positions, the relative total-variance band-width normalization, and grouped quote-quality metrics. The complete historical dataset is external to the repository, so the analysis runner is also exercised end-to-end on the real IBIT training data.
 - Run from the repository root: `python3 scripts/analyze_fit_quality.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit`. It reads only Oct 12–14, runs one cold CLI fit per usable snapshot, verifies convergence and quote-count reconciliation, and prints JSON to stdout; `docs/fit-quality.md` is the checked-in report transcribed from that output.
 - Run the configured full verification at the ticket boundary.
 
@@ -79,9 +81,15 @@ The user-visible result is `docs/fit-quality.md`, with reproducible JSON output 
 | 2026-10-17 | Review round 1 start | Base-to-HEAD review `ef6c788b8e2479b9aa74a1b595fc9844d9094082..ad3b8425855cb3001442163951f65c2b2b694ea7`; three isolated axes | `/home/zhangy/git/ql-essvi` | `ad3b8425855cb3001442163951f65c2b2b694ea7` | reviewing | Frozen diff SHA-256 `d8b11f8d4cbf7d5dd22c29174b7a74ddbf5fc1315f663bdf87efead3199e3949`; three independent reviewers. |
 | 2026-10-17T12:31:07Z | Review round 1 | Base-to-HEAD snapshot `ef6c788b8e2479b9aa74a1b595fc9844d9094082..ad3b8425855cb3001442163951f65c2b2b694ea7`; three isolated axes | `/home/zhangy/git/ql-essvi` | `ad3b8425855cb3001442163951f65c2b2b694ea7` | changes required | Spec: no findings. Standards: P2 non-object contract handling, P2 unapproved `noqa` suppressions, P3 runner-output wording. Verification: full command passed CTest 5/5 and pytest 10/10; data run treated as implementer-reported. |
 | 2026-10-17 | Red | `.venv/bin/python -m pytest -q tests/test_analyze_fit_quality.py` | `/home/zhangy/git/ql-essvi` | working tree | expected failure | The new identity-indexing regression could not import `source_contract_index`, proving the missing behavior before correction. |
-| 2026-10-17 | Green | `.venv/bin/python -m pytest -q tests/test_analyze_fit_quality.py` | `/home/zhangy/git/ql-essvi` | working tree | passed | Added the shared source-contract index helper; malformed non-dictionary entries are skipped without shifting subsequent raw indexes. Focused test passed 1/1. |
-| 2026-10-17 | Corrected real-data diagnosis | `python3 scripts/analyze_fit_quality.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit` | `/home/zhangy/git/ql-essvi` | working tree | passed | 212/212 cold fits, 113,965 valid quotes, 259,978 source contracts reconciled; original metrics and candidate counts unchanged. JSON output and checked-in Markdown relationship clarified. |
-| 2026-10-17 | Final verification after round-1 fixes | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | working tree | passed | Release build succeeded; CTest 5/5 passed; pytest 11/11 passed. |
+| 2026-10-17 | Green | `.venv/bin/python -m pytest -q tests/test_analyze_fit_quality.py` | `/home/zhangy/git/ql-essvi` | working tree | passed | Added the shared source-contract index helper; malformed non-dictionary entries are skipped without shifting original list indexes. Focused test passed 1/1. |
+| 2026-10-17 | Corrected real-data diagnosis | `python3 scripts/analyze_fit_quality.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit` | `/home/zhangy/git/ql-essvi` | `cdbdfc3` | passed | 212/212 cold fits, 113,965 valid quotes, 259,978 source contracts reconciled; original metrics and candidate counts unchanged. JSON output and checked-in Markdown relationship clarified. |
+| 2026-10-17 | Final verification after round-1 fixes | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `cdbdfc3` | passed | Release build succeeded; CTest 5/5 passed; pytest 11/11 passed. |
+| 2026-10-17T12:37:59Z | Review round 2 start | Base-to-HEAD review `ef6c788b8e2479b9aa74a1b595fc9844d9094082..cdbdfc3868f2dd2620e20e852ee4e47a7ab44407`; three isolated axes | `/home/zhangy/git/ql-essvi` | `cdbdfc3868f2dd2620e20e852ee4e47` | reviewing | Frozen diff `/tmp/cal-c1-round2.diff`, SHA-256 `52a68031d3aac9cfa547a4d61d82a7b61edb0aa7676a0e32e454b0136d596fb0`; three isolated reviewers. All round-1 findings resolved and reverified. |
+| 2026-10-17T12:43:30Z | Review round 2 | Base-to-HEAD snapshot `ef6c788b8e2479b9aa74a1b595fc9844d9094082..cdbdfc3868f2dd2620e20e852ee4e47a7ab44407`; three isolated axes | `/home/zhangy/git/ql-essvi` | `cdbdfc3868f2dd2620e20e852ee4e47` | changes required | Spec: P2 missing a breakdown by relative bid/ask total-variance band width (Addendum C §5, WP-C1); current table is price spread `(ask-bid)/mid`. Standards: approved, no findings. Verification: reviewer did not run the configured command; the prior full verification and external-data results were implementer-reported at `cdbdfc3`. Frozen diff SHA-256 `52a68031d3aac9cfa547a4d61d82a7b61edb0aa7676a0e32e454b0136d596fb0`. |
+| 2026-10-17 | Red | `.venv/bin/python -m pytest -q tests/test_analyze_fit_quality.py` | `/home/zhangy/git/ql-essvi` | working tree | expected failure | The new assertions failed at collection because `grouped_band_width_quality` was not yet implemented. |
+| 2026-10-17 | Green | `.venv/bin/python -m pytest -q tests/test_analyze_fit_quality.py` | `/home/zhangy/git/ql-essvi` | working tree | passed | Added midpoint-normalized total-variance band width and bucket aggregation; tests verify the formula, bucket assignment, quote counts, cap share, and RMS. Focused suite passed 3/3. |
+| 2026-10-17 | Corrected real-data diagnosis | `python3 scripts/analyze_fit_quality.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit > /tmp/cal-c1-round3.json` | `/home/zhangy/git/ql-essvi` | working tree | passed | 212/212 cold fits converged; 113,965 quotes reconciled. New band-width groups account for 110,355 / 3,597 / 13 quotes (all included quotes); the JSON records the definition and per-group quality metrics. Holdout dates were not read. |
+| 2026-10-17 | Final verification after round-2 correction | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | working tree | passed | Release build succeeded; CTest 5/5 passed; pytest 13/13 passed. |
 
 ## Review dispositions
 
@@ -90,6 +98,7 @@ The user-visible result is `docs/fit-quality.md`, with reproducible JSON output 
 | 1 — Standards P2 (judgement) | Identity indexing calls `.get()` on every raw contract although replay preparation skips non-dictionary entries. | Resolved | Added `source_contract_index`, which skips non-dictionary entries while preserving original list indexes. `tests/test_analyze_fit_quality.py` failed before and passed after; the real-data run still converges on 212/212 snapshots. |
 | 1 — Standards P2 (mechanical) | Added `# noqa: E402` suppressions have no ticket waiver or configured linter. | Resolved | Removed both new `noqa` comments; no linter or suppression check was added. |
 | 1 — Standards P3 (judgement) | Ticket says the runner emits the Markdown report, but it prints JSON to stdout. | Resolved | Ticket and report now state that the runner prints JSON and the checked-in Markdown report is transcribed from it. |
+| 2 — Spec P2 (mechanical) | Addendum C §5 WP-C1 requires a breakdown by relative band width; the report only groups by relative option-price spread `(ask-bid)/mid`. | Resolved | Added a separate relative total-variance width `(ask variance - bid variance) / midpoint variance` breakdown with quote counts, above-cap share, RMS, maxima, and summed-excess contribution. The analyzer and report both distinguish this from option-price spread. The test passed, and the real-data runner produced 3,597, 13, and 110,355 quotes in the observed width buckets, totaling 113,965. |
 
 ## Gate candidates
 
@@ -102,7 +111,7 @@ The user-visible result is `docs/fit-quality.md`, with reproducible JSON output 
 - Baseline verification: configured Release build, CTest 5/5, pytest 10/10 at base.
 - Branch: `delivery/calibrator-speedup-addendum-c/CAL-C1`
 - Worktree: primary checkout, `/home/zhangy/git/ql-essvi`
-- Commit: `f15bc16` (`docs: add Addendum C IBIT fit diagnosis`); round-1 corrections pending commit
+- Commits: `f15bc16` (C1 diagnosis), `ad3b842` (implementation verification record), `cdbdfc3` (round-1 corrections); round-2 correction awaiting commit and final review.
 - GitHub Issue: none (local tracker)
-- Tests: corrected real-data C1 analysis passed; configured CTest 5/5 and pytest 11/11 passed after round-1 fixes.
-- Diff review: round 1 changes requested; all findings corrected; round 2 required.
+- Tests: C1 analyzer-focused tests passed 3/3; real-data analysis passed on 212/212 training snapshots; configured CTest 5/5 and pytest 13/13 passed after the round-2 correction.
+- Diff review: round 1 findings corrected; round 2 spec finding corrected; third and final review pending.

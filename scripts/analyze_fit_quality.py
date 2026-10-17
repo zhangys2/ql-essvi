@@ -167,6 +167,38 @@ def spread_bucket(value: float) -> str:
     return ">=2"
 
 
+def relative_total_variance_band_width(
+    bid_variance: float, ask_variance: float
+) -> float:
+    midpoint_variance = 0.5 * (bid_variance + ask_variance)
+    if midpoint_variance <= 0.0:
+        raise ValueError("midpoint total variance must be positive")
+    return (ask_variance - bid_variance) / midpoint_variance
+
+
+def relative_total_variance_band_bucket(value: float) -> str:
+    if value < 0.25:
+        return "<0.25"
+    if value < 0.50:
+        return "0.25-0.5"
+    if value < 1.0:
+        return "0.5-1"
+    if value < 2.0:
+        return "1-2"
+    return ">=2"
+
+
+def grouped_band_width_quality(
+    rows: list[dict[str, Any]],
+) -> dict[str, dict[str, float | int]]:
+    return grouped_quality(
+        rows,
+        lambda row: relative_total_variance_band_bucket(
+            row["relative_total_variance_band_width"]
+        ),
+    )
+
+
 def underlying_mid(value: dict[str, Any]) -> float | None:
     bid = finite_number(value.get("bid"))
     ask = finite_number(value.get("ask"))
@@ -268,6 +300,9 @@ def fit_snapshot(
         bid_variance = bid_iv * bid_iv * time_years
         ask_variance = ask_iv * ask_iv * time_years
         width = ask_variance - bid_variance
+        relative_variance_width = relative_total_variance_band_width(
+            bid_variance, ask_variance
+        )
         excess = max(bid_variance - fitted_variance, 0.0, fitted_variance - ask_variance)
         residual = fitted_variance - 0.5 * (bid_variance + ask_variance)
         log_moneyness = math.log(strike / forward)
@@ -296,6 +331,7 @@ def fit_snapshot(
                 "log_moneyness": log_moneyness,
                 "premium": premium,
                 "relative_spread": relative_spread,
+                "relative_total_variance_band_width": relative_variance_width,
                 "abs_delta": abs_delta,
                 "bid": bid,
                 "option_type": row[7],
@@ -445,6 +481,7 @@ def analyze(data_root: Path, fit_binary: Path) -> dict[str, Any]:
         "relative_spread": grouped_quality(
             rows, lambda row: spread_bucket(row["relative_spread"])
         ),
+        "relative_total_variance_band_width": grouped_band_width_quality(rows),
         "option_type": grouped_quality(rows, lambda row: row["option_type"]),
     }
     total_excess = base_quality["sum_squared_total_variance_excess"]
@@ -466,6 +503,9 @@ def analyze(data_root: Path, fit_binary: Path) -> dict[str, Any]:
         "by_log_moneyness": grouped["log_moneyness"],
         "by_mid_premium_usd": grouped["mid_premium_usd"],
         "by_relative_spread": grouped["relative_spread"],
+        "by_relative_total_variance_band_width": grouped[
+            "relative_total_variance_band_width"
+        ],
         "by_option_type": grouped["option_type"],
         "fit_excess_contribution_percent": contributions,
         "distributions": {
@@ -529,6 +569,7 @@ def analyze(data_root: Path, fit_binary: Path) -> dict[str, Any]:
             "loss": "existing unweighted squared total-variance band excess; no vega weights or cleaning filters",
             "cap": CAP,
             "ratio": "outside-band total-variance distance / max(bid-ask total-variance width, 1e-6)",
+            "relative_total_variance_band_width": "(ask total variance - bid total variance) / midpoint total variance",
             "holdout": "2026-10-15 and 2026-10-16 are not read",
         },
     }

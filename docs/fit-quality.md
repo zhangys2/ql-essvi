@@ -24,7 +24,7 @@ build/essvi_fit normalized_quotes.csv parameters.csv fitted_quotes.csv surface_g
 
 Temporary fit inputs and outputs are removed after each cold fit. The runner checks that every fit converges and that valid plus excluded quote counts reconcile to the raw contract count.
 
-For each quote, bid and ask total variance are `T * IV^2`; the fitted variance is read from `fitted_quotes.csv`. Excess is the distance from fitted variance to the closed bid/ask total-variance interval, or zero in-band. Excess ratio is `excess / max(ask_variance - bid_variance, 1e-6)`. The cap is strictly `ratio > 0.1`. RMS is the square root of mean squared excess ratio. The contribution column below is each bucket's share of the sum of squared total-variance excesses, matching the current unweighted objective. No quotes were refitted after applying candidate filters; candidate retained-quality figures are post-hoc masks of this full-data fit, not filter-fit results.
+For each quote, bid and ask total variance are `T * IV^2`; the fitted variance is read from `fitted_quotes.csv`. Excess is the distance from fitted variance to the closed bid/ask total-variance interval, or zero in-band. Excess ratio is `excess / max(ask_variance - bid_variance, 1e-6)`. The cap is strictly `ratio > 0.1`. RMS is the square root of mean squared excess ratio. Relative total-variance band width is `(ask_variance - bid_variance) / midpoint_variance`, where midpoint variance is `(ask_variance + bid_variance) / 2`; this groups the same total-variance band used by the fit. The relative option-price spread `(ask-bid)/mid` is shown separately for comparison and cleaning-candidate analysis. The contribution column below is each bucket's share of the sum of squared total-variance excesses, matching the current unweighted objective. No quotes were refitted after applying candidate filters; candidate retained-quality figures are post-hoc masks of this full-data fit, not filter-fit results.
 
 The source contains 259,978 contracts across the 212 snapshots. Replay preparation retained 259,973 rows after excluding 5 locked quotes; it excluded 146,008 other rows and 0 crossed quotes. Of the prepared rows, 113,965 were valid OTM IV quotes and were scored. All 212 cold fits converged.
 
@@ -75,12 +75,24 @@ The source contains 259,978 contracts across the 212 snapshots. Replay preparati
 
 ### Relative price spread `(ask-bid)/mid`
 
-| Relative-spread bucket | Quotes | Share above cap | RMS ratio | Maximum ratio | Sum-excess share |
+This is the option-price spread used in the cleaning candidates below; it is distinct from the total-variance width used by the fitting objective.
+
+| Relative price-spread bucket | Quotes | Share above cap | RMS ratio | Maximum ratio | Sum-excess share |
 |---|---:|---:|---:|---:|---:|
 | `< 0.25` | 87,996 | 80.49% | 2.706 | 64.134 | 97.98% |
 | `0.25–0.5` | 12,012 | 54.46% | 0.882 | 11.491 | 1.16% |
 | `0.5–1` | 13,844 | 31.39% | 0.755 | 28.536 | 0.85% |
 | `1–2` | 113 | 7.08% | 0.037 | 0.128 | 0.003% |
+
+### Relative total-variance band width `(ask variance-bid variance)/midpoint variance`
+
+The midpoint variance is `(ask variance + bid variance) / 2`; each side's total variance is `T * IV^2`. Buckets use the same relative-width ranges as the option-price spread table.
+
+| Relative total-variance band-width bucket | Quotes | Share above cap | RMS ratio | Maximum ratio | Sum-excess share |
+|---|---:|---:|---:|---:|---:|
+| `< 0.25` | 110,355 | 73.21% | 2.434 | 64.134 | 99.82% |
+| `0.25–0.5` | 3,597 | 25.74% | 1.491 | 28.536 | 0.18% |
+| `0.5–1` | 13 | 7.69% | 0.747 | 2.689 | 0.002% |
 
 ### Option type
 
@@ -121,7 +133,7 @@ The minimum observed positive bid is `$0.01`. The existing European IV inversion
 
 1. **Long-dated bands dominate the squared total-variance excess.** The 91–180d bucket has 11.34% of quotes but 78.92% of summed excess². The 31–90d bucket adds 15.20%; together, expiries over 30d account for 94.12%.
 2. **The $1–$5 premium bucket dominates by price scale.** It has 22.28% of quotes and 76.68% of summed excess². Quotes below `$0.05` have lower band-miss ratios and contribute only 1.78% of summed excess²; minimum-premium filtering removes many quotes but does not improve the masked share-above-cap or RMS metrics.
-3. **Wide relative spreads are not the main source of the objective.** Quotes with relative spread below 0.25 account for 97.98% of summed excess². The p95 spread filter removes 2.85% of quotes, and the masked share-above-cap/RMS metrics worsen slightly.
+3. **Wide relative price spreads are not the main source of the objective.** Quotes with relative spread below 0.25 account for 97.98% of summed excess². The p95 spread filter removes 2.85% of quotes, and the masked share-above-cap/RMS metrics worsen slightly.
 4. **Near-forward and put buckets have high miss rates.** `0 < k <= 0.05` has 92.44% above cap and 28.69% of summed excess². Puts have a higher above-cap share than calls (76.08% vs 66.46%), while calls contribute more total squared excess because of their counts and premium mix.
 5. **Fetch-order gradients are weak in this sample.** Within-snapshot fetch-position R² is 0.00418; the snapshot-move regression R² is 0.0465. Collection takes about 100 seconds, but the recorded linear relationships do not explain most of the signed residual variation.
 
