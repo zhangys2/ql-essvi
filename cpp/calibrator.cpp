@@ -26,7 +26,10 @@ constexpr double kEps = 1e-8;
 constexpr std::size_t kMaxCalibrationThreads = ESSVI_MAX_CALIBRATION_THREADS;
 constexpr std::size_t kFullColdSearchBudget = 8;
 constexpr std::size_t kDegradedAgeBeforeForcedCold = 3;
-constexpr double kFastScenarioResidualP95 = 0.005561586;
+// WP-B7 pooled fast tilt p95 times the mean absolute loading of the uniform
+// log-moneyness shape on [-0.5, 0.5]; see docs/perf-results.md, WP-B4.
+constexpr double kFastScenarioMeanAbsoluteMove =
+    0.5 * 0.20680703819458962;
 using Clock = std::chrono::steady_clock;
 
 std::vector<std::string> split(const std::string& s) {
@@ -416,6 +419,7 @@ bool pairSafe(const Slice& s, BoundMemo& bound,
 struct Atm {
   double theta_star{NAN};
   double k_star{0};
+  const PreparedQuote* quote{nullptr};
 };
 
 Atm nearestAtm(const std::vector<PreparedQuote>& quotes, double t) {
@@ -423,9 +427,11 @@ Atm nearestAtm(const std::vector<PreparedQuote>& quotes, double t) {
   double best = INFINITY;
   for (const auto& q : quotes) {
     if (!q.has_mid) continue;
-    if (std::abs(q.k) < best) {
-      best = std::abs(q.k);
+    const double abs_k = std::abs(q.k);
+    if (abs_k < best) {
+      best = abs_k;
       a.k_star = q.k;
+      a.quote = &q;
       a.theta_star = t * q.mid_iv * q.mid_iv;
     }
   }
@@ -471,9 +477,22 @@ struct RhoCandidate {
 CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
                            const Slice* prev, RhoWorkerPool& rho_workers,
                            const Slice* warm_start = nullptr,
-                           const Slice* restricted_center = nullptr) {
+                           const Slice* restricted_center = nullptr,
+                           double quote_cap = INFINITY) {
   CalibrationResult out;
-  const auto atm = nearestAtm(qs, t);
+  const auto atm = [&] {
+    Atm result = nearestAtm(qs, t);
+    const auto* quote = result.quote;
+    if (warm_start && quote && quote->has_band && t > 0.0 &&
+        quote->bid_variance <= quote->ask_variance) {
+      const double anchor_iv =
+          0.5 * (std::sqrt(quote->bid_variance / t) +
+                 std::sqrt(quote->ask_variance / t));
+      if (anchor_iv > 0.0 && std::isfinite(anchor_iv))
+        result.theta_star = t * anchor_iv * anchor_iv;
+    }
+    return result;
+  }();
   if (!std::isfinite(atm.theta_star) || atm.theta_star <= 0) {
     out.error = "no ATM quote";
     return out;
@@ -588,6 +607,7 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
           std::max(slice.theta * 0.1, 1e-3), 0.1,
           std::max(slice.psi * 0.1, 1e-3)};
       double loss = 0.0;
+      double maximum_excess_ratio = 0.0;
       for (const auto& quote : qs) {
         if (!quote.has_band) continue;
         const double theta = slice.theta;
@@ -609,6 +629,13 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
         const double residual =
             variance - std::clamp(variance, quote.bid_variance, quote.ask_variance);
         loss += residual * residual;
+        const double quote_width =
+            std::max(quote.ask_variance - quote.bid_variance, 1e-6);
+        const double excess_ratio = std::abs(residual) / quote_width;
+        maximum_excess_ratio =
+            std::isfinite(excess_ratio)
+                ? std::max(maximum_excess_ratio, excess_ratio)
+                : INFINITY;
         if (residual == 0.0) continue;
         for (int row = 0; row < 3; ++row) {
           gradient[row] += scaled_jacobian[row] * residual;
@@ -617,7 +644,25 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
                 scaled_jacobian[row] * scaled_jacobian[column];
         }
       }
-      return loss;
+      return std::pair<double, double>{loss, maximum_excess_ratio};
+    };
+
+    // Keep the best raw-loss candidate and the best gate-passing candidate separately.
+    Slice best_quote_cap_candidate{};
+    double best_quote_cap_loss = INFINITY;
+    bool have_quote_cap_candidate = false;
+    const auto considerLocalCandidate = [&](const Slice& candidate, double loss,
+                                            double maximum_excess_ratio) {
+      if (loss < bestz) {
+        bestz = loss;
+        best = candidate;
+      }
+      if (std::isfinite(maximum_excess_ratio) &&
+          !(maximum_excess_ratio > quote_cap) && loss < best_quote_cap_loss) {
+        best_quote_cap_loss = loss;
+        best_quote_cap_candidate = candidate;
+        have_quote_cap_candidate = true;
+      }
     };
 
     Slice incumbent = *warm_start;
@@ -628,14 +673,21 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
     if (pairSafe(incumbent, incumbent_bound, incumbent_calendar)) {
       bestz = bandLoss(incumbent, qs);
       best = incumbent;
+      if (passesQuoteCap(incumbent, qs, quote_cap)) {
+        best_quote_cap_loss = bestz;
+        best_quote_cap_candidate = incumbent;
+        have_quote_cap_candidate = true;
+      }
       ++evals;
     }
 
     constexpr std::array<double, 3> rho_offsets{0.0, -0.05, 0.05};
     constexpr std::array<double, 5> alphas{1.0, 0.5, 0.25, 0.125, 0.0625};
     constexpr int local_evaluation_budget = 25;
-    const double rho_lower = std::max(-0.979999, warm_start->rho - 0.05);
-    const double rho_upper = std::min(0.979999, warm_start->rho + 0.05);
+    // Starts remain within rho ±0.05; LM may traverse the staged ±0.15
+    // fallback radius before resorting to a cold search.
+    const double rho_lower = std::max(-0.979999, warm_start->rho - 0.15);
+    const double rho_upper = std::min(0.979999, warm_start->rho + 0.15);
     const double theta_min = prev ? prev->theta + kEps : kEps;
 
     for (std::size_t start_index = 0; start_index < rho_offsets.size();
@@ -671,12 +723,11 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
       ++out.local_solver_starts;
       double normal[3][3];
       double gradient[3];
-      double current_loss = lossAndNormal(current, normal, gradient);
+      const auto current_evaluation =
+          lossAndNormal(current, normal, gradient);
+      double current_loss = current_evaluation.first;
+      considerLocalCandidate(current, current_loss, current_evaluation.second);
       ++evals;
-      if (current_loss < bestz) {
-        bestz = current_loss;
-        best = current;
-      }
       if (current_loss == 0.0) break;
 
       const int starts_remaining =
@@ -762,8 +813,10 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
 
           double trial_normal[3][3];
           double trial_gradient[3];
-          const double trial_loss =
+          const auto trial_evaluation =
               lossAndNormal(trial, trial_normal, trial_gradient);
+          const double trial_loss = trial_evaluation.first;
+          considerLocalCandidate(trial, trial_loss, trial_evaluation.second);
           ++evals;
           if (trial_loss < current_loss) {
             selected = trial;
@@ -797,6 +850,10 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
         }
       }
       if (bestz == 0.0) break;
+    }
+    if (have_quote_cap_candidate) {
+      bestz = best_quote_cap_loss;
+      best = best_quote_cap_candidate;
     }
   } else if (restricted_center) {
     // Keep the cold fallback near the prior slice; psi still spans its feasible interval.
@@ -1004,7 +1061,7 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
                        : 0.0;
       const bool skip_local_for_large_move =
           prior_fallback_majority &&
-          mean_absolute_move >= kFastScenarioResidualP95;
+          mean_absolute_move >= kFastScenarioMeanAbsoluteMove;
       const auto previousSliceBefore = [&](double expiry) -> const Slice* {
         const Slice* previous = nullptr;
         for (const auto& slice : previous_surface.slices) {
@@ -1136,9 +1193,10 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
                     {
                       detail::MmBoundCallScope local_bound_scope(
                           &plan.local_bound_calls);
-                      plan.local = fitSlice(plan.prepared, current_groups.expiries[i],
-                                            plan.old_previous, rho_workers,
-                                            plan.warm_start);
+                      plan.local = fitSlice(
+                          plan.prepared, current_groups.expiries[i],
+                          plan.old_previous, rho_workers, plan.warm_start,
+                          nullptr, options.quote_cap);
                     }
                     if (plan.local.converged) {
                       plan.candidate = plan.local.surface.slices.front();
@@ -1243,8 +1301,9 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
             CalibrationResult local;
             {
               detail::MmBoundCallScope local_bound_scope(&local_bound_calls);
-              local = fitSlice(plan.prepared, expiry, previous_slice, rho_workers,
-                               warm_start);
+              local = fitSlice(plan.prepared, expiry, previous_slice,
+                               rho_workers, warm_start, nullptr,
+                               options.quote_cap);
             }
             out.local_solver_starts += local.local_solver_starts;
             out.local_objective_evaluations += local.objective_evaluations;

@@ -482,6 +482,89 @@ void localSolverUsesThreeBoundedStarts() {
   checkDenseGrid(warm.surface);
 }
 
+void localSolverKeepsNearOptimalCapPassingCandidate() {
+  const auto previous_quotes = essvi::bench::realisticChain(1, 100, 37);
+  const auto previous = essvi::calibrate(previous_quotes);
+  assert(previous.converged);
+
+  const auto& prior = previous.surface.slices.front();
+  const essvi::Slice target{prior.expiry, prior.theta + 0.002, prior.psi,
+                            prior.rho};
+  assert(essvi::validate(essvi::Surface{{target}}).empty());
+
+  constexpr double quote_cap = 0.1137;
+  constexpr double cap_boundary = 0.1;
+  // Ten shifted narrow bands compete with ninety prior-centered broad bands;
+  // the raw-loss minimum misses this per-quote cap by less than one basis point.
+  constexpr double narrow_half_width_fraction =
+      (1.0 - 0.3) / (1.0 + 2.0 * cap_boundary);
+  constexpr double broad_half_width_fraction = 0.28;
+  auto current_quotes = previous_quotes;
+  for (std::size_t i = 0; i < current_quotes.size(); ++i) {
+    auto& quote = current_quotes[i];
+    const double k = std::log(quote.strike / quote.forward);
+    const bool narrow = i == 49 || (i % 10 == 0 && i / 10 < 9);
+    const double center_variance = essvi::sliceTotalVariance(
+        narrow ? target : prior, k);
+    const double target_variance = essvi::sliceTotalVariance(target, k);
+    const double prior_variance = essvi::sliceTotalVariance(prior, k);
+    const double delta = std::abs(target_variance - prior_variance);
+    const double half_width_fraction =
+        narrow ? narrow_half_width_fraction : broad_half_width_fraction;
+    const double center_iv = std::sqrt(center_variance / quote.expiry);
+    const double half_spread =
+        2.0 * delta * half_width_fraction /
+        (4.0 * quote.expiry * center_iv);
+    quote.bid_iv = center_iv - half_spread;
+    quote.ask_iv = center_iv + half_spread;
+    quote.mid_iv = center_iv;
+  }
+
+  essvi::WarmOptions options;
+  options.quote_tol = 0.0;
+  options.quote_cap = quote_cap;
+  const auto warm = essvi::calibrateWarm(
+      current_quotes, &previous, previous_quotes, options);
+  auto relaxed_options = options;
+  relaxed_options.quote_cap = 0.114;
+  const auto relaxed = essvi::calibrateWarm(
+      current_quotes, &previous, previous_quotes, relaxed_options);
+  assert(warm.converged && relaxed.converged);
+  assert(warm.local_solver_slices == 1 && relaxed.local_solver_slices == 1);
+  assert(warm.fallback_slices == 0 && relaxed.fallback_slices == 0);
+  assert(warm.quality_maximum_excess_ratio <= quote_cap + 1e-10);
+  assert(relaxed.quality_maximum_excess_ratio <=
+         relaxed_options.quote_cap + 1e-10);
+  assert(warm.objective > relaxed.objective);
+  assert(warm.objective <= relaxed.objective * 1.05 + 1e-12);
+  checkDenseGrid(warm.surface);
+  checkDenseGrid(relaxed.surface);
+}
+
+void localSolverTraversesFallbackRhoRangeForNormalTilt() {
+  constexpr std::size_t expiry_count = 40;
+  constexpr std::size_t quotes_per_expiry = 100;
+  const auto previous_quotes = essvi::bench::realisticChain(
+      expiry_count, quotes_per_expiry, 1);
+  const auto previous = essvi::calibrate(previous_quotes);
+  assert(previous.converged);
+
+  auto current_quotes = previous_quotes;
+  essvi::bench::Noise noise(2);
+  essvi::bench::evolveWarmScenario(
+      current_quotes, expiry_count, quotes_per_expiry,
+      essvi::bench::WarmScenario::normal, 1, noise);
+  essvi::WarmOptions options;
+  options.quote_tol = 0.0;
+  const auto warm = essvi::calibrateWarm(
+      current_quotes, &previous, previous_quotes, options);
+  assert(warm.converged);
+  assert(warm.restricted_cold_searches < 3 * expiry_count / 4);
+  assert(warm.quality_maximum_excess_ratio <= options.quote_cap);
+  assert(warm.quality_rms_excess_ratio <= 0.02);
+  checkDenseGrid(warm.surface);
+}
+
 void localWarmRefitHonorsBudgetAndQuality() {
   const auto previous_quotes = essvi::bench::realisticChain(3, 100, 1);
   const auto previous = essvi::calibrate(previous_quotes);
@@ -525,6 +608,51 @@ void localWarmRefitHonorsBudgetAndQuality() {
   checkDenseGrid(warm.surface);
 }
 
+void fastScenarioPreservesQuoteSpreadsAtIvFloor() {
+  constexpr std::size_t expiry_count = 40;
+  constexpr std::size_t quotes_per_expiry = 100;
+  auto quotes = essvi::bench::realisticChain(
+      expiry_count, quotes_per_expiry, 1);
+  essvi::bench::Noise noise(2);
+  for (std::size_t update = 1; update <= 200; ++update) {
+    essvi::bench::evolveWarmScenario(
+        quotes, expiry_count, quotes_per_expiry,
+        essvi::bench::WarmScenario::fast, update, noise);
+    for (const auto& quote : quotes) assert(quote.ask_iv > quote.bid_iv);
+  }
+}
+
+void highFallbackShortcutUsesFastScenarioMoveScale() {
+  constexpr std::size_t expiry_count = 10;
+  constexpr std::size_t quotes_per_expiry = 100;
+  const auto previous_quotes = essvi::bench::realisticChain(
+      expiry_count, quotes_per_expiry, 11);
+  const auto previous = essvi::calibrate(previous_quotes);
+  assert(previous.converged);
+
+  essvi::WarmOptions options;
+  options.quote_tol = 0.0;
+  options.quote_cap = 0.0;
+  const auto run = [&](essvi::bench::WarmScenario scenario) {
+    auto current = previous_quotes;
+    essvi::bench::Noise noise(12);
+    essvi::bench::evolveWarmScenario(current, expiry_count,
+                                     quotes_per_expiry, scenario, 1, noise);
+    auto prior = previous;
+    prior.fallback_slices = 6;
+    return essvi::calibrateWarm(current, &prior, previous_quotes, options);
+  };
+
+  const auto normal = run(essvi::bench::WarmScenario::normal);
+  const auto fast = run(essvi::bench::WarmScenario::fast);
+  assert(normal.converged);
+  assert(normal.local_solver_slices > 0);
+  assert(fast.converged);
+  assert(fast.local_solver_slices == 0);
+  assert(fast.restricted_cold_searches > 0);
+  checkDenseGrid(fast.surface);
+}
+
 void stagedFallbackBudgetReturnsValidDegradedResults() {
   const auto previous_quotes = essvi::bench::realisticChain(10, 100, 11);
   const auto previous = essvi::calibrate(previous_quotes);
@@ -544,15 +672,6 @@ void stagedFallbackBudgetReturnsValidDegradedResults() {
   essvi::WarmOptions options;
   options.quote_tol = 0.0;
   options.quote_cap = 0.0;
-  const auto high_fallback = [&] {
-    auto prior = previous;
-    prior.fallback_slices = 6;
-    return essvi::calibrateWarm(current, &prior, previous_quotes, options);
-  }();
-  assert(high_fallback.converged);
-  assert(high_fallback.local_solver_slices == 0);
-  assert(high_fallback.restricted_cold_searches > 0);
-  checkDenseGrid(high_fallback.surface);
 
   auto prior_result = previous;
   auto prior_quotes = previous_quotes;
@@ -631,7 +750,48 @@ void stagedFallbackBudgetReturnsValidDegradedResults() {
 }  // namespace
 
 int main() {
-  warmUpdatesReuseAndRefitSafely();
+  {
+    const auto warmFitIgnoresMidOutsideBand = []() {
+      const auto previous_quotes = essvi::bench::realisticChain(1, 100, 1);
+      const auto previous = essvi::calibrate(previous_quotes);
+      assert(previous.converged);
+    
+      auto current_quotes = previous_quotes;
+      const auto& old_slice = previous.surface.slices.front();
+      const essvi::Slice target{old_slice.expiry, old_slice.theta + 0.003,
+                                old_slice.psi, old_slice.rho};
+      for (std::size_t i = 0; i < current_quotes.size(); ++i) {
+        auto& quote = current_quotes[i];
+        const double k = std::log(quote.strike / quote.forward);
+        const double mid = std::sqrt(
+            essvi::sliceTotalVariance(target, k) / quote.expiry);
+        const double half_spread = i == 49 ? 0.1 : 0.003;
+        quote.bid_iv = std::max(0.001, mid - half_spread);
+        quote.ask_iv = mid + half_spread;
+        quote.mid_iv = mid;
+      }
+      auto shifted_mid_quotes = current_quotes;
+      shifted_mid_quotes[49].mid_iv += 0.08;
+    
+      essvi::WarmOptions options;
+      options.quote_tol = 0.0;
+      options.quote_cap = 0.1;
+      const auto baseline = essvi::calibrateWarm(
+          current_quotes, &previous, previous_quotes, options);
+      const auto shifted_mid = essvi::calibrateWarm(
+          shifted_mid_quotes, &previous, previous_quotes, options);
+      assert(baseline.converged && shifted_mid.converged);
+      assert(baseline.local_solver_slices == 1);
+      assert(shifted_mid.local_solver_slices == 1);
+      assert(baseline.local_objective_evaluations > 0);
+      assert(shifted_mid.local_objective_evaluations > 0);
+      sameParameters(baseline.surface, shifted_mid.surface);
+      checkDenseGrid(baseline.surface);
+      checkDenseGrid(shifted_mid.surface);
+    };
+    warmFitIgnoresMidOutsideBand();
+    warmUpdatesReuseAndRefitSafely();
+  }
   changedQuotesReuseWhenPreviousSurfaceStillFits();
   perQuoteCapBoundaryAndWidthFloor();
   perQuoteGateChecksSingleOutlierAgainstColdReference();
@@ -642,6 +802,10 @@ int main() {
   failedCalendarRepairIsCounted();
   localWarmRefitHonorsBudgetAndQuality();
   localSolverUsesThreeBoundedStarts();
+  localSolverKeepsNearOptimalCapPassingCandidate();
+  localSolverTraversesFallbackRhoRangeForNormalTilt();
+  fastScenarioPreservesQuoteSpreadsAtIvFloor();
+  highFallbackShortcutUsesFastScenarioMoveScale();
   stagedFallbackBudgetReturnsValidDegradedResults();
   return 0;
 }

@@ -11,6 +11,7 @@ from typing import Any
 
 SCENARIOS = ("quiet", "normal", "fast", "front")
 SEEDS = (1, 2, 3, 4, 5)
+UPDATES = 77
 
 
 def metric_range(values: list[float | None]) -> str:
@@ -26,13 +27,13 @@ def metric_range(values: list[float | None]) -> str:
 def load_report(path: Path, scenario: str, seed: int) -> dict[str, Any]:
     with path.open(encoding="utf-8") as report_file:
         report = json.load(report_file)
-    if report.get("seed") != seed or report.get("updates") != 200:
-        raise ValueError(f"{path}: expected seed {seed}, 200 updates")
+    if report.get("seed") != seed or report.get("updates") != UPDATES:
+        raise ValueError(f"{path}: expected seed {seed}, {UPDATES} updates")
     runs = report.get("runs", [])
     if len(runs) != 1 or runs[0].get("run") != scenario:
         raise ValueError(f"{path}: expected one {scenario} result")
-    if runs[0].get("samples") != 200:
-        raise ValueError(f"{path}: expected 200 measured updates")
+    if runs[0].get("samples") != UPDATES:
+        raise ValueError(f"{path}: expected {UPDATES} measured updates")
     return runs[0]
 
 
@@ -55,7 +56,7 @@ def main() -> int:
     print("Five-seed median [minimum, maximum]; timing in milliseconds.")
     print(
         "scenario | warm p50 ms | warm p99 ms | fallback % | "
-        "share delta pp | max ratio warm/cold | RMS ratio warm/cold | "
+        "share delta pp | max ratio warm/cold | RMS ratio Δ W−C | "
         "band loss warm/cold | RMS IV excess delta pt"
     )
     for scenario in SCENARIOS:
@@ -86,14 +87,9 @@ def main() -> int:
             else None
             for run in runs
         ]
-        rms_warm = [
+        rms_delta = [
             run["warm_quality"]["rms_excess_ratio"]
-            if paired_metrics(run)
-            else None
-            for run in runs
-        ]
-        rms_cold = [
-            run["cold_quality"]["rms_excess_ratio"]
+            - run["cold_quality"]["rms_excess_ratio"]
             if paired_metrics(run)
             else None
             for run in runs
@@ -110,7 +106,7 @@ def main() -> int:
             f"{scenario} | {metric_range(p50)} | {metric_range(p99)} | "
             f"{metric_range(fallback)} | {metric_range(share_delta)} | "
             f"{metric_range(max_warm)} / {metric_range(max_cold)} | "
-            f"{metric_range(rms_warm)} / {metric_range(rms_cold)} | "
+            f"{metric_range(rms_delta)} | "
             f"{metric_range(loss_ratio)} | {metric_range(iv_delta)}"
         )
 

@@ -165,35 +165,35 @@ Load averages are 1/5/15-minute values, before → after each run. The sequence 
 
 The replay command was `python/run_snapshot_replay.py --data-root /home/zhangy/vol-rv/data --output-dir build/snapshot-replay --bench build/essvi_bench`. It read IBIT `ibit/chain_*.jsonl.gz` and SPY `zdte/spy_*.jsonl.gz`. Quotes were converted to European Black-Scholes mid implied volatility, matched across consecutive five-minute snapshots by expiry and contract identity, then fitted per expiry with a Theil-Sen regression of IV change against mean log-moneyness. The intercept is the common level move; half the slope is the tilt move for the benchmark's `clamp(2*k)` shape; residual variation estimates per-quote noise. Quantiles below are absolute moves.
 
-Pooled quantiles give equal weight to each asset and session day; observations within an asset-day share that day's weight equally. This prevents IBIT's denser chain from dominating SPY. The final capture contained 620 snapshots (619 usable, one unusable), covering 10 usable asset-days (five IBIT and five SPY). It produced 6,199 level/tilt observations and 164,009 residual observations. Same-session expiries use a fixed one-day date-based year fraction so expiry identity is stable across intraday snapshots. The current 2026-10-16 files were partial when captured.
+Pooled quantiles give equal weight to each asset and session day; observations within an asset-day share that day's weight equally. This prevents IBIT's denser chain from dominating SPY. The latest capture contains 739 snapshots (738 usable, one unusable), covering 10 usable asset-days (five IBIT and five SPY). It produced 7,448 level/tilt observations and 197,250 residual observations. Same-session expiries use a fixed one-day date-based year fraction so expiry identity is stable across intraday snapshots.
 
 | Asset | Measure | Observations | p10 | p50 | p95 |
 |---|---|---:|---:|---:|---:|
-| IBIT | Level | 5,882 | 0.000046521 | 0.000467756 | 0.003376293 |
-| IBIT | Tilt | 5,882 | 0.000379699 | 0.003578760 | 0.054064609 |
-| IBIT | Residual noise | 155,064 | 0.000040666 | 0.001008464 | 0.007305616 |
-| SPY | Level | 317 | 0.000065178 | 0.000523359 | 0.002172665 |
-| SPY | Tilt | 317 | 0.005496195 | 0.065444918 | 0.233002777 |
-| SPY | Residual noise | 8,945 | 0.000048059 | 0.000749564 | 0.003841574 |
+| IBIT | Level | 7,072 | 0.000055305 | 0.000464534 | 0.003683010 |
+| IBIT | Tilt | 7,072 | 0.000388369 | 0.003278513 | 0.047604162 |
+| IBIT | Residual noise | 186,212 | 0.000045478 | 0.000963738 | 0.007027728 |
+| SPY | Level | 376 | 0.000060588 | 0.000479849 | 0.002938721 |
+| SPY | Tilt | 376 | 0.003135817 | 0.059893002 | 0.262696334 |
+| SPY | Residual noise | 11,038 | 0.000041873 | 0.000727467 | 0.004044560 |
 
 | Pooled measure | Observations | p10 | p50 | p95 |
 |---|---:|---:|---:|---:|
-| Level | 6,199 | 0.000057870 | 0.000485901 | 0.002928020 |
-| Tilt | 6,199 | 0.000731869 | 0.013646118 | 0.170740395 |
-| Residual noise | 164,009 | 0.000044357 | 0.000863814 | 0.005561586 |
+| Level | 7,448 | 0.000058552 | 0.000473653 | 0.003178583 |
+| Tilt | 7,448 | 0.000685505 | 0.011289126 | 0.206807038 |
+| Residual noise | 197,250 | 0.000043413 | 0.000836693 | 0.005535503 |
 
-Quiet uses p10, normal p50, fast p95. The measured front/back level ratio is 2.805297395; the front scenario uses the normal median for back expiries and scales front expiries by this ratio. No unmeasured per-expiry idiosyncratic amplitude is added.
+Quiet uses p10, normal p50, fast p95. The measured front/back level ratio is 2.714112941; the front scenario uses the normal median for back expiries and scales front expiries by this ratio. No unmeasured per-expiry idiosyncratic amplitude is added.
 
 | Scenario | Level move | Tilt move | Residual quote noise | Front level / back level |
 |---|---:|---:|---:|---:|
-| quiet | 0.000057870 | 0.000731869 | 0.000044357 | — |
-| normal | 0.000485901 | 0.013646118 | 0.000863814 | — |
-| fast | 0.002928020 | 0.170740395 | 0.005561586 | — |
-| front | 0.001363098 | 0.013646118 | 0.000863814 | 2.805297395 |
+| quiet | 0.000058552 | 0.000685505 | 0.000043413 | — |
+| normal | 0.000473653 | 0.011289126 | 0.000836693 | — |
+| fast | 0.003178583 | 0.206807038 | 0.005535503 | — |
+| front | 0.001285547 | 0.011289126 | 0.000836693 | 2.714112941 |
 
 ### Full-session replay coverage
 
-Replay retained each source timestamp and excluded locked/crossed quotes only in this benchmark adapter; the general preparation/CVI path is unchanged. Per-snapshot exclusion counts are in `build/snapshot-replay/replay_manifest.tsv`. Across the capture: 16 locked, 0 crossed, and 228,055 other quote exclusions. The unusable IBIT 2026-10-10 snapshot had no valid quotes. There were 601 consecutive warm pairs across the 10 usable asset-days, 18 cold starts (10 session starts plus 8 gap restarts), 8 gap events, and 16 missing five-minute intervals. Skipped/unusable snapshots and timestamp gaps break the chain and force a cold start.
+Replay retained each source timestamp and excluded locked/crossed quotes only in this benchmark adapter; the general preparation/CVI path is unchanged. Per-snapshot exclusion counts are in `build/snapshot-replay/replay_manifest.tsv`. Across the latest capture: 20 locked, 0 crossed, and 274,878 other quote exclusions. The unusable IBIT 2026-10-10 snapshot had no valid quotes. There were 720 consecutive warm pairs across the 10 usable asset-days, 18 cold starts (10 session starts plus 8 gap restarts), 8 gap events, and 16 missing five-minute intervals. Skipped/unusable snapshots and timestamp gaps break the chain and force a cold start.
 
 | Asset | Session | Snapshots | Usable / skipped | Warm pairs | Cold starts | Gap events | Missing intervals | Locked | Crossed | Other exclusions |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -202,12 +202,12 @@ Replay retained each source timestamp and excluded locked/crossed quotes only in
 | IBIT | 2026-10-13 | 76 | 76 / 0 | 75 | 1 | 0 | 0 | 2 | 0 | 51,377 |
 | IBIT | 2026-10-14 | 76 | 76 / 0 | 75 | 1 | 0 | 0 | 1 | 0 | 52,978 |
 | IBIT | 2026-10-15 | 76 | 76 / 0 | 75 | 1 | 0 | 0 | 0 | 0 | 54,903 |
-| IBIT | 2026-10-16 | 9 | 9 / 0 | 8 | 1 | 0 | 0 | 0 | 0 | 6,420 |
+| IBIT | 2026-10-16 | 69 | 69 / 0 | 68 | 1 | 0 | 0 | 1 | 0 | 49,956 |
 | SPY | 2026-10-12 | 76 | 76 / 0 | 75 | 1 | 0 | 0 | 1 | 0 | 5,316 |
 | SPY | 2026-10-13 | 78 | 78 / 0 | 77 | 1 | 0 | 0 | 1 | 0 | 5,561 |
 | SPY | 2026-10-14 | 78 | 78 / 0 | 77 | 1 | 0 | 0 | 7 | 0 | 4,758 |
 | SPY | 2026-10-15 | 78 | 78 / 0 | 77 | 1 | 0 | 0 | 1 | 0 | 4,325 |
-| SPY | 2026-10-16 | 12 | 12 / 0 | 11 | 1 | 0 | 0 | 1 | 0 | 714 |
+| SPY | 2026-10-16 | 71 | 71 / 0 | 70 | 1 | 0 | 0 | 4 | 0 | 4,001 |
 
 ### Per-day quality and cap sensitivity
 
@@ -293,6 +293,8 @@ The changed-slice solver now uses three deterministic starts within prior rho ±
 
 The focused warm test verifies all three starts, the evaluation cap, repeatable search diagnostics, bound-rejection behavior, all four reason categories, and a zero-loss fixture that stops after the incumbent plus one ATM start (2 evaluations). `scripts/verify_scenarios.sh` then completed all four scenarios × five seeds × 200 updates at 40 expiries × 100 quotes. Every invocation ran to completion; all 20 `--check` results were 2 for target misses and the script returned 1 after reporting the full matrix. That is a target failure, not an execution failure. Values below are median [minimum, maximum] over seeds; load averages are 1/5/15-minute values before → after each sequential run.
 
+Supplemental in-scope warm-seed refinement: cold `nearestAtm` output remains unchanged. For local warm fitting only, `fitSlice` derives theta from the selected nearest ATM quote's ordered bid/ask IV center; if that band is unavailable or invalid it retains the mid-IV seed. This keeps the start tied to the active band-loss data and does not add a mid-centering objective. A deterministic warm regression failed before and passed after; with identical bands, it asserts identical fitted parameters when only an in-band mid on the nonbinding nearest-ATM quote changes. The post-change 1-expiry × 100-quote fast one-step smoke reports RMS excess ratio 1.801741815, maximum 4.047629088, 1/1 fallback update, and warm/cold summed band loss 7.404145831457e-05; failures, invalid surfaces, and dense-grid violations are all zero. The configured full verification passed after the change: Release build, CTest 5/5, pytest 10/10. The refinement does not resolve the fast-scenario RMS hard limit of 0.05; it stabilizes local starts when the quote mid and band center differ, not the measured scenario mismatch.
+
 | Scenario | Warm p50 (ms) | Warm p99 (ms) | Fallback updates (%) | Cap-share delta (pp) | Maximum excess ratio warm / cold | RMS excess ratio warm / cold | Summed band loss warm / cold | RMS excess-IV delta (vol pt) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | quiet | 1.43041 [1.14823, 1.70749] | 69.5995 [58.7284, 115.405] | 25 [13, 30] | 0 [0, 0] | 0.0998562 [0.0993879, 0.0999863] / 0.0121983 [0, 0.0325625] | 0.00504428 [0.00401056, 0.00632181] / 1.79078e-05 [0, 4.4845e-05] | unavailable (zero cold loss in some seeds) | 0.00499885 [0.00393728, 0.00629424] |
@@ -338,7 +340,7 @@ Warm calibration now runs local → restricted-cold → full-cold stages with a 
 
 A valid budget-exhausted surface has `path=degraded` and `converged=true`; the final surface still passes `validate()`. `degraded_ages` aligns with `surface.slices`: a slice failing the base per-quote cap increments its consecutive age, and an age resets to zero only when the returned slice passes that cap. `degraded_slices` counts nonzero ages. A slice with prior age ≥3 bypasses reuse/local work and is forced through a full-cold refit on the next update, even above the ordinary cap; the age resets only if that selected fit passes the gate. Local refits for pending slices are ordered by descending age, with expiry order as the deterministic tie-break. Benchmark output distinguishes fallback and degraded paths, counts both as fallback updates, and reports search counts, reason histograms, achieved ratio summaries, and final per-slice ages in JSON without changing shared CSV headers.
 
-The approved high-fallback shortcut uses this exact threshold: if the previous result's fallback-slice count is greater than half its surface slices and the **mean absolute midpoint-IV move across matching included quotes** is at least `0.005561586`, skip local prefit and start at restricted cold. The threshold is the pooled fast-scenario p95 residual-noise move measured in WP-B7. The move metric matches quotes by expiry-group order and quote ID; unavailable matches do not contribute.
+The approved high-fallback shortcut skips local prefit and starts at restricted cold when the previous result's fallback-slice count is greater than half its surface slices and the **mean absolute midpoint-IV move across matching included quotes** is at least `0.10340351909729481`. This threshold is the latest pooled WP-B7 fast-scenario p95 absolute tilt (`0.20680703819458962`) multiplied by the mean absolute `clamp(2*k, -1, 1)` loading (`0.5`) for uniform log-moneyness over `[-0.5, 0.5]`. In a one-step 40 × 100 synthetic check using the 739-snapshot profile, observed mean movement was 0.00571308–0.00572677 for normal and 0.104090–0.104174 for fast (seeds 1–5), separating these empirical distributions. The residual-noise p95 is not used as a move threshold. Quotes match by expiry-group order and quote ID; unavailable matches do not contribute.
 
 Focused warm tests cover local skipping under that shortcut, restricted-stage diagnostics, the eight-search limit, valid degraded surfaces and dense-grid safety, age carry-forward and forced full cold after three degraded outputs, age reset on a passing forced fit, and explicit failure when budget exhaustion prevents fitting a new expiry. The configured full-suite result is recorded in the CAL-B4 ticket.
 
@@ -362,7 +364,7 @@ This short run confirms bounded stage accounting and valid degraded-path reporti
 
 The standalone `essvi_warm_scenario_regression` target runs quiet, normal, fast, and front for 50 updates each at 40 expiries × 100 quotes, fixed seed 1. It aggregates quality over paired quote-update observations (the same population semantics as the scenario benchmark), checks Addendum B hard limits, validates every warm result and dense-grid surface, and exits nonzero on a breach. Each first breach reports scenario, seed, update, metric, observed value, and hard limit. It is built with the configured CMake build but is intentionally invoked separately from CTest: the hard-limit run currently returns nonzero and its measured latency limit is host-dependent.
 
-Command: `build/essvi_warm_scenario_regression`. Every scenario breached at least one hard limit; no warm invalid surfaces or dense-grid violations were reported. Timing is one run and remains load-sensitive.
+Earlier 4 × 50 run, superseded by the 739-snapshot-profile rerun below: `build/essvi_warm_scenario_regression`. Every scenario breached at least one hard limit; no warm invalid surfaces or dense-grid violations were reported. Timing is one run and remains load-sensitive.
 
 | Scenario | p99 (ms) / hard limit | Fallback updates (%) / hard limit | Warm RMS excess ratio / hard limit | Other reported hard-limit breaches |
 |---|---:|---:|---:|---|
@@ -372,6 +374,19 @@ Command: `build/essvi_warm_scenario_regression`. Every scenario breached at leas
 | front | 196.840 / 10 | 100 / 5 | 0.24640 / 0.05 | None in paired cap-share, maximum-ratio, summed-loss, or RMS-IV-delta checks. |
 
 The regression is intentionally not described as a performance pass: current 4 × 50 hard-limit misses remain visible for downstream work. The direct degraded-result tests in `tests/test_warm_calibrator.cpp` assert age/count agreement and the ordinary full-cold budget in addition to valid surfaces and forced-refit behavior.
+
+### Latest 739-snapshot-profile 4 × 50 regression
+
+Command: `build/essvi_warm_scenario_regression`. The fixed-seed run completed 50 updates per scenario and exited 1 because each scenario breached hard limits. No invalid warm surfaces or dense-grid violations were reported. Values below are the first reported breach for each metric; a dash means no breach was reported for that metric.
+
+| Scenario | Warm p99 (ms) / limit | Fallback updates (%) / limit | Warm RMS excess ratio / limit | Other reported breaches |
+|---|---:|---:|---:|---|
+| quiet | 67.642 / 10 | 34 (17/50) / 5 | — / 0.05 | Median 1.604 / 0.47 ms; p99 67.642 / 7.6 ms; summed band-loss ratio `∞` / 1.2 because cold loss was zero. |
+| normal | 103.223 / 10 | 100 (50/50) / 5 | 0.15234 / 0.05 | None reported in RMS excess-IV delta or paired quality checks. |
+| fast | 92.455 / 20 | 100 (50/50) / 25 | 587.325 / 0.05 | RMS excess-IV delta 0.087678 / 0.05. |
+| front | 110.578 / 10 | 100 (50/50) / 5 | 0.15715 / 0.05 | None reported in RMS excess-IV delta or paired quality checks. |
+
+This remains a hard-limit failure, not a performance pass.
 
 ## WP-B2 — Per-quote gate and reuse drift
 
@@ -407,3 +422,293 @@ Two sessions disagree on timing direction. Session 2 load averages were captured
 The first full-chain session makes the current binary 15.5% slower than the reference; the second makes it 12.8% faster. Single-slice sessions show +13.1% and +45.7%, but the reference itself moves from a 2.350 ms to a 2.506 ms median, crossing the 2.5 ms threshold. Current medians exceed the 55 ms full-chain and 2.5 ms single-slice thresholds in both sessions; the second-session reference also exceeds both. This dispersion prevents a measurement-noise judgment. The first session’s reference load was not captured; session 2 has matching system load averages around the paired runs. No cold-path code was changed: provenance is incomplete and the repeated sessions do not establish a stable regression. The measured parameter outputs are identical, but this does not resolve the missing source revision.
 
 The exact benchmark shape/repeat commands were the corresponding binary with `--expiries {40|1} --quotes-per-expiry 100 --repeats {9|20} --warm-updates 1 --input <shared-seed-1-csv> --parameters-out <binary-specific.csv> --timings-out <binary-specific.json>`. The old executable’s lack of seed support is why the same generated input file, rather than separate synthetic generation, was used.
+
+## Five-seed acceptance run — superseded 620-snapshot scenario profile
+
+This historical run used the 620-snapshot WP-B7 profile and predates the refreshed 739-snapshot profile above. Both corrections described here remain in the current implementation: the shortcut threshold maps pooled fast-scenario p95 tilt to the mean-absolute-mid-IV metric, and `evolveWarmScenario` applies one shared IV-floor correction to bid, ask, and mid to preserve quote width. Focused regressions failed before each fix and passed afterward.
+
+Command: `export PATH="$PWD/.venv/bin:$PATH"; ./scripts/verify_scenarios.sh`. All 20 cases completed; every `--check` returned 2 for target misses and the script exited 1. Values are five-seed medians with `[minimum, maximum]` ranges.
+
+| Scenario | Warm p50 (ms) | Warm p99 (ms) | Fallback updates (%) | RMS excess ratio, warm / cold | Warm/cold band loss | RMS excess IV delta (vol pt) |
+|---|---:|---:|---:|---:|---:|---:|
+| quiet | 1.57377 [1.46914, 1.86285] | 88.7447 [73.5194, 111.078] | 23.5 [8.5, 31] | 0.00506518 / 0.00001791 | unavailable (zero cold loss in some seeds) | 0.00492870 |
+| normal | 74.0016 [68.7923, 78.8912] | 162.712 [144.191, 290.799] | 94 [90, 95.5] | 2.12155 / 2.12138 | 0.999994 | -0.00000391 |
+| fast | 51.8106 [46.2765, 64.7232] | 185.213 [130.591, 293.289] | 78.5 [69, 93] | 548.512 / 548.279 | 1.00251 | 0.0532054 |
+| front | 82.8518 [74.9025, 88.7928] | 309.551 [157.811, 423.184] | 93.5 [89.5, 95.5] | 2.15199 / 2.15185 | 1.00000 | -0.00000149 |
+
+All 20 updates had zero warm/cold failures, invalid surfaces, and dense-grid violations. Every scenario still misses its p99 and fallback hard limits; quiet also regresses its 49fed2b median/p99. The warm/cold summed-loss ratio is undefined when cold loss is zero. The normal, fast, and front cold references themselves have RMS excess ratios far above the 0.05 hard limit, and the warm RMS is nearly identical to cold. The current 200-update synthetic path applies independently signed measured-size moves cumulatively, so its late snapshots produce quote sets that the approved eSSVI fit/objective cannot represent at the stated quality limits. Changing that temporal model would change the accepted workload; no such unapproved change was made.
+
+
+## Five-seed acceptance run — superseded 719-snapshot profile
+
+This historical run used the prior 719-snapshot profile; the latest 739-snapshot capture and scenario results follow. Command: `export PATH="$PWD/.venv/bin:$PATH"; ./scripts/verify_scenarios.sh`. All 20 scenario/seed runs completed at 40 expiries × 100 quotes for 200 updates; each `--check` returned 2 for target misses, and the script returned 1 after the full matrix. Values are five-seed medians with `[minimum, maximum]` ranges.
+
+| Scenario | Warm p50 (ms) | Warm p99 (ms) | Fallback updates (%) | Cap-share delta (pp) |
+|---|---:|---:|---:|---:|
+| quiet | 1.67084 [0.798161, 2.01678] | 63.9807 [53.9157, 103.957] | 20 [9.5, 34] | 0 [0, 0] |
+| normal | 69.7051 [64.0588, 93.8719] | 233.6 [113.836, 288.432] | 93 [89.5, 95.5] | -0.0125 [-0.02225, 0.0265] |
+| fast | 41.0258 [38.8692, 43.023] | 130.645 [121.114, 239.327] | 82 [71.5, 91] | 0.0696429 [0.00932203, 0.186082] |
+| front | 77.0258 [69.5392, 80.794] | 251.987 [145.964, 287.147] | 92.5 [90, 94] | -0.017875 [-0.0295, 0.018375] |
+
+| Scenario | Maximum excess ratio, warm / cold | RMS excess ratio, warm / cold | Summed band loss, warm / cold | RMS excess-IV delta (vol pt) |
+|---|---:|---:|---:|---:|
+| quiet | 0.0998846 [0.0997549, 0.0999925] / 0.00657002 [0, 0.0448181] | 0.00600215 [0.00344901, 0.00683066] / 0.0000106394 [0, 0.0000519783] | unavailable (zero cold reference) | 0.00581645 [0.00342804, 0.0067951] |
+| normal | 16.209 [4.04282, 102.559] / 16.209 [4.04282, 102.559] | 0.88507 [0.350834, 2.3031] / 0.885043 [0.350846, 2.30311] | 1 [0.999978, 1.00027] | -0.00000710488 [-0.00000927445, 0.0000275216] |
+| fast | 13,517.1 [11,975.9, 19,207.8] / 13,517.1 [11,975.9, 19,207.8] | 605.423 [365.616, 825.275] / 605.36 [365.115, 825.221] | 1.00159 [0.9997, 1.00337] | 0.0708032 [0.0252837, 0.0834204] |
+| front | 17.287 [3.89513, 102.892] / 17.287 [3.89513, 102.892] | 0.896722 [0.355116, 2.0576] / 0.896709 [0.355131, 2.05761] | 0.999994 [0.99998, 1.00009] | -0.0000059915 [-0.0000160868, 0.00000990809] |
+
+All 20 runs had zero warm/cold failures, invalid surfaces, and dense-grid violations. Every scenario missed warm p99 and fallback targets and hard limits; quiet also missed both 49fed2b median/p99 non-regression limits. Normal, fast, and front exceed the 0.05 RMS excess-ratio hard limit for both warm and cold references; fast also exceeds the 0.05 RMS excess-IV-delta hard limit. Cap-share, maximum-ratio versus cold, and summed-loss checks pass where defined; quiet loss ratio is unavailable because some cold reference losses are zero. The normal, fast, and front cold-reference RMS values are themselves far above the specified limit, and warm results are nearly identical. This is consistent with cumulative independent measured-size quote moves producing late scenario snapshots that the approved eSSVI objective cannot fit to the specified absolute RMS limit. Changing that trajectory or the objective would alter the approved workload/model, so neither was changed.
+
+Load averages (1/5/15-minute, before → after):
+
+| Scenario | Seed | Load average before → after |
+|---|---:|---|
+| quiet | 1 | 1.32 2.13 2.58 → 1.64 2.16 2.58 |
+| quiet | 2 | 1.64 2.16 2.58 → 2.75 2.38 2.65 |
+| quiet | 3 | 2.75 2.38 2.65 → 3.43 2.57 2.70 |
+| quiet | 4 | 3.43 2.57 2.70 → 4.32 2.87 2.80 |
+| quiet | 5 | 4.32 2.87 2.80 → 4.44 2.99 2.84 |
+| normal | 1 | 4.44 2.99 2.84 → 5.01 3.30 2.95 |
+| normal | 2 | 5.01 3.30 2.95 → 5.09 3.53 3.04 |
+| normal | 3 | 5.09 3.53 3.04 → 4.61 3.56 3.07 |
+| normal | 4 | 4.61 3.56 3.07 → 4.62 3.66 3.12 |
+| normal | 5 | 4.62 3.66 3.12 → 4.16 3.65 3.13 |
+| fast | 1 | 4.16 3.65 3.13 → 3.25 3.47 3.08 |
+| fast | 2 | 3.25 3.47 3.08 → 3.48 3.52 3.10 |
+| fast | 3 | 3.48 3.52 3.10 → 4.08 3.65 3.15 |
+| fast | 4 | 4.08 3.65 3.15 → 3.95 3.64 3.16 |
+| fast | 5 | 3.95 3.64 3.16 → 3.82 3.62 3.17 |
+| front | 1 | 3.82 3.62 3.17 → 4.25 3.76 3.23 |
+| front | 2 | 4.25 3.76 3.23 → 4.35 3.84 3.27 |
+| front | 3 | 4.35 3.84 3.27 → 4.37 3.91 3.32 |
+| front | 4 | 4.37 3.91 3.32 → 3.65 3.78 3.29 |
+| front | 5 | 3.65 3.78 3.29 → 3.37 3.70 3.28 |
+
+Fallback/rejection reason histograms (five-seed totals):
+
+| Scenario | Infeasible local result | Loss above gate | Calendar repair failed | Bound check failed | Budget exhausted |
+|---|---:|---:|---:|---:|---:|
+| quiet | 0 | 3,412 | 0 | 0 | 0 |
+| normal | 0 | 5,635 | 0 | 0 | 531 |
+| fast | 0 | 15,233 | 677 | 397,377 | 4,423 |
+| front | 0 | 5,605 | 0 | 0 | 519 |
+
+## Five-seed acceptance run — superseded 726-snapshot profile
+
+Command: `export PATH="$PWD/.venv/bin:$PATH"; ./scripts/verify_scenarios.sh`. All 20 scenario/seed runs completed at 40 expiries × 100 quotes for 200 updates; every `--check` returned 2 for target misses, and the script exited 1 after the full matrix. Values are five-seed medians with `[minimum, maximum]` ranges.
+
+| Scenario | Warm p50 (ms) | Warm p99 (ms) | Fallback updates (%) | Cap-share delta (pp) |
+|---|---:|---:|---:|---:|
+| quiet | 1.76051 [0.794526, 2.00409] | 61.8479 [53.3973, 202.84] | 27 [6.5, 30.5] | 0 [0, 0] |
+| normal | 83.9052 [70.9068, 101.775] | 279.302 [141.406, 307.037] | 93.5 [89.5, 95.5] | -0.01425 [-0.027125, 0.004875] |
+| fast | 45.5597 [26.8635, 49.1836] | 153.94 [79.9754, 338.423] | 84.5 [68, 93] | 0.0626263 [0.00860656, 0.176238] |
+| front | 85.7315 [68.6614, 87.3181] | 266.05 [118.956, 430.608] | 93 [90, 95.5] | -0.013125 [-0.02725, 0.01125] |
+
+| Scenario | Maximum excess ratio, warm / cold | RMS excess ratio, warm / cold | Summed band loss, warm / cold | RMS excess-IV delta (vol pt) |
+|---|---:|---:|---:|---:|
+| quiet | 0.0999683 [0.0994678, 0.0999946] / 0.00569392 [0, 0.0273015] | 0.00658321 [0.00335673, 0.00691196] / 0.00000858338 [0, 0.0000312984] | unavailable (zero cold reference) | 0.00652201 [0.00337092, 0.00668774] |
+| normal | 15.6117 [3.82401, 102.018] / 15.6117 [3.82401, 102.018] | 0.85026 [0.347461, 2.18318] / 0.850253 [0.347493, 2.18318] | 0.999996 [0.999939, 1.00007] | -0.00000425322 [-0.0000243249, 0.00000583243] |
+| fast | 16,069.9 [11,831.5, 18,944] / 16,069.9 [11,831.5, 18,944] | 616.886 [413.294, 833.123] / 616.849 [412.971, 832.817] | 1.00103 [0.999992, 1.00405] | 0.0390601 [0.0158866, 0.0744161] |
+| front | 16.5906 [3.87935, 98.3092] / 16.5906 [3.87935, 98.3092] | 0.864797 [0.352312, 1.93749] / 0.864785 [0.352316, 1.93749] | 0.999996 [0.999983, 1.00016] | -0.00000455697 [-0.0000140499, 0.0000121843] |
+
+All 20 runs had zero unpaired updates, warm/cold failures, invalid surfaces, and dense-grid violations. Every scenario missed p99 and fallback targets and hard limits; quiet also missed both 49fed2b median/p99 non-regression limits. Normal, fast, and front exceed the 0.05 RMS excess-ratio hard limit for warm and cold; some fast seeds also exceed the 0.05 RMS excess-IV-delta hard limit. Cap-share and max-ratio-vs-cold checks pass; summed band loss passes where defined. Quiet loss ratio is unavailable because the cold reference loss is zero for some seeds. The normal, fast, and front cold-reference RMS values are themselves far above the limit, and warm results remain nearly identical. Cumulative independent measured-size moves produce late scenario snapshots the approved eSSVI objective cannot fit to the absolute RMS threshold; changing that workload/model would exceed scope.
+
+Load averages (1/5/15-minute, before → after):
+
+| Scenario | Seed | Load average before → after |
+|---|---:|---|
+| quiet | 1 | 1.11 2.10 2.69 → 1.78 2.21 2.72 |
+| quiet | 2 | 1.78 2.21 2.72 → 2.05 2.25 2.72 |
+| quiet | 3 | 2.05 2.25 2.72 → 2.55 2.35 2.74 |
+| quiet | 4 | 2.55 2.35 2.74 → 4.32 2.81 2.88 |
+| quiet | 5 | 4.32 2.81 2.88 → 4.82 3.05 2.96 |
+| normal | 1 | 4.82 3.05 2.96 → 5.06 3.35 3.07 |
+| normal | 2 | 5.06 3.35 3.07 → 5.97 3.84 3.25 |
+| normal | 3 | 5.97 3.84 3.25 → 5.11 3.85 3.28 |
+| normal | 4 | 5.11 3.85 3.28 → 4.26 3.79 3.28 |
+| normal | 5 | 4.26 3.79 3.28 → 3.70 3.70 3.26 |
+| fast | 1 | 3.70 3.70 3.26 → 3.52 3.66 3.26 |
+| fast | 2 | 3.52 3.66 3.26 → 3.15 3.56 3.24 |
+| fast | 3 | 3.15 3.56 3.24 → 3.36 3.60 3.25 |
+| fast | 4 | 3.36 3.60 3.25 → 3.76 3.68 3.29 |
+| fast | 5 | 3.76 3.68 3.29 → 3.50 3.62 3.28 |
+| front | 1 | 3.50 3.62 3.28 → 3.72 3.65 3.30 |
+| front | 2 | 3.72 3.65 3.30 → 4.49 3.85 3.38 |
+| front | 3 | 4.49 3.85 3.38 → 4.64 4.00 3.45 |
+| front | 4 | 4.64 4.00 3.45 → 4.23 3.96 3.46 |
+| front | 5 | 4.23 3.96 3.46 → 4.40 4.02 3.49 |
+
+Fallback/rejection reason histograms (five-seed totals):
+
+| Scenario | Infeasible local result | Loss above gate | Calendar repair failed | Bound check failed | Budget exhausted |
+|---|---:|---:|---:|---:|---:|
+| quiet | 0 | 3,365 | 0 | 0 | 0 |
+| normal | 0 | 5,626 | 0 | 0 | 515 |
+| fast | 0 | 14,214 | 504 | 377,765 | 4,099 |
+| front | 0 | 5,618 | 0 | 0 | 516 |
+
+## Five-seed 200-update synthetic stress matrix — 739-snapshot profile
+
+This historical 200-update matrix used the 739-snapshot profile, the refreshed shortcut threshold 0.10340351909729481, 40 expiries × 100 quotes, and 200 updates per scenario/seed. All 20 runs completed with zero invalid warm surfaces and zero dense-grid violations. Fast seeds 3, 4, and 5 had 149, 109, and 107 unpaired/unscored updates and 144, 106, and 94 warm failures; seeds 4 and 5 also had 104 and 101 cold failures. Every scenario family breached warm p99 and fallback hard limits in every seed; quiet also missed the 49fed2b median/p99 non-regression limits. The earlier --check statuses used the former absolute RMS criterion and are not treated as current session-scale acceptance. Fast's five-seed median RMS excess-IV delta was 0.0660718 vol point, above its unchanged 0.05 hard limit, with the seed range crossing that limit. Summed band loss met the 1.20 hard limit for normal, fast, and front; the quiet ratio is unavailable where cold reference loss was zero. Values are five-seed medians with [minimum, maximum] ranges; load averages are 1/5/15-minute values before → after each run.
+
+| Scenario | Warm p50 (ms) | Warm p99 (ms) | Fallback updates (%) | Cap-share delta (pp) | Maximum excess ratio, warm / cold | RMS excess ratio, warm / cold | Summed band-loss ratio | RMS excess-IV delta (vol pt) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| quiet | 1.47791 [0.704516, 1.7976] | 65.5706 [47.581, 118.117] | 26 [8, 30.5] | 0 [0, 0] | 0.0999268 [0.0996076, 0.0999942] / 0.00645331 [0, 0.0383648] | 0.00639927 [0.0030859, 0.00693541] / 1.02629e-05 [0, 4.40601e-05] | unavailable (zero cold reference in some seeds) | 0.00644993 [0.00308443, 0.00660808] |
+| normal | 67.7245 [59.9524, 81.5539] | 217.006 [113.642, 361.601] | 93 [89, 96] | -0.0105 [-0.018625, 0.017375] | 18.3615 [3.84666, 98.8054] / 18.3615 [3.84666, 98.8054] | 0.980526 [0.355711, 2.59097] / 0.980511 [0.355721, 2.59098] | 1.00001 [0.999978, 1.00016] | -4.08511e-06 [-1.62301e-05, 1.55582e-05] |
+| fast | 35.3656 [23.3659, 45.2901] | 121.154 [97.6346, 160.493] | 81 [68, 91] | 0.0607143 [0.0147059, 0.200806] | 13,638.2 [11,350.3, 19,680.9] / 13,638.2 [11,350.3, 19,680.9] | 531.402 [373.712, 948.382] / 531.361 [373.263, 948.375] | 1.0017 [1.00062, 1.00851] | 0.0660718 [0.0408365, 0.152395] |
+| front | 61.4091 [57.79, 63.4585] | 119.928 [105.157, 249.686] | 93 [89.5, 95.5] | -0.016875 [-0.01925, 0.01625] | 19.7617 [3.93533, 98.818] / 19.7617 [3.93533, 98.818] | 0.995472 [0.360896, 2.31676] / 0.995455 [0.360922, 2.31676] | 0.999998 [0.999948, 1.0002] | -4.18469e-06 [-2.28223e-05, 1.78394e-05] |
+
+Fallback/rejection reason histograms (five-seed totals):
+
+| Scenario | Infeasible local result | Loss above gate | Calendar repair failed | Bound check failed | Budget exhausted |
+|---|---:|---:|---:|---:|---:|
+| quiet | 0 | 3,636 | 0 | 0 | 0 |
+| normal | 0 | 5,511 | 0 | 0 | 511 |
+| fast | 0 | 16,699 | 679 | 444,326 | 4,740 |
+| front | 0 | 5,571 | 0 | 0 | 516 |
+
+Load averages (1/5/15-minute, before → after):
+
+| Scenario | Seed | Load average before → after |
+|---|---:|---|
+| quiet | 1 | 1.34 1.30 1.10 → 1.86 1.42 1.14 |
+| quiet | 2 | 1.86 1.42 1.14 → 2.26 1.53 1.18 |
+| quiet | 3 | 2.26 1.53 1.18 → 2.89 1.71 1.25 |
+| quiet | 4 | 2.89 1.71 1.25 → 3.15 1.82 1.30 |
+| quiet | 5 | 3.15 1.82 1.30 → 3.26 1.91 1.33 |
+| normal | 1 | 3.26 1.91 1.33 → 3.17 2.01 1.38 |
+| normal | 2 | 3.17 2.01 1.38 → 3.30 2.13 1.44 |
+| normal | 3 | 3.30 2.13 1.44 → 3.46 2.27 1.51 |
+| normal | 4 | 3.46 2.27 1.51 → 3.69 2.47 1.61 |
+| normal | 5 | 3.69 2.47 1.61 → 4.14 2.72 1.72 |
+| fast | 1 | 4.14 2.72 1.72 → 3.66 2.69 1.73 |
+| fast | 2 | 3.66 2.69 1.73 → 3.74 2.75 1.76 |
+| fast | 3 | 3.74 2.75 1.76 → 3.35 2.71 1.77 |
+| fast | 4 | 3.35 2.71 1.77 → 4.19 2.94 1.86 |
+| fast | 5 | 4.19 2.94 1.86 → 4.01 2.96 1.89 |
+| front | 1 | 4.01 2.96 1.89 → 3.91 3.03 1.94 |
+| front | 2 | 3.91 3.03 1.94 → 3.86 3.09 1.99 |
+| front | 3 | 3.86 3.09 1.99 → 3.53 3.07 2.02 |
+| front | 4 | 3.53 3.07 2.02 → 4.07 3.23 2.10 |
+| front | 5 | 4.07 3.23 2.10 → 3.75 3.22 2.13 |
+
+### Latest full-session replay quality — 739-snapshot capture after warm-only seed refinement
+
+Run against the current code after the warm-only ATM seed refinement: `export PATH="$PWD/.venv/bin:$PATH"; python/run_snapshot_replay.py --data-root /home/zhangy/vol-rv/data --output-dir /tmp/cal-recalib-replay --bench build/essvi_bench`. The capture contains 739 snapshots (738 usable, one unusable), 720 warm pairs, 18 cold starts, 8 gaps, 16 missing intervals, and 20 locked / 0 crossed / 274,878 other quote exclusions. All ten usable asset-days had zero warm/cold failures, invalid surfaces, and dense-grid violations. European Black-Scholes IV is a calibration-path stand-in; these data do not establish American pricing or consolidated NBBO accuracy.
+
+The longest uninterrupted session chain is 77 warm pairs (SPY, 2026-10-13 through 2026-10-16). The four synthetic verification scenarios now use 77 updates; the prior 200-update matrix is retained above as long-run stress. RMS excess ratio acceptance is the warm-minus-cold increase with unchanged 0.02/0.05 target/hard margins. Current cold-reference RMS ratios range from 1.718674 to 3.112787, so the former absolute 0.05 criterion was below every measured cold reference. No latency or fallback limit was relaxed: full-session fallback remains 94.118–100%, and warm p99 ranges from 6.951 to 125.139 ms (cold p99 6.738–92.820 ms). The calibration removes a cold-floor false failure; it does not turn the observed speed/fallback misses into passes.
+
+| Asset | Session | Warm p50 / p99 (ms) | Cold p50 / p99 (ms) | Fallback (%) | Maximum W/C | RMS W/C | RMS Δ W−C | Loss W/C | RMS excess-IV Δ (vol pt) |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| IBIT | 2026-10-12 | 29.656 / 49.601 | 29.413 / 43.324 | 94.118 | 28.536 / 28.536 | 2.574 / 2.581 | -0.007273 | 0.981783 | -0.001869 |
+| IBIT | 2026-10-13 | 27.665 / 47.898 | 25.235 / 36.987 | 96.000 | 64.134 / 64.134 | 2.459 / 2.461 | -0.001922 | 0.983265 | -0.001185 |
+| IBIT | 2026-10-14 | 29.731 / 54.406 | 29.357 / 41.201 | 96.000 | 19.308 / 19.308 | 2.249 / 2.252 | -0.002774 | 0.986992 | -0.001919 |
+| IBIT | 2026-10-15 | 27.539 / 54.772 | 26.383 / 46.583 | 96.000 | 20.038 / 20.038 | 2.408 / 2.411 | -0.002621 | 0.978544 | -0.001872 |
+| IBIT | 2026-10-16 | 23.846 / 49.803 | 23.610 / 42.613 | 96.000 | 21.245 / 21.245 | 1.719 / 1.719 | +0.000036 | 0.977135 | -0.001496 |
+| SPY | 2026-10-12 | 2.277 / 6.951 | 2.290 / 6.738 | 100.000 | 8.148 / 8.148 | 1.943 / 1.943 | 0.000000 | 1.000000 | 0.000000 |
+| SPY | 2026-10-13 | 2.663 / 15.578 | 2.644 / 9.710 | 100.000 | 9.634 / 9.634 | 1.982 / 1.982 | 0.000000 | 1.000000 | 0.000000 |
+| SPY | 2026-10-14 | 2.940 / 11.762 | 2.950 / 9.078 | 100.000 | 6.106 / 6.106 | 1.752 / 1.752 | +0.000001 | 0.999999 | -0.00000003 |
+| SPY | 2026-10-15 | 3.025 / 18.219 | 3.002 / 20.559 | 100.000 | 11.093 / 11.093 | 3.113 / 3.113 | -0.000003 | 1.000002 | +0.00000009 |
+| SPY | 2026-10-16 | 4.105 / 125.139 | 3.269 / 92.820 | 100.000 | 10.795 / 10.795 | 2.451 / 2.451 | -0.000003 | 1.000001 | -0.00000027 |
+
+RMS Δ is warm RMS excess ratio minus cold RMS excess ratio. The maximum increase is 0.000036, below the 0.02 target. At cap 0.1, warm-minus-cold share changes remain between 0 and +0.131 percentage points; band-loss ratios remain 0.977135–1.000002. These quality comparisons pass the revised relative limits while the p99/fallback objectives remain unmet.
+
+| Asset | Session | Cap 0.05: W/C %, Δpp | Cap 0.1: W/C %, Δpp | Cap 0.2: W/C %, Δpp |
+|---|---|---:|---:|---:|
+| IBIT | 2026-10-12 | 73.45 / 73.38, +0.070 | 71.14 / 71.05, +0.090 | 66.86 / 66.70, +0.161 |
+| IBIT | 2026-10-13 | 74.09 / 74.07, +0.027 | 72.04 / 72.01, +0.039 | 67.36 / 67.30, +0.054 |
+| IBIT | 2026-10-14 | 74.60 / 74.52, +0.076 | 72.17 / 72.09, +0.081 | 67.83 / 67.75, +0.074 |
+| IBIT | 2026-10-15 | 76.51 / 76.49, +0.019 | 74.44 / 74.40, +0.037 | 70.46 / 70.43, +0.028 |
+| IBIT | 2026-10-16 | 70.46 / 70.34, +0.118 | 67.86 / 67.73, +0.131 | 63.06 / 62.94, +0.118 |
+| SPY | 2026-10-12 | 80.03 / 80.03, +0.000 | 76.61 / 76.61, +0.000 | 71.71 / 71.71, +0.000 |
+| SPY | 2026-10-13 | 80.13 / 80.13, +0.000 | 77.05 / 77.05, +0.000 | 71.56 / 71.56, +0.000 |
+| SPY | 2026-10-14 | 76.10 / 76.10, +0.000 | 73.49 / 73.49, +0.000 | 69.14 / 69.14, +0.000 |
+| SPY | 2026-10-15 | 80.98 / 80.98, +0.000 | 78.48 / 78.48, +0.000 | 74.17 / 74.17, +0.000 |
+| SPY | 2026-10-16 | 79.85 / 79.85, +0.000 | 77.51 / 77.51, +0.000 | 73.15 / 73.15, +0.000 |
+
+
+## Five-seed 77-update session-scale synthetic matrix — 739-snapshot profile
+
+Command: `export PATH="$PWD/.venv/bin:$PATH"; ./scripts/verify_scenarios.sh`. Pre-refinement baseline in the current checkout at `e2bfe2c`: all 20 cases (quiet, normal, fast, front × seeds 1–5) completed at 40 expiries × 100 quotes and 77 updates per case. Every `--check` returned 2; the script returned 1 for target misses. Warm p50/p99 are milliseconds, other entries are five-seed medians [minimum, maximum]. RMS Δ is the current warm-minus-cold acceptance metric (target 0.02, hard limit 0.05).
+
+| Scenario | Warm p50 (ms) | Warm p99 (ms) | Fallback updates (%) | Cap-share Δ (pp) | RMS Δ (warm − cold) | Summed band-loss ratio | RMS excess-IV Δ (vol pt) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| quiet | 1.1265 [0.536961, 2.01023] | 56.8329 [2.21747, 77.2721] | 16.8831 [0, 35.0649] | 0 [0, 0] | 0.00663570 [0.000772862, 0.00891233] | unavailable (zero cold reference in some seeds) | 0.00648086 [0.000883023, 0.00863326] |
+| normal | 69.2037 [59.1676, 73.7056] | 132.795 [113.199, 264.957] | 81.8182 [71.4286, 89.6104] | -0.0272727 [-0.0483766, 0.0451299] | -0.00000673532 [-0.000135945, 0.000202363] | 1.00027 [0.998972, 1.00652] | -0.00000853157 [-0.000182786, 0.000199936] |
+| fast | 44.081 [41.421, 57.355] | 125.587 [104.016, 198.609] | 87.013 [64.9351, 90.9091] | 0.0844595 [0.0157609, 0.315455] | 0.138624 [0.0497174, 0.724323] | 1.00223 [1.00055, 1.01748] | 0.0702967 [0.0568585, 0.222875] |
+| front | 60.1868 [58.0428, 77.0039] | 130.049 [104.735, 261.519] | 81.8182 [72.7273, 88.3117] | -0.0438312 [-0.05, 0.0422078] | -0.00000790792 [-0.000113117, 0.000238674] | 0.999997 [0.999535, 1.00809] | -0.0000120131 [-0.0000955679, 0.00023594] |
+
+All cases had zero invalid warm surfaces and zero dense-grid violations. Fast seeds 1–5 had 69 unpaired/unscored updates, 63 warm failures, and 55 cold failures; their RMS Δ values ranged from 0.0497174 to 0.724323, so four breached the 0.05 hard limit and the fifth missed the 0.02 target. Quiet has a zero cold band-loss reference in some seeds. The full-session replay remains the workload-faithful quality comparison; this matrix is a synthetic session-length stress check.
+
+Load averages (1/5/15-minute, before → after):
+
+| Scenario | Seed | Load average before → after |
+|---|---:|---|
+| quiet | 1 | 0.99 1.50 1.25 → 1.44 1.58 1.28 |
+| quiet | 2 | 1.44 1.58 1.28 → 1.80 1.66 1.31 |
+| quiet | 3 | 1.80 1.66 1.31 → 1.74 1.64 1.31 |
+| quiet | 4 | 1.74 1.64 1.31 → 2.00 1.70 1.33 |
+| quiet | 5 | 2.00 1.70 1.33 → 2.08 1.72 1.34 |
+| normal | 1 | 2.08 1.72 1.34 → 2.22 1.77 1.36 |
+| normal | 2 | 2.22 1.77 1.36 → 2.17 1.78 1.37 |
+| normal | 3 | 2.17 1.78 1.37 → 2.29 1.82 1.39 |
+| normal | 4 | 2.29 1.82 1.39 → 2.48 1.88 1.41 |
+| normal | 5 | 2.48 1.88 1.41 → 2.64 1.93 1.43 |
+| fast | 1 | 2.64 1.93 1.43 → 2.59 1.93 1.44 |
+| fast | 2 | 2.59 1.93 1.44 → 2.67 1.97 1.45 |
+| fast | 3 | 2.67 1.97 1.45 → 2.61 1.97 1.46 |
+| fast | 4 | 2.61 1.97 1.46 → 2.52 1.97 1.46 |
+| fast | 5 | 2.52 1.97 1.46 → 2.81 2.05 1.50 |
+| front | 1 | 2.81 2.05 1.50 → 2.77 2.07 1.51 |
+| front | 2 | 2.77 2.07 1.51 → 2.90 2.12 1.53 |
+| front | 3 | 2.90 2.12 1.53 → 3.00 2.16 1.55 |
+| front | 4 | 3.00 2.16 1.55 → 3.36 2.29 1.60 |
+| front | 5 | 3.36 2.29 1.60 → 3.31 2.31 1.62 |
+
+
+## Five-seed 77-update session-scale synthetic matrix — post local quality selection
+
+Command: `export PATH="$PWD/.venv/bin:$PATH"; ./scripts/verify_scenarios.sh`. This run used the working tree at `e2bfe2c` with the quote-cap-aware local candidate refinement. All 20 scenario/seed cases completed at 40 expiries × 100 quotes and 77 updates each. Every `--check` returned 2, so the script exited 1 for target misses; no execution failures occurred. Timings are milliseconds; other entries are five-seed medians [minimum, maximum].
+
+| Scenario | Warm p50 (ms) | Warm p99 (ms) | Fallback updates (%) | Cap-share Δ (pp) | RMS Δ (warm − cold) | Summed band-loss ratio | RMS excess-IV Δ (vol pt) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| quiet | 1.18009 [0.558002, 1.46559] | 61.6793 [1.19237, 81.3492] | 15.5844 [0, 24.6753] | 0 [0, 0] | 0.00649647 [0.000772862, 0.0073946] | unavailable (zero cold reference in some seeds) | 0.00645228 [0.000883023, 0.00722631] |
+| normal | 65.4761 [62.5949, 71.0207] | 129.166 [112.791, 423.679] | 81.8182 [71.4286, 89.6104] | -0.0272727 [-0.0967532, 0.0886364] | -0.00000673532 [-0.000225006, 0.000355152] | 1.00027 [0.998634, 1.01007] | -0.00000853157 [-0.00027962, 0.000329237] |
+| fast | 47.0763 [38.7107, 53.0169] | 119.206 [98.7199, 125.544] | 87.013 [64.9351, 90.9091] | 0.0844595 [0.0157609, 0.315455] | 0.138624 [0.0497174, 0.724323] | 1.00223 [1.00055, 1.01748] | 0.0702967 [0.0568585, 0.222875] |
+| front | 69.8919 [60.3024, 82.0072] | 140 [101.92, 371.471] | 81.8182 [72.7273, 88.3117] | -0.0438312 [-0.0480519, 0.0422078] | -0.00000703597 [-0.000113117, 0.000238674] | 0.999999 [0.999535, 1.00809] | -0.0000120131 [-0.0000955679, 0.00023594] |
+
+Quiet, normal, and front had zero warm failures. Fast had 63 warm failures, 55 cold failures, and 69 unpaired updates across its five seeds. All runs had zero invalid warm surfaces and dense-grid violations. Quiet cold band-loss references were zero in some seeds. Warm p99 and fallback targets remain unmet in every non-quiet scenario; the fast RMS Δ spans 0.0497174–0.724323, above the 0.02 target in all five seeds. The focused refinement does not resolve the Addendum B scenario hard-limit misses.
+
+Cumulative fallback/rejection reason counts across the five seeds:
+
+| Scenario | Infeasible local result | Loss above gate | Calendar repair failed | Bound check failed | Budget exhausted |
+|---|---:|---:|---:|---:|---:|
+| quiet | 0 | 904 | 0 | 0 | 0 |
+| normal | 0 | 5537 | 0 | 0 | 512 |
+| fast | 0 | 5855 | 175 | 125511 | 1658 |
+| front | 0 | 5579 | 0 | 0 | 518 |
+
+Load averages (1/5/15-minute, before → after):
+
+| Scenario | Seed | Load average before → after |
+|---|---:|---|
+| quiet | 1 | 1.79 1.84 1.55 → 1.82 1.84 1.55 |
+| quiet | 2 | 1.82 1.84 1.55 → 1.91 1.86 1.56 |
+| quiet | 3 | 1.91 1.86 1.56 → 1.84 1.85 1.56 |
+| quiet | 4 | 1.84 1.85 1.56 → 2.17 1.92 1.58 |
+| quiet | 5 | 2.17 1.92 1.58 → 2.38 1.97 1.60 |
+| normal | 1 | 2.38 1.97 1.60 → 2.70 2.05 1.63 |
+| normal | 2 | 2.70 2.05 1.63 → 2.75 2.09 1.65 |
+| normal | 3 | 2.75 2.09 1.65 → 2.62 2.08 1.65 |
+| normal | 4 | 2.62 2.08 1.65 → 2.64 2.11 1.67 |
+| normal | 5 | 2.64 2.11 1.67 → 2.62 2.12 1.68 |
+| fast | 1 | 2.62 2.12 1.68 → 2.76 2.17 1.70 |
+| fast | 2 | 2.76 2.17 1.70 → 2.78 2.18 1.70 |
+| fast | 3 | 2.78 2.18 1.70 → 2.97 2.25 1.73 |
+| fast | 4 | 2.97 2.25 1.73 → 3.11 2.30 1.75 |
+| fast | 5 | 3.11 2.30 1.75 → 3.18 2.33 1.77 |
+| front | 1 | 3.18 2.33 1.77 → 3.07 2.33 1.77 |
+| front | 2 | 3.07 2.33 1.77 → 2.75 2.30 1.77 |
+| front | 3 | 2.75 2.30 1.77 → 2.87 2.34 1.79 |
+| front | 4 | 2.87 2.34 1.79 → 3.34 2.47 1.84 |
+| front | 5 | 3.34 2.47 1.84 → 3.51 2.54 1.87 |

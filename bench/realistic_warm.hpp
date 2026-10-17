@@ -77,12 +77,12 @@ struct ScenarioAmplitudes {
 // Equal-asset/equal-session-day quantiles from the available five-minute
 // IBIT/SPY snapshot pairs. See docs/perf-results.md, WP-B7 measurement method.
 inline constexpr ScenarioAmplitudes kQuietScenario{
-    5.786996128484235e-05, 7.318689397061038e-04, 4.435662553908102e-05};
+    5.855246734129231e-05, 6.855053975409323e-04, 4.3412909554098864e-05};
 inline constexpr ScenarioAmplitudes kNormalScenario{
-    4.859012545148474e-04, 1.3646117877557956e-02, 8.638141035393551e-04};
+    4.736525792518032e-04, 1.1289126139384938e-02, 8.366926101141996e-04};
 inline constexpr ScenarioAmplitudes kFastScenario{
-    2.928019908412336e-03, 1.7074039452014506e-01, 5.561586448558091e-03};
-inline constexpr double kFrontBackMoveRatio = 2.8052973951424724;
+    3.1785829306381114e-03, 2.0680703819458962e-01, 5.535502695369443e-03};
+inline constexpr double kFrontBackMoveRatio = 2.7141129408715052;
 
 inline void evolveWarmScenario(std::vector<Quote>& quotes,
                                std::size_t expiry_count,
@@ -122,9 +122,12 @@ inline void evolveWarmScenario(std::vector<Quote>& quotes,
       const double tilt = common_tilt * std::clamp(2.0 * k, -1.0, 1.0);
       const double change = expiry_level + tilt +
                             noise.centered() * amplitudes.quote_noise;
-      quote.bid_iv = std::max(0.001, quote.bid_iv + change);
-      quote.ask_iv = std::max(quote.bid_iv, quote.ask_iv + change);
-      quote.mid_iv = std::max(0.001, quote.mid_iv + change);
+      // Clamp all quote values together to preserve the band at the IV floor.
+      const double applied_change =
+          std::max(change, 0.001 - quote.bid_iv);
+      quote.bid_iv += applied_change;
+      quote.ask_iv += applied_change;
+      quote.mid_iv += applied_change;
     }
   }
 }

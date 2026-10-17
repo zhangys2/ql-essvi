@@ -30,7 +30,8 @@ struct Options {
   std::size_t quotes_per_expiry{100};
   std::size_t repeats{9};
   std::size_t warm_updates{100};
-  std::size_t scenario_updates{200};
+  // Longest uninterrupted warm chain in the 739-snapshot capture.
+  std::size_t scenario_updates{77};
   double quote_cap{0.1};
   std::uint64_t seed{0x8f3f73b5cf1c9ad1ULL};
   std::string input;
@@ -990,8 +991,9 @@ std::vector<essvi::bench::QualityCheck> qualityChecks(const Summary& summary) {
   checks.push_back(checkAtMost("maximum excess ratio, warm",
                                metric(warm.maximum_ratio), max_target,
                                max_hard));
-  checks.push_back(checkAtMost("RMS excess ratio, warm",
-                               metric(warm.rms_ratio()), 0.02, 0.05));
+  checks.push_back(
+      essvi::bench::checkRmsRatioRegression(
+          "RMS excess ratio warm minus cold", warm, cold, 0.02, 0.05));
   checks.push_back(checkRatioAtMost("summed band loss warm / cold",
                                     metric(warm.summed_band_loss),
                                     metric(cold.summed_band_loss), 1.05, 1.20));

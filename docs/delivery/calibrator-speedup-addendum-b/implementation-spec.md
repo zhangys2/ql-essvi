@@ -3,6 +3,7 @@
 - **Intake:** decision-only
 - **Status:** Approved by the user on 2026-10-16T11:22:57Z (`approve the spec, implement`)
 - **Approval scope:** Approved as written, including DEC-011 through DEC-015 and the implementation inferences below.
+- **Post-approval direction:** On 2026-10-17, the user selected workload and acceptance recalibration after full-session evidence. The session-scale workload and cold-relative RMS amendment are recorded under Acceptance criteria; latency, fallback, and safety limits remain unchanged.
 - **Source handoff:** `docs/delivery/2026-10-16-handoff.md`
 - **Validator:** Not run. This is decision-only intake, not a research brief; the addenda are not to be validated as research briefs.
 - **Base:** `master` at `af7f0e4bf883dec67e26dc6c94e5d665a8fb5536`; the base tree was verified identical to commit `49fed2bd0a31f1df60ffc370f8af82978d1b51d0`.
@@ -57,13 +58,13 @@ No research facts are asserted: this is a decision-only handoff, not a research 
 
 ## Acceptance criteria
 
-The following table is Addendum B §3. Each synthetic scenario run uses 200 updates; results are reported as the median over five fixed seeds plus the range, with load average before and after. The replay reports results per day. `--check` returns non-zero on a target miss; report target status and hard-limit status distinctly so a target miss cannot be presented as a pass. [DEC-001, DEC-003; `docs/calibrator-speedup-addendum-b.md` §3]
+This table retains Addendum B §3's limits except for the user-directed workload and RMS calibration. Synthetic scenarios use 77 updates, the longest uninterrupted warm chain in the 739-snapshot capture; the former 200-update matrix remains a long-run stress workload, not a session proxy. The full-session replay remains the primary realistic benchmark and reports results per day. Synthetic results use five fixed seeds plus range and load averages. `--check` returns non-zero on target misses and reports target status separately from hard-limit status. [DEC-001, DEC-003; `docs/calibrator-speedup-addendum-b.md` §3]
 
 | Metric | Target | Hard limit |
 |---|---:|---:|
 | Per-quote cap share above 0.1, warm minus cold | ≤ 0.5 percentage points | ≤ 2 percentage points |
 | Maximum excess ratio, warm | ≤ max(0.1, cold + 0.01) | ≤ max(0.2, cold + 0.05) |
-| RMS excess ratio | ≤ 0.02 | ≤ 0.05 |
+| RMS excess-ratio increase, warm minus cold | ≤ 0.02 | ≤ 0.05 |
 | Summed band loss, warm / cold | ≤ 1.05 | ≤ 1.20 |
 | Per-quote RMS excess outside band, warm vs cold, in vol points | within +0.02 vol point | within +0.05 vol point |
 | Warm p99, quiet / normal / front | ≤ 3 ms | ≤ 10 ms |
@@ -73,10 +74,12 @@ The following table is Addendum B §3. Each synthetic scenario run uses 200 upda
 | Warm failures and invalid surfaces | 0 | 0 |
 | Dense-grid butterfly/calendar violations | 0 | 0 |
 
+RMS calibration rationale: the current real replay's cold-reference RMS excess ratio is 1.719–3.113 across usable asset-days, far above the former absolute 0.05 ceiling. The criterion therefore limits warm degradation relative to the paired cold reference using the original 0.02/0.05 margins. No latency, fallback, per-quote, loss, IV-point, feasibility, or arbitrage limits are relaxed; the latest replay still shows fallback rates of 94.1–100% and warm p99 of 6.95–125.14 ms. The original Addendum B source document is unchanged.
+
 Additional observable requirements:
 
 - For each included two-sided quote, let `bid_var = expiry * bid_iv²`, `ask_var = expiry * ask_iv²`, `width = max(ask_var - bid_var, 1e-6)`, `w_fit` be the fitted total variance, `excess = max(0, bid_var - w_fit, w_fit - ask_var)`, and `ratio = excess / width`. Report share above cap, maximum, RMS, summed loss, and the warm/cold comparison. Convert excess distance to IV points using fitted IV `sqrt(w_fit / expiry)`, distance to the nearer violated IV boundary (zero when inside), multiplied by 100. Exclude rows not included in the fit or without a valid two-sided band; document quote counts. [DEC-002]
-- `scripts/verify_scenarios.sh` runs quiet, normal, fast, and front for five fixed, reported seeds; each run uses 200 updates and emits the pass/fail table and load averages. [DEC-001, DEC-003]
+- `scripts/verify_scenarios.sh` runs quiet, normal, fast, and front for five fixed, reported seeds; each run uses 77 updates and emits the pass/fail table and load averages. [DEC-001, DEC-003]
 - The warm path has zero invalid results and zero dense-grid butterfly/calendar violations. A degraded result is still validated and arbitrage-free; it must include achieved quality, degraded-slice count, per-slice age, and worst-slice maximum/RMS excess ratio. [DEC-001, DEC-007, DEC-013]
 - `loss_tol` remains in `WarmOptions` as deprecated compatibility state, but it no longer controls either the gate or reuse. The benchmark reports old/new gate behavior side-by-side on the `49fed2b` baseline. [DEC-002]
 - Quiet median and p99 must not regress against the `49fed2b` baseline (0.47 ms median, 7.6 ms p99). For cold-path A/B, run 40 expiries × 100 quotes for nine repeats and one expiry × 100 quotes for 20 repeats, recording load averages. If slower beyond measurement noise, restore single-slice cold median ≤ 2.5 ms and full-chain cold median ≤ 55 ms, with outputs within the parent spec's tolerance. [DEC-003, DEC-007]

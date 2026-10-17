@@ -36,6 +36,7 @@ Improve changed-slice local fitting with deterministic multi-start in the bounde
 - Result/bench output includes counts for infeasible local result, loss above gate, calendar repair failed, and bound check failed; scenario reports include reason histograms.
 - Repeated identical inputs return identical parameters and diagnostics relevant to search ordering; no infeasible point is accepted.
 - Local candidate quality and all gate decisions continue to satisfy CAL-B2; no D17-D22 semantics change.
+- Within the existing local-evaluation budget, prefer the lowest raw-`bandLoss` candidate that passes CAL-B2's per-quote cap over lower-loss gate failures; keep the reported objective as raw `bandLoss`.
 
 ## Out of scope
 
@@ -45,6 +46,7 @@ Improve changed-slice local fitting with deterministic multi-start in the bounde
 ## Test plan
 
 - Add deterministic behavior tests for all three starts, ATM initialization, early stop, evaluation bound, fallback reason categories, feasibility rejection, and repeatability through the calibrator seam.
+- Add a conflicting-band fixture proving a near-optimal cap-passing local trial avoids fallback, has higher raw band loss than the relaxed-cap local minimum but stays within 5%, and satisfies the dense-grid constraints.
 - Run focused warm CTest and configured full CTest/Python suites.
 - Re-run the four-scenario/five-seed benchmark to show reason histograms and quality/latency after the local solver change.
 
@@ -75,6 +77,12 @@ Improve changed-slice local fitting with deterministic multi-start in the bounde
 | 2026-10-16 | Scenario benchmark | `scripts/verify_scenarios.sh` | `/home/zhangy/git/ql-essvi` | `c5a7aca2bf565bd78aa0e81baa1231fa923b2aed` | target misses (exit 1) | Completed all 20 runs (four scenarios × five seeds × 200 updates); all `--check` calls returned 2 for target misses, not execution failures. The result table and reason histograms are in `docs/perf-results.md`; fast seeds 2–5 had warm failures and unpaired updates. |
 | 2026-10-16 | Configured verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `c5a7aca2bf565bd78aa0e81baa1231fa923b2aed` | passed | Release build succeeded; CTest 5/5 passed; pytest 10/10 passed. |
 
+| 2026-10-17 | Supplemental solver baseline | `export PATH="$PWD/.venv/bin:$PATH"; ./scripts/verify_scenarios.sh` | `/home/zhangy/git/ql-essvi` | working tree at `e2bfe2c` | completed; target misses | Pre-refinement 739-profile matrix: all 20 cases completed with 77 updates, each `--check` returned 2, script exit 1 for target misses. No invalid warm surfaces or dense-grid violations. Baseline p99 medians [min,max]: quiet 56.833 [2.217,77.272] ms; normal 132.795 [113.199,264.957] ms; fast 125.587 [104.016,198.609] ms; front 130.049 [104.735,261.519] ms. Full matrix and load averages are in `docs/perf-results.md`. |
+| 2026-10-17 | Supplemental refinement Red | `make -C build essvi_warm_calibrator_tests -j2 && build/essvi_warm_calibrator_tests` | `/home/zhangy/git/ql-essvi` | working tree at `e2bfe2c` with focused test added | expected failure | `localSolverKeepsNearOptimalCapPassingCandidate` failed at `warm.fallback_slices == 0`; local raw-loss selection retained a per-quote-cap failure and entered cold fallback. |
+| 2026-10-17 | Supplemental refinement Green | `make -C build essvi_warm_calibrator_tests -j2 && build/essvi_warm_calibrator_tests` | `/home/zhangy/git/ql-essvi` | working tree with quote-cap-aware candidate selection | passed | Strict-cap candidate has higher raw `bandLoss` than the relaxed-cap local minimum but stays within 5%; both pass without fallback and satisfy dense-grid checks. Existing local budget and repeatability assertions also pass. |
+| 2026-10-17 | Supplemental configured verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | working tree with quote-cap-aware candidate selection | passed | Release configure/build passed; CTest 5/5 passed and pytest 10/10 passed. |
+| 2026-10-17 | Supplemental scenario benchmark | `export PATH="$PWD/.venv/bin:$PATH"; ./scripts/verify_scenarios.sh` | `/home/zhangy/git/ql-essvi` | working tree at `e2bfe2c` with quote-cap-aware selection | target misses (exit 1) | All 20 cases completed; every `--check` returned 2, with no execution failures. Fast had 63 warm failures, 55 cold failures, and 69 unpaired updates; quiet, normal, and front had zero warm failures. No invalid warm surfaces or dense-grid violations. Updated metrics and reason histograms are in `docs/perf-results.md`. |
+
 ## Review dispositions
 
 | Round | Finding | Disposition | Evidence |
@@ -93,5 +101,6 @@ Improve changed-slice local fitting with deterministic multi-start in the bounde
 - Worktree: primary checkout, `/home/zhangy/git/ql-essvi` (configured checkout form)
 - Commit: `c5a7aca2bf565bd78aa0e81baa1231fa923b2aed`
 - GitHub Issue: none (local tracker)
-- Tests: focused warm test passed; configured CTest 5/5 and pytest 10/10 passed; scenario script completed all 20 runs but returned 1 for target misses (documented in `docs/perf-results.md`).
+- Tests: the configured full command passed after this working-tree change: Release build, CTest 5/5, and pytest 10/10. The supplemental warm-only ATM-seed regression failed before and passed after; it asserts identical parameters when the nonbinding nearest-ATM quote's mid changes while all bands remain identical. The post-change 1 × 100 fast smoke reports RMS excess ratio 1.80174, maximum 4.04763, 1/1 fallback, and zero failures, invalid surfaces, or dense-grid violations. Addendum B hard limits remain unmet; see `docs/perf-results.md`.
+- Supplemental 2026-10-17 verification: focused warm calibrator executable passed; configured Release build, CTest 5/5, and pytest 10/10 passed. All 20 739-profile 77-update scenario cases completed; every `--check` returned 2 and the script exited 1 for target misses, with no execution failures. Fast had 63 warm failures, 55 cold failures, and 69 unpaired updates; all runs had zero invalid warm surfaces and dense-grid violations. See `docs/perf-results.md` for full metrics and reason histograms.
 - Diff review: waived at user request; no independent review performed.

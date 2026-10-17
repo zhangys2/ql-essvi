@@ -116,6 +116,19 @@ inline QualityCheck checkAtMost(std::string name, double value,
   return {std::move(name), value, target, hard_limit, available};
 }
 
+// Measure warm RMS deterioration relative to the paired cold fit.
+inline QualityCheck checkRmsRatioRegression(
+    std::string name, const QuoteExcessMetrics& warm,
+    const QuoteExcessMetrics& cold, double target_delta,
+    double hard_limit_delta) {
+  if (!hasPairedQuoteObservations(warm, cold))
+    return checkAtMost(std::move(name),
+                       std::numeric_limits<double>::quiet_NaN(), target_delta,
+                       hard_limit_delta);
+  return checkAtMost(std::move(name), warm.rms_ratio() - cold.rms_ratio(),
+                     target_delta, hard_limit_delta);
+}
+
 inline QualityCheck checkRatioAtMost(std::string name, double numerator,
                                      double denominator, double target,
                                      double hard_limit) {

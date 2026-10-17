@@ -6,6 +6,7 @@ cd "$ROOT"
 export PATH="$ROOT/.venv/bin:$PATH"
 
 SEEDS=(1 2 3 4 5)
+SCENARIO_UPDATES=77
 SCENARIOS=(quiet normal fast front)
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/essvi-scenarios.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
@@ -19,8 +20,8 @@ for scenario in "${SCENARIOS[@]}"; do
   for seed in "${SEEDS[@]}"; do
     report="$TMP/$scenario-$seed.json"
     log="$TMP/$scenario-$seed.log"
-    echo "Running scenario=$scenario seed=$seed updates=200"
-    if ./build/essvi_bench --scenario "$scenario" --scenario-updates 200 \
+    echo "Running scenario=$scenario seed=$seed updates=$SCENARIO_UPDATES"
+    if ./build/essvi_bench --scenario "$scenario" --scenario-updates "$SCENARIO_UPDATES" \
         --seed "$seed" --timings-out "$report" --check >"$log" 2>&1; then
       status=0
     else

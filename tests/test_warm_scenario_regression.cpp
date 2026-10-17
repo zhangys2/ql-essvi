@@ -237,8 +237,10 @@ bool runScenario(essvi::bench::WarmScenario scenario) {
     checkLimit(violations, maximum_ratio, kUpdates,
                "maximum excess ratio, warm", warm.maximum_ratio,
                std::max(0.2, cold.maximum_ratio + 0.05));
-    checkLimit(violations, rms_ratio, kUpdates, "RMS excess ratio, warm",
-               warm.rms_ratio(), 0.05);
+    const auto rms_check = essvi::bench::checkRmsRatioRegression(
+        "RMS excess ratio warm minus cold", warm, cold, 0.02, 0.05);
+    checkLimit(violations, rms_ratio, kUpdates, rms_check.name.c_str(),
+               rms_check.value, rms_check.hard_limit);
     checkLimit(violations, summed_loss_ratio, kUpdates,
                "summed band loss warm / cold",
                lossRatio(warm.summed_band_loss, cold.summed_band_loss), 1.20);
@@ -253,8 +255,8 @@ bool runScenario(essvi::bench::WarmScenario scenario) {
                unavailable, 2.0);
     checkLimit(violations, maximum_ratio, kUpdates,
                "maximum excess ratio, warm", unavailable, 0.2);
-    checkLimit(violations, rms_ratio, kUpdates, "RMS excess ratio, warm",
-               unavailable, 0.05);
+    checkLimit(violations, rms_ratio, kUpdates,
+               "RMS excess ratio warm minus cold", unavailable, 0.05);
     checkLimit(violations, summed_loss_ratio, kUpdates,
                "summed band loss warm / cold", unavailable, 1.20);
     checkLimit(violations, rms_iv_delta, kUpdates,

@@ -210,6 +210,39 @@ void reportsTargetMissAcrossChecks() {
   assert(essvi::bench::qualityCheckExitCode(
              essvi::bench::hasTargetMiss(unavailable)) == 2);
 }
+
+void comparesRmsRatioToColdReference() {
+  essvi::bench::QuoteExcessMetrics warm;
+  essvi::bench::QuoteExcessMetrics cold;
+  warm.quote_count = cold.quote_count = 2;
+  warm.squared_ratio_sum = cold.squared_ratio_sum = 8.0;
+
+  const auto equal = essvi::bench::checkRmsRatioRegression(
+      "RMS increase", warm, cold, 0.02, 0.05);
+  assert(equal.available);
+  assert(equal.value == 0.0);
+  assert(equal.targetPassed());
+  assert(equal.hardLimitPassed());
+
+  warm.squared_ratio_sum = 2.0 * 2.03 * 2.03;
+  const auto target_miss = essvi::bench::checkRmsRatioRegression(
+      "RMS increase", warm, cold, 0.02, 0.05);
+  assert(std::abs(target_miss.value - 0.03) < 1e-12);
+  assert(!target_miss.targetPassed());
+  assert(target_miss.hardLimitPassed());
+
+  warm.squared_ratio_sum = 2.0 * 2.06 * 2.06;
+  const auto hard_miss = essvi::bench::checkRmsRatioRegression(
+      "RMS increase", warm, cold, 0.02, 0.05);
+  assert(hard_miss.value > 0.05);
+  assert(!hard_miss.hardLimitPassed());
+
+  cold.quote_count = 0;
+  const auto unpaired = essvi::bench::checkRmsRatioRegression(
+      "RMS increase", warm, cold, 0.02, 0.05);
+  assert(!unpaired.available);
+}
+
 }  // namespace
 
 int main() {
@@ -218,6 +251,7 @@ int main() {
   requiresMatchedWarmAndColdQuoteCounts();
   mergesOnlyCompletePerUpdateQuotePopulations();
   separatesTargetAndHardLimitAndHandlesZeroReference();
+  comparesRmsRatioToColdReference();
   reportsTargetMissAcrossChecks();
   return 0;
 }
