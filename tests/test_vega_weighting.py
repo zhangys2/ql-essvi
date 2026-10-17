@@ -6,6 +6,7 @@ import json
 import math
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
@@ -74,6 +75,8 @@ def test_snapshot_weights_are_positive_and_median_one():
 
 
 def test_converter_and_replay_emit_identical_vega_weights(tmp_path):
+    locked = _contract("locked", 103.0)
+    locked["ask"] = locked["bid"]
     snapshot = _snapshot(
         [
             _contract("near", 101.0),
@@ -83,6 +86,7 @@ def test_converter_and_replay_emit_identical_vega_weights(tmp_path):
             _contract("same-day", 101.0, expiry="20261012", time_years=1 / 365),
             _contract("past", 101.0, expiry="20261011", time_years=1 / 365),
             _contract("session-next", 101.0, expiry="20261013", time_years=1 / 365),
+            locked,
         ],
         timestamp=dt.datetime(2026, 10, 13, 0, 15, tzinfo=dt.timezone.utc),
     )
@@ -94,22 +98,31 @@ def test_converter_and_replay_emit_identical_vega_weights(tmp_path):
     )
 
     assert output_path is not None
-    assert row_count == 7
+    assert row_count == 8
     assert included_count == replay.valid_quotes == 4
     with output_path.open(newline="", encoding="utf-8") as stream:
         converted_rows = list(csv.DictReader(stream))
     assert converter.HEADER[-1] == "weight"
     converted_by_id = {row["quote_id"]: row for row in converted_rows}
     replay_by_id = {row[0]: row for row in replay.csv_rows}
-    assert converted_by_id.keys() == replay_by_id.keys()
-    for quote_id, converted in converted_by_id.items():
-        replay_row = replay_by_id[quote_id]
+    assert set(converted_by_id) - {"locked"} == set(replay_by_id)
+    converted_included = {
+        quote_id
+        for quote_id, row in converted_by_id.items()
+        if row["included"] == "true"
+    }
+    replay_included = {
+        quote_id for quote_id, row in replay_by_id.items() if row[11] == "true"
+    }
+    assert converted_included == replay_included
+    for quote_id, replay_row in replay_by_id.items():
+        converted = converted_by_id[quote_id]
         assert converted["effective_date"] == replay_row[1]
         assert converted["time_to_expiry"] == replay_row[3]
         assert converted["included"] == replay_row[11]
         assert converted["weight"] == replay_row[13]
     assert all(row["effective_date"] == "2026-10-12" for row in converted_rows)
-    for quote_id in ("excluded", "same-day", "past"):
+    for quote_id in ("excluded", "same-day", "past", "locked"):
         assert converted_by_id[quote_id]["included"] == "false"
         assert converted_by_id[quote_id]["weight"] == ""
     assert all(
@@ -153,6 +166,20 @@ def test_normalized_schema_accepts_legacy_and_weighted_files(tmp_path):
         )
         assert result.returncode == 0, result.stderr
 
+    for invalid_weight in ("", "0", "-1", "nan", "inf", "-inf"):
+        path = tmp_path / f"invalid-weight-{invalid_weight or 'blank'}.csv"
+        with path.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(converter.HEADER)
+            writer.writerow(row + [invalid_weight])
+        result = subprocess.run(
+            [sys.executable, str(validator), "normalized", str(path)],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode != 0
+        assert "weight" in result.stderr
+
     excluded = row.copy()
     excluded[8:11] = ["", "", ""]
     excluded[11] = "false"
@@ -171,80 +198,60 @@ def test_normalized_schema_accepts_legacy_and_weighted_files(tmp_path):
     assert "excluded quote weight must be empty" in result.stderr
 
 
-def test_vega_ab_runs_unit_and_weighted_cold_arms_on_training_only(tmp_path):
+def test_vega_ab_runs_real_cold_fits_on_training_only():
     evaluator = importlib.import_module("scripts.evaluate_vega_weighting")
-    data_root = tmp_path / "data"
-    source_dir = data_root / "ibit"
-    source_dir.mkdir(parents=True)
-    for date in ("20261012", "20261013", "20261014"):
-        snapshot = _snapshot(
-            [
-                _contract("near", 101.0),
-                _contract("mid", 115.0),
-                _contract("wing", 150.0),
-            ]
-        )
-        source_path = source_dir / f"chain_{date}.jsonl.gz"
-        with gzip.open(source_path, "wt", encoding="utf-8") as stream:
-            stream.write(json.dumps(snapshot) + "\n")
+    with tempfile.TemporaryDirectory(prefix="vega-evaluator-") as temp_name:
+        data_root = Path(temp_name) / "data"
+        source_dir = data_root / "ibit"
+        source_dir.mkdir(parents=True)
+        strikes = (101.0, 105.0, 110.0, 115.0, 120.0, 130.0, 140.0, 150.0)
+        contracts = [
+            _contract(f"q{index}", strike, iv=1.0 if index == 0 else 0.8)
+            for index, strike in enumerate(strikes)
+        ]
+        for date in ("20261012", "20261013", "20261014"):
+            source_path = source_dir / f"chain_{date}.jsonl.gz"
+            with gzip.open(source_path, "wt", encoding="utf-8") as stream:
+                stream.write(json.dumps(_snapshot(contracts)) + "\n")
 
-    fit_binary = tmp_path / "essvi_fit"
-    weights_log = tmp_path / "fit-weights.jsonl"
-    fit_binary.write_text(
-        f"""#!/usr/bin/env python3
-import csv
-import json
-import math
-import sys
-from pathlib import Path
-
-normalized, parameters, fitted, grid, diagnostics = map(Path, sys.argv[1:])
-with normalized.open(newline="", encoding="utf-8") as stream:
-    rows = list(csv.DictReader(stream))
-included = [row for row in rows if row["included"] == "true"]
-with open({str(weights_log)!r}, "a", encoding="utf-8") as stream:
-    json.dump([float(row["weight"]) for row in included], stream)
-    stream.write(chr(10))
-with diagnostics.open("w", newline="", encoding="utf-8") as stream:
-    writer = csv.writer(stream)
-    writer.writerow(["model", "converged", "objective", "iterations", "runtime_seconds", "error"])
-    writer.writerow(["eSSVI", "true", "0.25", "1", "0.01", ""])
-with fitted.open("w", newline="", encoding="utf-8") as stream:
-    writer = csv.writer(stream)
-    writer.writerow(["quote_id", "time_to_expiry", "strike", "log_moneyness", "fitted_total_variance", "fitted_iv", "status"])
-    for row in included:
-        time_years = float(row["time_to_expiry"])
-        strike = float(row["strike"])
-        forward = float(row["forward"])
-        ask_variance = time_years * float(row["ask_iv"]) ** 2
-        variance = ask_variance + 0.001
-        writer.writerow([
-            row["quote_id"],
-            row["time_to_expiry"],
-            row["strike"],
-            math.log(strike / forward),
-            format(variance, ".17g"),
-            format(math.sqrt(variance / time_years), ".17g"),
-            "ok",
-        ])
-parameters.write_text("parameters" + chr(10), encoding="utf-8")
-grid.write_text("grid" + chr(10), encoding="utf-8")
-""",
-        encoding="utf-8",
-    )
-    fit_binary.chmod(0o755)
-
-    report = evaluator.evaluate(data_root, fit_binary)
-    seen_weights = [
-        json.loads(line) for line in weights_log.read_text(encoding="utf-8").splitlines()
-    ]
+        report = evaluator.evaluate(data_root, ROOT / "build" / "essvi_fit")
 
     assert report["training_dates"] == ["20261012", "20261013", "20261014"]
     assert report["method"]["cleaning_profile"] == "combined"
-    assert report["arms"]["unweighted"]["coverage"]["cold_fits_succeeded"] == 3
-    assert report["arms"]["vega_weighted"]["coverage"]["cold_fits_succeeded"] == 3
-    assert report["arms"]["unweighted"]["fit_quality"]["quote_count"] == 9
-    assert report["arms"]["vega_weighted"]["fit_quality"]["quote_count"] == 9
-    assert len(seen_weights) == 6
-    assert all(weights == [1.0, 1.0, 1.0] for weights in seen_weights[::2])
-    assert any(any(weight != 1.0 for weight in weights) for weights in seen_weights[1::2])
+    for arm_name in ("unweighted", "vega_weighted"):
+        arm = report["arms"][arm_name]
+        assert arm["coverage"]["snapshot_count"] == 3
+        assert arm["coverage"]["cold_fits_succeeded"] == 3
+        assert arm["coverage"]["input_contract_count"] == 24
+        assert arm["coverage"]["valid_quotes"] == 24
+        assert arm["fit_quality"]["quote_count"] == 24
+        assert len(arm["per_snapshot_exclusions"]) == 3
+        assert [item["source"] for item in arm["per_snapshot_exclusions"]] == [
+            f"chain_{date}.jsonl.gz:1"
+            for date in ("20261012", "20261013", "20261014")
+        ]
+        assert all(
+            item["input_contracts"] == item["valid_quotes"] == 8
+            for item in arm["per_snapshot_exclusions"]
+        )
+
+    unit = report["arms"]["unweighted"]
+    weighted = report["arms"]["vega_weighted"]
+    assert math.isclose(
+        unit["summed_fit_objective"],
+        unit["fit_quality"]["sum_squared_total_variance_excess"],
+        rel_tol=1e-8,
+        abs_tol=1e-12,
+    )
+    assert math.isclose(
+        weighted["summed_fit_objective"],
+        weighted["fit_quality"]["sum_squared_vega_weighted_excess"],
+        rel_tol=1e-8,
+        abs_tol=1e-12,
+    )
+    assert not math.isclose(
+        unit["summed_fit_objective"],
+        weighted["summed_fit_objective"],
+        rel_tol=1e-6,
+        abs_tol=1e-10,
+    )

@@ -188,7 +188,7 @@ def quote_row(
         reason = "invalid_contract_or_forward"
     elif time_years <= 0.0:
         reason = "expired_or_same_day"
-    elif bid is None or ask is None or bid < 0.0 or ask < bid or ask <= 0.0:
+    elif bid is None or ask is None or bid < 0.0 or ask <= bid or ask <= 0.0:
         reason = "invalid_or_crossed_quote"
     elif (option_type == "C" and strike <= forward) or (
         option_type == "P" and strike >= forward
