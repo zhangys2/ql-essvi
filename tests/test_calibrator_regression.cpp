@@ -105,11 +105,14 @@ void legacyAndWeightedCsvControlColdObjective() {
   const auto blank_weight_path = directory / "blank-weight.csv";
   const auto invalid_weight_path = directory / "invalid-weight.csv";
   const auto malformed_weight_path = directory / "malformed-weight.csv";
+  const auto partial_numeric_weight_path =
+      directory / "partial-numeric-weight.csv";
   writeQuoteCsv(legacy_path, source_quotes, false);
   writeQuoteCsv(weighted_path, source_quotes, true);
   writeQuoteCsv(blank_weight_path, source_quotes, true, "");
   writeQuoteCsv(invalid_weight_path, source_quotes, true, "0");
   writeQuoteCsv(malformed_weight_path, source_quotes, true, "invalid");
+  writeQuoteCsv(partial_numeric_weight_path, source_quotes, true, "2junk");
 
   const auto legacy_quotes = essvi::readQuotes(legacy_path.string());
   const auto weighted_quotes = essvi::readQuotes(weighted_path.string());
@@ -119,11 +122,14 @@ void legacyAndWeightedCsvControlColdObjective() {
       essvi::readQuotes(invalid_weight_path.string());
   const auto malformed_weight_quotes =
       essvi::readQuotes(malformed_weight_path.string());
+  const auto partial_numeric_weight_quotes =
+      essvi::readQuotes(partial_numeric_weight_path.string());
   assert(legacy_quotes.size() == source_quotes.size());
   assert(weighted_quotes.size() == source_quotes.size());
   assert(blank_weight_quotes.size() == source_quotes.size());
   assert(invalid_weight_quotes.size() == source_quotes.size());
   assert(malformed_weight_quotes.size() == source_quotes.size());
+  assert(partial_numeric_weight_quotes.size() == source_quotes.size());
   for (std::size_t i = 0; i < source_quotes.size(); ++i) {
     assert(legacy_quotes[i].weight == 1.0);
     assert(weighted_quotes[i].weight == 2.0);
@@ -137,6 +143,11 @@ void legacyAndWeightedCsvControlColdObjective() {
       essvi::calibrate(malformed_weight_quotes);
   assert(!malformed_csv_result.converged);
   assert(malformed_csv_result.error ==
+         "included quote weight must be finite and positive");
+  const auto partial_numeric_csv_result =
+      essvi::calibrate(partial_numeric_weight_quotes);
+  assert(!partial_numeric_csv_result.converged);
+  assert(partial_numeric_csv_result.error ==
          "included quote weight must be finite and positive");
 
   const auto legacy_result = essvi::calibrate(legacy_quotes);
