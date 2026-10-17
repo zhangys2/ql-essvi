@@ -2,10 +2,10 @@
 
 ## State
 
-- Current: `implemented`
-- Last transition: `implementing` → `implemented`
-- At: `2026-10-17T14:17:41Z`
-- Reason/evidence: review-only deliverable is committed at `bfe35f735fd007f137368e6e9326085d1dea553b`; final configured verification passed at this HEAD. The original C1 analysis and F1 zero-excess correction are included for whole-deliverable review.
+- Current: `reviewing`
+- Last transition: `implemented` → `reviewing`
+- At: `2026-10-17T14:19:02Z`
+- Reason/evidence: fresh three-axis review requested for the full C1 deliverable after the current branch passed configured full verification. The review snapshot will pin the original base through this ticket's HEAD and include the review-start record before reviewers begin.
 - Blocker: None for this replacement ticket. WP-C5 remains gated on explicit cleaning-threshold approval.
 
 ## State history
@@ -17,6 +17,7 @@
 | `baseline-checking` | `baseline-passed` | `2026-10-17T14:12:18Z` | Reused exact-base baseline evidence at `ef6c788b8e2479b9aa74a1b595fc9844d9094082` from CAL-C1: Release build passed, CTest 5/5, pytest 10/10. |
 | `baseline-passed` | `implementing` | `2026-10-17T14:14:50Z` | Review-only scope confirmed; source code already exists on the fixed branch. Fresh configured verification, real-data recheck, and full-diff review are being performed. |
 | `implementing` | `implemented` | `2026-10-17T14:17:41Z` | Review-only full-deliverable scope confirmed; current committed deliverable passed fresh configured verification at `bfe35f735fd007f137368e6e9326085d1dea553b`. No code edits are in this ticket. |
+| `implemented` | `reviewing` | `2026-10-17T14:19:02Z` | Fresh three-axis review requested on the full C1 deliverable after configured verification passed. Snapshot and exact range are recorded in the review result. |
 
 ## Claim
 
