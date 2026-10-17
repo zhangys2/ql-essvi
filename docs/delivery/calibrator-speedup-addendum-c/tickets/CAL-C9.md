@@ -2,11 +2,10 @@
 
 ## State
 
-- Current: `reviewing`
-- Last transition: `changes-requested` → `reviewing`
-- At: `2026-10-17T16:52:32Z`
-- Reason/evidence: Round 1 corrections are committed as `438d073`; focused regressions, configured Release/CTest/pytest verification, and the training-only IBIT A/B smoke passed. Correction evidence is appended below; a new frozen snapshot is entering round 2 review.
-- Blocker: None.
+- Current: `changes-requested`
+- Last transition: `reviewing` → `changes-requested`
+- At: `2026-10-17T17:03:22Z`
+- Reason/evidence: Round 2 approved the spec and standards axes and approved verification with one non-blocking suggestion: the synthetic A/B evaluator test monkeypatches `subprocess.run` instead of using the executable stub specified in the ticket test plan. This is accepted for correction; other axes have no findings.
 
 ## State history
 
@@ -20,6 +19,7 @@
 | `implemented` | `reviewing` | `2026-10-17T16:34:31+00:00` | Final verification passed and the implementation commit is fixed; independent review is starting. |
 | `reviewing` | `changes-requested` | `2026-10-17T16:45:59+00:00` | Round 1 review accepted five findings for correction: validate included weights at C++ fit ingress and reject invalid weighted rows; reject excluded-row weights; cover blank current-schema defaults; cover IBIT excluded-row parity; exercise warm local weighted equations. |
 | `changes-requested` | `reviewing` | `2026-10-17T16:52:32Z` | Corrections committed as `438d073`; focused regression, configured full verification, and training-only IBIT A/B smoke passed. The updated fixed snapshot is entering round 2 review. |
+| `reviewing` | `changes-requested` | `2026-10-17T17:03:22Z` | Round 2 spec and standards axes approved; verification approved with one accepted non-blocking suggestion to exercise the synthetic A/B through a real executable stub rather than monkeypatching `subprocess.run`. |
 
 ## Claim
 
@@ -97,6 +97,9 @@ Compute normalized per-quote vega sensitivity in the IBIT quote preparation and 
 | 2026-10-17T16:52:08Z | Final correction verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | working tree | passed | Release configure/build succeeded; CTest 5/5 passed; pytest 33/33 passed. |
 | 2026-10-17T16:52:08Z | A/B correction smoke | `.venv/bin/python scripts/evaluate_vega_weighting.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit > /tmp/cal-c9-review-fix-evaluation.json` | `/home/zhangy/git/ql-essvi` | working tree | passed | Training-only IBIT Oct 12–14: 212/212 fits per arm, 90,954 quotes. Summed objective 0.3268896906491981 unit versus 0.13466688189465315 vega-weighted; no holdout dates or SPY used. Existing report-only comparison remains unchanged. |
 | 2026-10-17T16:52:32Z | Round 1 correction commit | `git commit -m "Validate C9 vega weights at fit ingress"` | `/home/zhangy/git/ql-essvi` | `438d073` | committed | Corrected included-weight ingress/parser handling, normalized-schema exclusion semantics, and all five review coverage gaps. |
+| 2026-10-17T17:03:22Z | Review round 2 | Frozen base-to-HEAD `fdf70b8b80ce6c9b617141293bda99a560be3e07..8f69b30862cc2ca4ede3e444a25fdf05127ad7d4`; archive `/tmp/cal-c9-8f69b30-review-snapshot.tar.gz` (SHA-256 `231b118e0de03091b68a1321f23bc33ea2a4895c1367d04808ca77f6d737448b`), patch SHA-256 `bb22d5bdabf9ac9b0d6ce987f55999ed0ecce5cd80e8b40d93f3909e4054478a` | `/home/zhangy/git/ql-essvi` | `8f69b30862cc2ca4ede3e444a25fdf05127ad7d4` | approved with suggestion | Spec axis approved; standards axis approved with no findings; verification axis approved with one non-blocking suggestion. Independent verification ran configured Release configure/build, CTest 5/5, pytest 33/33. No real holdout or SPY source files were opened. |
+| 2026-10-17T17:05:24Z | Executable-stub Green | `.venv/bin/python -m pytest -q tests/test_vega_weighting.py::test_vega_ab_runs_unit_and_weighted_cold_arms_on_training_only` | `/home/zhangy/git/ql-essvi` | working tree | passed | The deterministic three-date synthetic A/B now invokes a temporary executable fit stub for all six cold fits; the stub emits diagnostics and fitted quote rows and records unit versus normalized-vega inputs. 1 passed. |
+| 2026-10-17T17:05:24Z | Final round-two correction verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | working tree | passed | Release configure/build succeeded; CTest 5/5 passed; pytest 33/33 passed.
 
 ## Evidence and decision references
 
@@ -117,6 +120,7 @@ Compute normalized per-quote vega sensitivity in the IBIT quote preparation and 
 | 1 | P3: add coverage that blank weight in a current 14-column CSV defaults to 1.0. | accepted | Missing coverage verified in the C++ CRLF fixtures; correction evidence will be appended before round 2. |
 | 1 | P3: cover excluded-row blank weight parity in the IBIT converter and replay paths. | accepted | Existing converter/replay parity fixture contains included rows only; correction evidence will be appended before round 2. |
 | 1 | P3: test the weighted warm local objective/Jacobian path when the cap gate does not force fallback. | accepted | Existing warm test covers cap fallback only; correction evidence will be appended before round 2. |
+| 2 | Suggestion: run the deterministic synthetic A/B evaluator test through an executable fit stub rather than monkeypatching `subprocess.run`, matching the ticket test plan. | accepted | Verified in `tests/test_vega_weighting.py::test_vega_ab_runs_unit_and_weighted_cold_arms_on_training_only` at the frozen round-two snapshot; correction evidence will be appended before round 3. |
 
 ## Correction evidence — round 1
 
@@ -134,6 +138,13 @@ Configured correction verification passed on 2026-10-17T16:52:08Z: Release confi
 
 ## Review record
 
+### Round 2 — frozen commit `8f69b30862cc2ca4ede3e444a25fdf05127ad7d4`
+
+- **Spec axis — approved, no findings.** Confirmed the loss, compatibility, metrics, and report-only evaluator remain within the approved C9 scope; no holdout or SPY source data was used.
+- **Standards axis — approved, no findings.** Round-one ingress and schema corrections are correct; no additional bug or maintainability issue found.
+- **Verification axis — approved with one non-blocking suggestion.** Configured Release configure/build, CTest 5/5, and pytest 33/33 passed on the frozen snapshot. The prior round-one behavior gaps are covered. Accepted suggestion: replace the synthetic A/B test's monkeypatched `subprocess.run` with an executable fit stub, as specified in the ticket test plan.
+
+
 ### Round 1 — frozen commit `a2621b4c6fb7c71a040827b810e2af34705a61f2`
 
 - **Spec axis — approved, no findings.** Confirmed mandatory normalized vega weighting, cold/warm objective and gate scope, legacy compatibility, metrics, and IBIT Oct 12–14 training-only A/B under C5 cleaning; no holdout dates or SPY.
@@ -144,4 +155,5 @@ Configured correction verification passed on 2026-10-17T16:52:08Z: Release confi
 
 - C++ CTest: invalid direct included weights rejected in cold and warm APIs; invalid explicit weighted CSV rows are retained as invalid and rejected at fit ingress; blank 14-column weights default to 1.0; warm local weighted equations are observable with the cap gate passing.
 - Python pytest: excluded rows with nonblank weights fail schema validation; IBIT converter and replay agree on excluded-row blank weights and included quote weights.
+- Accepted round-two correction: execute the synthetic A/B evaluator against a temporary executable fit stub; verify it receives unit and normalized-vega inputs and returns valid fit artifacts.
 

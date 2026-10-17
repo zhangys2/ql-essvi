@@ -163,9 +163,7 @@ def test_normalized_schema_accepts_legacy_and_weighted_files(tmp_path):
     assert "excluded quote weight must be empty" in result.stderr
 
 
-def test_vega_ab_runs_unit_and_weighted_cold_arms_on_training_only(
-    tmp_path, monkeypatch
-):
+def test_vega_ab_runs_unit_and_weighted_cold_arms_on_training_only(tmp_path):
     evaluator = importlib.import_module("scripts.evaluate_vega_weighting")
     data_root = tmp_path / "data"
     source_dir = data_root / "ibit"
@@ -181,84 +179,57 @@ def test_vega_ab_runs_unit_and_weighted_cold_arms_on_training_only(
         source_path = source_dir / f"chain_{date}.jsonl.gz"
         with gzip.open(source_path, "wt", encoding="utf-8") as stream:
             stream.write(json.dumps(snapshot) + "\n")
+
     fit_binary = tmp_path / "essvi_fit"
-    fit_binary.write_text("fixture", encoding="utf-8")
-    seen_weights = []
+    weights_log = tmp_path / "fit-weights.jsonl"
+    fit_binary.write_text(
+        f"""#!/usr/bin/env python3
+import csv
+import json
+import math
+import sys
+from pathlib import Path
 
-    def fake_fit(command, *, check, capture_output, text):
-        assert check and capture_output and text
-        normalized, parameters, fitted, grid, diagnostics = map(Path, command[1:])
-        with normalized.open(newline="", encoding="utf-8") as stream:
-            rows = list(csv.DictReader(stream))
-        included = [row for row in rows if row["included"] == "true"]
-        weights = [float(row["weight"]) for row in included]
-        seen_weights.append(weights)
-        with diagnostics.open("w", newline="", encoding="utf-8") as stream:
-            writer = csv.DictWriter(
-                stream,
-                fieldnames=[
-                    "model",
-                    "converged",
-                    "objective",
-                    "iterations",
-                    "runtime_seconds",
-                    "error",
-                ],
-            )
-            writer.writeheader()
-            writer.writerow(
-                {
-                    "model": "eSSVI",
-                    "converged": "true",
-                    "objective": "0.25",
-                    "iterations": 1,
-                    "runtime_seconds": "0.01",
-                    "error": "",
-                }
-            )
-        with fitted.open("w", newline="", encoding="utf-8") as stream:
-            writer = csv.DictWriter(
-                stream,
-                fieldnames=[
-                    "quote_id",
-                    "time_to_expiry",
-                    "strike",
-                    "log_moneyness",
-                    "fitted_total_variance",
-                    "fitted_iv",
-                    "status",
-                ],
-            )
-            writer.writeheader()
-            for row in included:
-                bid_variance = float(row["bid_iv"]) ** 2 * float(
-                    row["time_to_expiry"]
-                )
-                ask_variance = float(row["ask_iv"]) ** 2 * float(
-                    row["time_to_expiry"]
-                )
-                variance = ask_variance + 0.001
-                writer.writerow(
-                    {
-                        "quote_id": row["quote_id"],
-                        "time_to_expiry": row["time_to_expiry"],
-                        "strike": row["strike"],
-                        "log_moneyness": "0",
-                        "fitted_total_variance": format(variance, ".17g"),
-                        "fitted_iv": format(
-                            math.sqrt(variance / float(row["time_to_expiry"])),
-                            ".17g",
-                        ),
-                        "status": "ok",
-                    }
-                )
-        parameters.write_text("parameters\n", encoding="utf-8")
-        grid.write_text("grid\n", encoding="utf-8")
-        return subprocess.CompletedProcess(command, 0, "", "")
+normalized, parameters, fitted, grid, diagnostics = map(Path, sys.argv[1:])
+with normalized.open(newline="", encoding="utf-8") as stream:
+    rows = list(csv.DictReader(stream))
+included = [row for row in rows if row["included"] == "true"]
+with open({str(weights_log)!r}, "a", encoding="utf-8") as stream:
+    json.dump([float(row["weight"]) for row in included], stream)
+    stream.write(chr(10))
+with diagnostics.open("w", newline="", encoding="utf-8") as stream:
+    writer = csv.writer(stream)
+    writer.writerow(["model", "converged", "objective", "iterations", "runtime_seconds", "error"])
+    writer.writerow(["eSSVI", "true", "0.25", "1", "0.01", ""])
+with fitted.open("w", newline="", encoding="utf-8") as stream:
+    writer = csv.writer(stream)
+    writer.writerow(["quote_id", "time_to_expiry", "strike", "log_moneyness", "fitted_total_variance", "fitted_iv", "status"])
+    for row in included:
+        time_years = float(row["time_to_expiry"])
+        strike = float(row["strike"])
+        forward = float(row["forward"])
+        ask_variance = time_years * float(row["ask_iv"]) ** 2
+        variance = ask_variance + 0.001
+        writer.writerow([
+            row["quote_id"],
+            row["time_to_expiry"],
+            row["strike"],
+            math.log(strike / forward),
+            format(variance, ".17g"),
+            format(math.sqrt(variance / time_years), ".17g"),
+            "ok",
+        ])
+parameters.write_text("parameters" + chr(10), encoding="utf-8")
+grid.write_text("grid" + chr(10), encoding="utf-8")
+""",
+        encoding="utf-8",
+    )
+    fit_binary.chmod(0o755)
 
-    fit_analysis = importlib.import_module("scripts.analyze_fit_quality")
-    monkeypatch.setattr(fit_analysis.subprocess, "run", fake_fit)
     report = evaluator.evaluate(data_root, fit_binary)
+    seen_weights = [
+        json.loads(line) for line in weights_log.read_text(encoding="utf-8").splitlines()
+    ]
 
     assert report["training_dates"] == ["20261012", "20261013", "20261014"]
     assert report["method"]["cleaning_profile"] == "combined"
