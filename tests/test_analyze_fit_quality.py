@@ -1,5 +1,10 @@
+import gzip
+import json
 import math
+import sys
+from types import SimpleNamespace
 
+import scripts.analyze_fit_quality as analysis
 from scripts.analyze_fit_quality import (
     contribution_percentages,
     grouped_band_width_quality,
@@ -75,4 +80,112 @@ def test_contribution_percentages_preserve_positive_total_shares():
 
     assert contribution_percentages(groups, total_excess=4.0) == {
         "expiry": {"near": 25.0, "far": 75.0}
+    }
+
+
+def test_analyzer_emits_zero_contributions_as_json_null_and_uses_training_files(
+    tmp_path, monkeypatch, capsys
+):
+    training_dates = ("20261012", "20261013", "20261014")
+    source_dir = tmp_path / "ibit"
+    source_dir.mkdir()
+    for date in training_dates + ("20261015", "20261016"):
+        snapshot = {
+            "session_date": f"{date[:4]}-{date[4:6]}-{date[6:]}",
+            "contracts": [{}, {}],
+            "underlying_start": {"bid": 99.99, "ask": 100.01},
+            "underlying_end": {"bid": 100.09, "ask": 100.11},
+            "fetch_start_ms": 1_000,
+            "fetch_end_ms": 2_000,
+        }
+        source_file = source_dir / f"chain_{date}.jsonl.gz"
+        with gzip.open(source_file, "wt", encoding="utf-8") as stream:
+            stream.write(json.dumps(snapshot) + "\n")
+
+    fit_binary = tmp_path / "essvi_fit"
+    fit_binary.touch()
+    training_files = {f"chain_{date}.jsonl.gz" for date in training_dates}
+
+    def fake_fit_snapshot(snapshot, source_file, fit_binary, sequence):
+        assert source_file.name in training_files
+        session_date = snapshot["session_date"]
+        snapshot_id = f"{source_file.name}:{sequence}"
+        observations = [
+            {
+                "snapshot_id": snapshot_id,
+                "session_date": session_date,
+                "source_position": 0.0,
+                "tick_position": 0.0,
+                "expiry_days": 5,
+                "log_moneyness": -0.1,
+                "premium": 0.1,
+                "relative_spread": 0.2,
+                "relative_total_variance_band_width": 0.2,
+                "abs_delta": 0.1,
+                "bid": 0.05,
+                "option_type": "C",
+                "signed_residual": -0.01,
+                "excess": 0.0,
+                "excess_ratio": 0.0,
+            },
+            {
+                "snapshot_id": snapshot_id,
+                "session_date": session_date,
+                "source_position": 1.0,
+                "tick_position": 1.0,
+                "expiry_days": 40,
+                "log_moneyness": 0.1,
+                "premium": 0.5,
+                "relative_spread": 0.4,
+                "relative_total_variance_band_width": 0.5,
+                "abs_delta": 0.3,
+                "bid": 0.3,
+                "option_type": "P",
+                "signed_residual": 0.01,
+                "excess": 0.0,
+                "excess_ratio": 0.0,
+            },
+        ]
+        prepared = SimpleNamespace(
+            valid_quotes=2,
+            excluded_locked=0,
+            excluded_crossed=0,
+            excluded_other=0,
+            csv_rows=[[], []],
+            session_date=session_date,
+        )
+        return prepared, observations
+
+    monkeypatch.setattr(analysis, "fit_snapshot", fake_fit_snapshot)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "analyze_fit_quality.py",
+            "--data-root",
+            str(tmp_path),
+            "--fit-binary",
+            str(fit_binary),
+        ],
+    )
+
+    assert analysis.main() == 0
+    report = json.loads(capsys.readouterr().out)
+
+    assert report["coverage"]["source_files"] == [
+        f"chain_{date}.jsonl.gz" for date in training_dates
+    ]
+    assert report["coverage"]["snapshot_count"] == 3
+    assert report["coverage"]["valid_quotes"] == 6
+    assert report["fit_quality"]["sum_squared_total_variance_excess"] == 0.0
+    assert report["fit_excess_contribution_percent"] == {
+        dimension: {bucket: None for bucket in groups}
+        for dimension, groups in {
+            "expiry_days": {"0-7d": {}, "31-90d": {}},
+            "log_moneyness": {"(-0.20,-0.10]": {}, "(0.05,0.10]": {}},
+            "mid_premium_usd": {"$0.05-$0.25": {}, "$0.25-$1": {}},
+            "relative_spread": {"<0.25": {}, "0.25-0.5": {}},
+            "relative_total_variance_band_width": {"<0.25": {}, "0.5-1": {}},
+            "option_type": {"C": {}, "P": {}},
+        }.items()
     }
