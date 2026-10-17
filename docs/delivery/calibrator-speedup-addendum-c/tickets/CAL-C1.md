@@ -2,10 +2,10 @@
 
 ## State
 
-- Current: `implementing`
-- Last transition: `baseline-passed` → `implementing`
-- At: `2026-10-17T12:25:43Z`
-- Reason/evidence: the baseline passed; the report and reproducible read-only analyzer are implemented. This transition was recorded after the analysis run; no behavior-changing production code is in scope.
+- Current: `implemented`
+- Last transition: `implementing` → `implemented`
+- At: `2026-10-17T12:26:11Z`
+- Reason/evidence: commit `f15bc16` contains the reproducible C1 runner, report, source-spec copy, and ticket; the real-data run completed 212/212 cold fits and the configured full verification passed.
 - Blocker: None for CAL-C1. WP-C5 remains gated on the user's threshold approval.
 
 ## State history
@@ -16,6 +16,7 @@
 | `ready` | `baseline-checking` | `2026-10-17` | Claimed by `omp coding assistant`; primary-checkout branch created at the declared base. |
 | `baseline-checking` | `baseline-passed` | `2026-10-17T11:55:05Z` | Configured full verification passed at the declared base: CTest 5/5 and pytest 10/10. |
 | `baseline-passed` | `implementing` | `2026-10-17T12:25:43Z` | Administrative transition recorded after the analysis run; the ticket remains analysis-only and changes no production behavior. |
+| `implementing` | `implemented` | `2026-10-17T12:26:11Z` | Commit `f15bc16`; real-data runner passed; final configured build and test command passed. The full external dataset is not repository-resident, so the reproducible data run is the acceptance test; no production behavior changed. |
 
 ## Claim
 
@@ -72,8 +73,8 @@ The user-visible result is `docs/fit-quality.md`, reproduced by `scripts/analyze
 | At | Phase | Command | CWD | Commit | Result | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-10-17 | Baseline | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `ef6c788b8e2479b9aa74a1b595fc9844d9094082` | passed | Release build succeeded; CTest 5/5 passed; pytest 10/10 passed. |
-| 2026-10-17 | Real-data diagnosis | `python3 scripts/analyze_fit_quality.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit` | `/home/zhangy/git/ql-essvi` | working tree | passed | 212/212 independent cold fits converged on 2026-10-12–14; 113,965 valid quotes; 259,978 source contracts reconciled; holdout dates not read. Results and methods are in `docs/fit-quality.md`. |
-| 2026-10-17 | Final verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | working tree | passed | Release build succeeded; CTest 5/5 passed; pytest 10/10 passed. |
+| 2026-10-17 | Real-data diagnosis | `python3 scripts/analyze_fit_quality.py --data-root ~/vol-rv/data --fit-binary build/essvi_fit` | `/home/zhangy/git/ql-essvi` | `f15bc16` | passed | 212/212 independent cold fits converged on 2026-10-12–14; 113,965 valid quotes; 259,978 source contracts reconciled; holdout dates not read. Results and methods are in `docs/fit-quality.md`. |
+| 2026-10-17 | Final verification | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` | `/home/zhangy/git/ql-essvi` | `f15bc16` | passed | Release build succeeded; CTest 5/5 passed; pytest 10/10 passed. |
 
 ## Review dispositions
 
@@ -87,7 +88,7 @@ The user-visible result is `docs/fit-quality.md`, reproduced by `scripts/analyze
 - Baseline verification: configured Release build, CTest 5/5, pytest 10/10 at base.
 - Branch: `delivery/calibrator-speedup-addendum-c/CAL-C1`
 - Worktree: primary checkout, `/home/zhangy/git/ql-essvi`
-- Commit: pending
+- Commit: `f15bc16` (`docs: add Addendum C IBIT fit diagnosis`)
 - GitHub Issue: none (local tracker)
 - Tests: real IBIT C1 analysis passed; final configured CTest 5/5 and pytest 10/10 passed. No permanent test added (analysis-only ticket; external raw-data dependency).
 - Diff review: pending.
