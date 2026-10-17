@@ -2,11 +2,11 @@
 
 ## State
 
-- Current: `review-approved`
-- Last transition: `reviewing` → `review-approved`
-- At: `2026-10-17T15:36:05Z`
-- Reason/evidence: Spec, standards, and verification reviewers approved the frozen base-to-HEAD range with no findings; the isolated verifier passed the configured full suite (CTest 5/5, pytest 25/25).
-- Blocker: None.
+- Current: `finished`
+- Last transition: `review-approved` → `finished`
+- At: `2026-10-17T15:36:58Z`
+- Reason/evidence: Final verification and isolated three-axis review are recorded; implementation commit `b501822865cd0652ed1f9d66809a658cbfbd94ae` and review-approval record commit `bf2b96f1db1178c78f78928ee898b446270fb0f3` are on the ticket branch.
+- Blocker: None for WP-C5; WP-C9 is next in the approved sequence.
 
 ## State history
 
@@ -19,6 +19,7 @@
 | `implementing` | `implemented` | `2026-10-17T15:29:55Z` | Approved shared classifier and reports are complete; 212/212 fits passed in each of five training-only profiles, focused tests passed 19/19, and configured verification passed (CTest 5/5, pytest 25/25). |
 | `implemented` | `reviewing` | `2026-10-17T15:31:22Z` | Implementation commit `b501822865cd0652ed1f9d66809a658cbfbd94ae` is under three isolated review axes; the frozen base-to-HEAD snapshot hash is recorded in the review record. |
 | `reviewing` | `review-approved` | `2026-10-17T15:36:05Z` | Round 1's isolated spec, standards, and verification axes found no issues; verification passed CTest 5/5 and pytest 25/25 on reviewed HEAD `b501822865cd0652ed1f9d66809a658cbfbd94ae`. |
+| `review-approved` | `finished` | `2026-10-17T15:36:58Z` | Review-approved ticket record committed as `bf2b96f1db1178c78f78928ee898b446270fb0f3`; no learning or gate candidate was captured. |
 
 ## Claim
 
@@ -131,5 +132,5 @@ None.
 - Learning capture: None; no new repository-specific learning met the capture bar.
 - Remaining: No WP-C5 blockers. Continue with WP-C9 on the cleaned IBIT baseline; do not read Oct 15–16 until WP-C7.
 - Residual risk: The approved policy is input cleaning, not a guarantee of lower error. Combined refits modestly improve share-above-cap/RMS while the maximum ratio is slightly worse; vega-weighted loss is WP-C9.
-- Review-approval record commit: pending.
+- Review-approval record commit: `bf2b96f1db1178c78f78928ee898b446270fb0f3`.
 - GitHub Issue: none (local tracker).
