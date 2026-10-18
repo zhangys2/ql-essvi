@@ -54,3 +54,13 @@ def test_every_contract_schema_has_a_valid_example():
         example=ROOT/'schemas'/f'{name}.example.csv'
         result=subprocess.run([sys.executable,str(ROOT/'python/validate_schema.py'),kind,str(example)],capture_output=True,text=True)
         assert result.returncode==0, f'{example.name}: {result.stderr}'
+
+def test_fitted_schema_rejects_non_numeric_fields(tmp_path):
+    fitted=tmp_path/'fitted.csv'
+    fitted.write_text(
+        'quote_id,time_to_expiry,strike,log_moneyness,fitted_total_variance,fitted_iv,status\n'
+        'q000001,not-a-number,95,-0.0533036180111567,0.021800652117907,0.20967269972805,ok\n'
+    )
+    result=subprocess.run([sys.executable,str(ROOT/'python/validate_schema.py'),'fitted',str(fitted)],capture_output=True,text=True)
+    assert result.returncode != 0
+    assert 'time_to_expiry is not numeric' in result.stderr

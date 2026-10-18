@@ -56,42 +56,84 @@ def require_precision(value, field, row, digits=12):
 def validate(kind, rows):
     for i, row in enumerate(rows, 2):
         if kind == "normalized":
-                    try:
-                        effective = dt.date.fromisoformat(row["effective_date"])
-                        expiry = dt.date.fromisoformat(row["expiry_date"])
-                    except ValueError as exc:
-                        fail(f"row {i}: invalid ISO date: {exc}")
-                    included = boolean(row["included"], "included", i)
-                    expired_exclusion = (
-                        not included
-                        and row["filter_reason"] == "expired_or_same_day"
-                        and expiry <= effective
-                    )
-                    if expiry <= effective and not expired_exclusion:
-                        fail(f"row {i}: expiry_date must be after effective_date")
-                    if expired_exclusion:
-                        if row["time_to_expiry"] != "":
-                            fail(f"row {i}: expired quote time_to_expiry must be empty")
-                    else:
-                        t = number(row["time_to_expiry"], "time_to_expiry", i)
-                        if t <= 0:
-                            fail(f"row {i}: time_to_expiry must be positive")
-                    for field in ("forward", "discount_factor", "strike"):
-                        if number(row[field], field, i) <= 0:
-                            fail(f"row {i}: {field} must be positive")
-                    if row["option_type"] not in {"C", "P"}:
-                        fail(f"row {i}: option_type must be C/P")
-                    if "weight" in row and not included and row["weight"] != "":
-                        fail(f"row {i}: excluded quote weight must be empty")
-                    fields = ("bid_iv", "ask_iv", "mid_iv")
-                    if "weight" in row:
-                        fields += ("weight",)
-                    for field in fields:
-                        number(row[field], field, i, allow_empty=not included)
-                    if included and row["filter_reason"]:
-                        fail(f"row {i}: included quote cannot have filter_reason")
-                    if not included and not row["filter_reason"]:
-                        fail(f"row {i}: excluded quote needs filter_reason")
+            try:
+                effective = dt.date.fromisoformat(row["effective_date"])
+                expiry = dt.date.fromisoformat(row["expiry_date"])
+            except ValueError as exc:
+                fail(f"row {i}: invalid ISO date: {exc}")
+            included = boolean(row["included"], "included", i)
+            expired_exclusion = (
+                not included
+                and row["filter_reason"] == "expired_or_same_day"
+                and expiry <= effective
+            )
+            if expiry <= effective and not expired_exclusion:
+                fail(f"row {i}: expiry_date must be after effective_date")
+            if expired_exclusion:
+                if row["time_to_expiry"] != "":
+                    fail(f"row {i}: expired quote time_to_expiry must be empty")
+            else:
+                t = number(row["time_to_expiry"], "time_to_expiry", i)
+                if t <= 0:
+                    fail(f"row {i}: time_to_expiry must be positive")
+            for field in ("forward", "discount_factor", "strike"):
+                if number(row[field], field, i) <= 0:
+                    fail(f"row {i}: {field} must be positive")
+            if row["option_type"] not in {"C", "P"}:
+                fail(f"row {i}: option_type must be C/P")
+            if "weight" in row and not included and row["weight"] != "":
+                fail(f"row {i}: excluded quote weight must be empty")
+            fields = ("bid_iv", "ask_iv", "mid_iv")
+            if "weight" in row:
+                fields += ("weight",)
+            for field in fields:
+                number(row[field], field, i, allow_empty=not included)
+            if included and row["filter_reason"]:
+                fail(f"row {i}: included quote cannot have filter_reason")
+            if not included and not row["filter_reason"]:
+                fail(f"row {i}: excluded quote needs filter_reason")
+        elif kind == "fitted":
+            status = row["status"]
+            if status not in {"ok", "excluded", "not_fitted", "error"}:
+                fail(f"row {i}: unsupported fitted status {status!r}")
+            allow_empty = status != "ok"
+            for field in ("time_to_expiry", "strike", "log_moneyness"):
+                number(row[field], field, i, allow_empty=allow_empty)
+                if not allow_empty:
+                    require_precision(row[field], field, i)
+            for field in ("fitted_total_variance", "fitted_iv"):
+                number(row[field], field, i, allow_empty=allow_empty)
+                if not allow_empty:
+                    require_precision(row[field], field, i)
+        elif kind == "grid":
+            for field in ("time_to_expiry", "forward", "discount_factor", "log_moneyness", "strike", "fitted_total_variance", "fitted_iv"):
+                number(row[field], field, i)
+                if field != "log_moneyness":
+                    require_precision(row[field], field, i)
+            boolean(row["is_tail"], "is_tail", i)
+        elif kind == "parameters":
+            for field in ("time_to_expiry", "theta", "psi", "phi"):
+                number(row[field], field, i)
+                require_precision(row[field], field, i)
+            rho = number(row["rho"], "rho", i)
+            if not -1 < rho < 1:
+                fail(f"row {i}: rho must be strictly between -1 and 1")
+            boolean(row["butterfly_safe"], "butterfly_safe", i)
+            boolean(row["calendar_safe"], "calendar_safe", i)
+        elif kind == "diagnostics":
+            if not row["model"]:
+                fail(f"row {i}: model is empty")
+            boolean(row["converged"], "converged", i)
+            number(row["objective"], "objective", i)
+            if int(number(row["iterations"], "iterations", i)) < 0:
+                fail(f"row {i}: iterations must be nonnegative")
+            if number(row["runtime_seconds"], "runtime_seconds", i) < 0:
+                fail(f"row {i}: runtime_seconds must be nonnegative")
+        elif kind == "cvi_parameters":
+            for field in ("time_to_expiry", "atm_total_variance", "observed_min_log_moneyness", "observed_max_log_moneyness"):
+                number(row[field], field, i)
+            if int(number(row["grid_points"], "grid_points", i)) <= 0 or int(number(row["fit_rows"], "fit_rows", i)) <= 0:
+                fail(f"row {i}: grid_points and fit_rows must be positive")
 
 
 def main():
