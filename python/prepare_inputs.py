@@ -3,6 +3,8 @@
 import argparse, csv, datetime as dt, math
 from collections import defaultdict
 
+import vega_weights
+
 def parse_date(value):
     for fmt in ('%Y-%m-%d', '%m-%d-%Y', '%m/%d/%Y'):
         try: return dt.datetime.strptime(value.strip(), fmt).date()
@@ -66,7 +68,8 @@ def main():
         if included:
             call=r['Option Type'].upper().startswith('C'); biv=implied(bid,fwd,strike,t,df,call); aiv=implied(ask,fwd,strike,t,df,call)
             if biv is None or aiv is None: included=False; reason='iv_inversion_failed'
-        out.append({'quote_id':'q'+r['_n'].zfill(6),'effective_date':ed,'expiry_date':xd,'time_to_expiry':f'{t:.12g}','forward':f'{fwd:.12g}','discount_factor':f'{df:.12g}','strike':f'{strike:.12g}' if math.isfinite(strike) else '','option_type':r['Option Type'].upper()[0] if r['Option Type'] else '','bid_iv':f'{biv:.12g}' if biv is not None else '','ask_iv':f'{aiv:.12g}' if aiv is not None else '','mid_iv':f'{(biv+aiv)/2:.12g}' if biv is not None and aiv is not None else '','included':'true' if included else 'false','filter_reason':reason})
+        out.append({'quote_id':'q'+r['_n'].zfill(6),'effective_date':ed,'expiry_date':xd,'time_to_expiry':f'{t:.12g}','forward':f'{fwd:.12g}','discount_factor':f'{df:.12g}','strike':f'{strike:.12g}' if math.isfinite(strike) else '','option_type':r['Option Type'].upper()[0] if r['Option Type'] else '','bid_iv':f'{biv:.12g}' if biv is not None else '','ask_iv':f'{aiv:.12g}' if aiv is not None else '','mid_iv':f'{(biv+aiv)/2:.12g}' if biv is not None and aiv is not None else '','included':'true' if included else 'false','filter_reason':reason,'weight':''})
+    vega_weights.normalize_quote_dict_weights(out)
     fields=list(out[0]);
     with open(args.output,'w',newline='') as f: w=csv.DictWriter(f,fieldnames=fields); w.writeheader(); w.writerows(out)
 if __name__=='__main__': main()

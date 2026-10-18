@@ -2,9 +2,9 @@
 """Prepare benchmark-only IBIT/SPY snapshot replay inputs and IV move data.
 
 Prices are inverted with European Black-Scholes as a calibration-path stand-in,
-not as NBBO or American-option pricing estimates. Same-session expiry dates use
-a fixed one-day date-based year fraction so expiry identity stays stable across
-intraday replay snapshots.
+not as NBBO or American-option pricing estimates. Expiry year fractions use
+calendar days from the New York session date; same-day and expired contracts are
+excluded.
 """
 
 import argparse
@@ -17,13 +17,23 @@ import statistics
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
-from convert_ibit_snapshots import HEADER, expiry_date, finite_number, quote_row, snapshot_time
+from convert_ibit_snapshots import (
+    CLEANING_RULES,
+    HEADER,
+    date_based_year_fraction,
+    add_cleaning_exclusions,
+    empty_cleaning_counts,
+    expiry_date,
+    finite_number,
+    quote_row,
+    snapshot_time,
+    trading_session_date,
+    vega_weights,
+)
 
 
 CADENCE_MS = 5 * 60 * 1000
-NEW_YORK = ZoneInfo("America/New_York")
 METRICS = ("level", "tilt", "noise")
 MANIFEST_HEADER = [
     "asset",
@@ -39,6 +49,8 @@ MANIFEST_HEADER = [
     "excluded_locked",
     "excluded_crossed",
     "excluded_other",
+    *(f"excluded_cleaning_{rule}" for rule in CLEANING_RULES),
+    "excluded_cleaning_combined",
     "source_file",
 ]
 
@@ -63,6 +75,7 @@ class PreparedSnapshot:
     excluded_locked: int
     excluded_crossed: int
     excluded_other: int
+    cleaning_exclusions: dict[str, int]
     source_file: str = ""
     quote_file: str = ""
     mode: str = ""
@@ -80,6 +93,10 @@ class PreparedSnapshot:
     @property
     def status(self):
         return "usable" if self.quotes else "unusable"
+
+    @property
+    def excluded_cleaning_combined(self):
+        return self.cleaning_exclusions["combined"]
 
 
 @dataclass(frozen=True)
@@ -125,15 +142,10 @@ def _spot_reference(snapshot):
     return spot if spot is not None and spot > 0.0 else None
 
 
-def _year_fraction(expiry, session_date):
-    days = (expiry - session_date).days
-    return max(days, 1) / 365.0
-
-
-def prepare_snapshot(snapshot, asset, source_file=""):
-    """Convert one raw snapshot, strictly excluding locked and crossed quotes."""
+def prepare_snapshot(snapshot, asset, source_file="", *, cleaning_rules=CLEANING_RULES):
+    """Convert one snapshot, applying the selected cleaning rules after IV checks."""
     timestamp = snapshot_time(snapshot)
-    session_day = timestamp.astimezone(NEW_YORK).date()
+    session_day = trading_session_date(timestamp)
     spot = _spot_reference(snapshot)
     contracts = snapshot.get("contracts")
     if not isinstance(contracts, list):
@@ -141,6 +153,7 @@ def prepare_snapshot(snapshot, asset, source_file=""):
 
     quotes = []
     rows = []
+    cleaning_counts = empty_cleaning_counts()
     locked = crossed = other = 0
     for index, contract in enumerate(contracts, start=1):
         if not isinstance(contract, dict):
@@ -165,7 +178,7 @@ def prepare_snapshot(snapshot, asset, source_file=""):
             try:
                 expiry = expiry_date(raw_expiry)
                 expiry_text = expiry.isoformat()
-                time_years = _year_fraction(expiry, session_day)
+                time_years = date_based_year_fraction(expiry, session_day)
             except (TypeError, ValueError):
                 pass
         row, included = quote_row(
@@ -175,8 +188,10 @@ def prepare_snapshot(snapshot, asset, source_file=""):
             expiry_text,
             time_years,
             spot,
+            cleaning_rules=cleaning_rules,
         )
         rows.append(row)
+        add_cleaning_exclusions(cleaning_counts, row[12])
         if not included:
             other += 1
             continue
@@ -200,10 +215,11 @@ def prepare_snapshot(snapshot, asset, source_file=""):
         timestamp=timestamp,
         session_date=session_day.isoformat(),
         quotes=quotes,
-        csv_rows=rows,
+        csv_rows=vega_weights.normalize_snapshot_weights(rows),
         excluded_locked=locked,
         excluded_crossed=crossed,
         excluded_other=other,
+        cleaning_exclusions=cleaning_counts,
         source_file=Path(source_file).name if source_file else "",
     )
 
@@ -482,7 +498,7 @@ def analyze_snapshots(snapshots):
 
 
 def _manifest_row(snapshot):
-    return {
+    row = {
         "asset": snapshot.asset,
         "session_date": snapshot.session_date,
         "timestamp_ms": snapshot.timestamp_ms,
@@ -495,11 +511,19 @@ def _manifest_row(snapshot):
         "excluded_locked": snapshot.excluded_locked,
         "excluded_crossed": snapshot.excluded_crossed,
         "excluded_other": snapshot.excluded_other,
+        "excluded_cleaning_combined": snapshot.excluded_cleaning_combined,
         "source_file": snapshot.source_file,
     }
+    row.update(
+        {
+            f"excluded_cleaning_{rule}": snapshot.cleaning_exclusions[rule]
+            for rule in CLEANING_RULES
+        }
+    )
+    return row
 
 
-def prepare_data(data_root, output_dir):
+def prepare_data(data_root, output_dir, *, cleaning_rules=CLEANING_RULES):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     snapshots = []
@@ -512,7 +536,9 @@ def prepare_data(data_root, output_dir):
                     raw = json.loads(line)
                 except json.JSONDecodeError as error:
                     raise ValueError(f"{path}:{line_number}: invalid JSON: {error}") from error
-                snapshot = prepare_snapshot(raw, asset, str(path))
+                snapshot = prepare_snapshot(
+                    raw, asset, str(path), cleaning_rules=cleaning_rules
+                )
                 snapshot.source_file = f"{path.name}:{line_number}"
                 if snapshot.valid_quotes:
                     snapshot.quote_file = (
@@ -564,12 +590,18 @@ def prepare_data(data_root, output_dir):
                 missing_intervals=snapshot.missing_intervals,
             )
             writer.writerow(row)
+            cleaning_text = " ".join(
+                f"excluded_cleaning_{rule}={snapshot.cleaning_exclusions[rule]}"
+                for rule in CLEANING_RULES
+            )
             print(
                 f"{snapshot.asset} {snapshot.session_date} {row['timestamp']} "
                 f"status={snapshot.status} quotes={snapshot.valid_quotes} "
                 f"excluded_locked={snapshot.excluded_locked} "
                 f"excluded_crossed={snapshot.excluded_crossed} "
                 f"excluded_other={snapshot.excluded_other} "
+                f"{cleaning_text} "
+                f"excluded_cleaning_combined={snapshot.excluded_cleaning_combined} "
                 f"mode={snapshot.mode} reason={snapshot.restart_reason or 'none'} "
                 f"source={snapshot.source_file}"
             )
@@ -582,6 +614,26 @@ def prepare_data(data_root, output_dir):
     report["excluded_locked"] = sum(s.excluded_locked for s in snapshots)
     report["excluded_crossed"] = sum(s.excluded_crossed for s in snapshots)
     report["excluded_other"] = sum(s.excluded_other for s in snapshots)
+    report["excluded_cleaning_combined"] = sum(
+        snapshot.excluded_cleaning_combined for snapshot in snapshots
+    )
+    report["excluded_cleaning_by_rule"] = {
+        rule: sum(snapshot.cleaning_exclusions[rule] for snapshot in snapshots)
+        for rule in CLEANING_RULES
+    }
+    report["cleaning_exclusions_by_snapshot"] = [
+        {
+            "asset": snapshot.asset,
+            "session_date": snapshot.session_date,
+            "timestamp_ms": snapshot.timestamp_ms,
+            "source_file": snapshot.source_file,
+            "by_rule": {
+                rule: snapshot.cleaning_exclusions[rule] for rule in CLEANING_RULES
+            },
+            "combined": snapshot.excluded_cleaning_combined,
+        }
+        for snapshot in snapshots
+    ]
     report_path = output_dir / "move_measurements.json"
     with report_path.open("w", encoding="utf-8") as stream:
         json.dump(report, stream, indent=2, sort_keys=True, allow_nan=False)
