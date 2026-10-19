@@ -65,8 +65,8 @@ def normalize_snapshot_weights(rows):
 
 
 def normalize_quote_dict_weights(rows):
-    """Normalize an option-chain converter's included quote dictionaries."""
-    sensitivities = []
+    """Normalize quote dictionaries to median-one weights per effective date."""
+    sensitivities_by_date = {}
     for row in rows:
         row["weight"] = ""
         if row["included"] != "true":
@@ -78,13 +78,14 @@ def normalize_quote_dict_weights(rows):
             float(row["time_to_expiry"]),
             float(row["discount_factor"]),
         )
-        sensitivities.append((row, sensitivity))
+        sensitivities_by_date.setdefault(row["effective_date"], []).append(
+            (row, sensitivity)
+        )
 
-    if not sensitivities:
-        return rows
-    scale = median([sensitivity for _, sensitivity in sensitivities])
-    for row, sensitivity in sensitivities:
-        row["weight"] = format(sensitivity / scale, ".17g")
+    for sensitivities in sensitivities_by_date.values():
+        scale = median([sensitivity for _, sensitivity in sensitivities])
+        for row, sensitivity in sensitivities:
+            row["weight"] = format(sensitivity / scale, ".17g")
     return rows
 
 

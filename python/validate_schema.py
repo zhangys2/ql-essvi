@@ -61,17 +61,26 @@ def validate(kind, rows):
                 expiry = dt.date.fromisoformat(row["expiry_date"])
             except ValueError as exc:
                 fail(f"row {i}: invalid ISO date: {exc}")
-            if expiry <= effective:
+            included = boolean(row["included"], "included", i)
+            expired_exclusion = (
+                not included
+                and row["filter_reason"] == "expired_or_same_day"
+                and expiry <= effective
+            )
+            if expiry <= effective and not expired_exclusion:
                 fail(f"row {i}: expiry_date must be after effective_date")
-            t = number(row["time_to_expiry"], "time_to_expiry", i)
-            if t <= 0:
-                fail(f"row {i}: time_to_expiry must be positive")
+            if expired_exclusion:
+                if row["time_to_expiry"] != "":
+                    fail(f"row {i}: expired quote time_to_expiry must be empty")
+            else:
+                t = number(row["time_to_expiry"], "time_to_expiry", i)
+                if t <= 0:
+                    fail(f"row {i}: time_to_expiry must be positive")
             for field in ("forward", "discount_factor", "strike"):
                 if number(row[field], field, i) <= 0:
                     fail(f"row {i}: {field} must be positive")
             if row["option_type"] not in {"C", "P"}:
                 fail(f"row {i}: option_type must be C/P")
-            included = boolean(row["included"], "included", i)
             if "weight" in row and not included and row["weight"] != "":
                 fail(f"row {i}: excluded quote weight must be empty")
             fields = ("bid_iv", "ask_iv", "mid_iv")

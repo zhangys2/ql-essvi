@@ -1,11 +1,22 @@
 #pragma once
 #include "essvi_surface.hpp"
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
 
 namespace essvi {
+namespace detail {
+inline bool passesAdaptiveWeightedQuoteCap(double candidate_ratio,
+                                           double cold_ratio, double weight,
+                                           double cap) {
+  return std::isfinite(candidate_ratio) && std::isfinite(cold_ratio) &&
+         candidate_ratio <= std::max(cap, cold_ratio + 0.01 * weight);
+}
+}  // namespace detail
+
 struct Quote {
   std::string id;
   double expiry, forward, discount_factor, strike, bid_iv, ask_iv, mid_iv;
