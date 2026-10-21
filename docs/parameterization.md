@@ -43,7 +43,7 @@ the Martini--Mingone infimum (D21), independently checked by the dense-grid scan
 |---|---|---|
 | `theta > 0`, `psi > 0`, `abs(rho) < 1` | per-slice domain | parameter CSV and diagnostics |
 | MM butterfly N&S infimum (D21) | hard Roger-Lee plus `psi^2 <= f_MM`, per slice | dense-grid butterfly scan |
-| HM/Corbetta calendar sufficient conditions | hard adjacent-slice inequalities with strict epsilon margin (sequential Mingone interval) | dense-grid calendar scan |
+| HM/Corbetta calendar sufficient conditions | hard adjacent-slice inequalities with strict epsilon margin; CM1 adds a 0.5% proportional psi-ratio headroom floor, retrying the original floor only if it leaves no feasible set | dense-grid calendar scan checks the original strict conditions |
 | solver failure | no unconstrained fallback; `converged=false` and error are emitted | diagnostics CSV |
 | tail safety | dense grid extends to `k in [-0.5,0.5]`; tail points are retained | all grid points included in arbitrage checks |
 

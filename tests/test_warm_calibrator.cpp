@@ -566,7 +566,14 @@ void localSolverTraversesFallbackRhoRangeForNormalTilt() {
 }
 
 void localWarmRefitHonorsBudgetAndQuality() {
-  const auto previous_quotes = essvi::bench::realisticChain(3, 100, 1);
+  auto previous_quotes = essvi::bench::realisticChain(3, 100, 1);
+  // Wider symmetric bands keep the quality cap achievable after a local repair.
+  for (auto& quote : previous_quotes) {
+    const double k = std::log(quote.strike / quote.forward);
+    const double half_spread = 0.006 * (1.0 + 2.0 * std::abs(k));
+    quote.bid_iv = std::max(0.001, quote.mid_iv - half_spread);
+    quote.ask_iv = quote.mid_iv + half_spread;
+  }
   const auto previous = essvi::calibrate(previous_quotes);
   assert(previous.converged);
 
@@ -582,7 +589,7 @@ void localWarmRefitHonorsBudgetAndQuality() {
     const double k = std::log(quote.strike / quote.forward);
     const double mid = std::sqrt(
         essvi::sliceTotalVariance(target_slice, k) / quote.expiry);
-    const double half_spread = 0.003 * (1.0 + 2.0 * std::abs(k));
+    const double half_spread = 0.006 * (1.0 + 2.0 * std::abs(k));
     quote.bid_iv = std::max(0.001, mid - half_spread);
     quote.ask_iv = mid + half_spread;
     quote.mid_iv = mid;
@@ -590,11 +597,40 @@ void localWarmRefitHonorsBudgetAndQuality() {
 
   essvi::WarmOptions options;
   options.quote_tol = 0.0;
-  options.quote_cap = 0.6;  // Calendar headroom pushes the unchanged slice above 0.5.
+  options.quote_cap = 0.5;
   const auto warm = essvi::calibrateWarm(
       current_quotes, &previous, previous_quotes, options);
   const auto cold = essvi::calibrate(current_quotes);
   assert(warm.converged && cold.converged);
+  double maximum_weighted_excess_ratio = 0.0;
+  for (const auto& quote : current_quotes) {
+    if (!quote.included) continue;
+    const auto slice = std::find_if(
+        warm.surface.slices.begin(), warm.surface.slices.end(),
+        [&](const essvi::Slice& candidate) {
+          return candidate.expiry == quote.expiry;
+        });
+    assert(slice != warm.surface.slices.end());
+    const double variance = essvi::sliceTotalVariance(
+        *slice, std::log(quote.strike / quote.forward));
+    const double bid_variance = quote.expiry * quote.bid_iv * quote.bid_iv;
+    const double ask_variance = quote.expiry * quote.ask_iv * quote.ask_iv;
+    const double excess = std::max(
+        0.0, std::max(bid_variance - variance, variance - ask_variance));
+    const double width = std::max(ask_variance - bid_variance, 1e-6);
+    maximum_weighted_excess_ratio =
+        std::max(maximum_weighted_excess_ratio, quote.weight * excess / width);
+  }
+  assert(maximum_weighted_excess_ratio <= options.quote_cap + 1e-12);
+  for (std::size_t i = 1; i < warm.surface.slices.size(); ++i) {
+    const auto& shorter = warm.surface.slices[i - 1];
+    const auto& longer = warm.surface.slices[i];
+    const double wing_ratio =
+        std::max((1.0 + shorter.rho) / (1.0 + longer.rho),
+                 (1.0 - shorter.rho) / (1.0 - longer.rho));
+    assert(longer.psi >=
+           shorter.psi * wing_ratio * 1.005 * (1.0 - 1e-9));
+  }
   assert(warm.slices_refit == 1);
   assert(warm.slices_reused == 2);
   assert(warm.local_solver_slices == 1);
