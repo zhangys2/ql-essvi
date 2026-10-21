@@ -410,7 +410,33 @@ void rejectedInfeasiblePriorIsCountedAndRefit() {
   assert(warm.fallback_reason_counts.bound_check_failed > 0);
 }
 
-void failedCalendarRepairIsCounted() {
+void strictOnlyPriorSliceCanBeReused() {
+  const auto previous_quotes = essvi::bench::realisticChain(2, 100, 4);
+  auto previous = essvi::calibrate(previous_quotes);
+  assert(previous.converged);
+
+  auto& shorter = previous.surface.slices[0];
+  auto& longer = previous.surface.slices[1];
+  const double wing_ratio =
+      std::max((1.0 + shorter.rho) / (1.0 + longer.rho),
+               (1.0 - shorter.rho) / (1.0 - longer.rho));
+  const double strict_floor = shorter.psi * wing_ratio + 1e-8;
+  const double headroom_floor = shorter.psi * wing_ratio * 1.005 + 1e-8;
+  assert(longer.psi > headroom_floor);
+  longer.psi = 0.5 * (strict_floor + headroom_floor);
+  assert(essvi::validate(previous.surface).empty());
+
+  essvi::WarmOptions options;
+  options.quote_tol = 0.0;
+  options.quote_cap = 100.0;
+  const auto warm = essvi::calibrateWarm(
+      previous_quotes, &previous, previous_quotes, options);
+  assert(warm.converged);
+  assert(warm.slices_reused == previous.surface.slices.size());
+  assert(warm.surface.slices[1].psi == longer.psi);
+}
+
+void failedCalendarRepairRetainsStrictSafeCandidate() {
   const auto previous_quotes = essvi::bench::realisticChain(3, 100, 1);
   const auto previous = essvi::calibrate(previous_quotes);
   assert(previous.converged);
@@ -418,9 +444,17 @@ void failedCalendarRepairIsCounted() {
   auto current_quotes = previous_quotes;
   const auto& old_front = previous.surface.slices[0];
   const auto& old_next = previous.surface.slices[1];
-  essvi::Slice new_front{old_front.expiry, old_next.theta + 0.001,
-                         old_front.psi, old_front.rho};
-  assert(essvi::validate(essvi::Surface{{new_front}}).empty());
+  const double wing_ratio =
+      std::max((1.0 + old_front.rho) / (1.0 + old_next.rho),
+               (1.0 - old_front.rho) / (1.0 - old_next.rho));
+  const double strict_limit = old_next.psi / wing_ratio;
+  const double headroom_limit = old_next.psi / (wing_ratio * 1.005);
+  const essvi::Slice new_front{old_front.expiry, old_front.theta,
+                               0.5 * (strict_limit + headroom_limit),
+                               old_front.rho};
+  auto target_surface = previous.surface;
+  target_surface.slices.front() = new_front;
+  assert(essvi::validate(target_surface).empty());
   for (auto& quote : current_quotes) {
     if (quote.expiry == old_front.expiry) {
       const double k = std::log(quote.strike / quote.forward);
@@ -439,11 +473,14 @@ void failedCalendarRepairIsCounted() {
   options.quote_cap = 1.0;
   const auto warm = essvi::calibrateWarm(
       current_quotes, &previous, previous_quotes, options);
-  assert(!warm.converged);
-  assert(warm.error == "no ATM quote");
+  assert(warm.converged);
+  assert(essvi::validate(warm.surface).empty());
   assert(warm.fallback_reason_counts.calendar_repair_failed == 1);
+  assert(warm.surface.slices.size() == previous.surface.slices.size());
+  assert(warm.surface.slices[1].theta == old_next.theta);
+  assert(warm.surface.slices[1].psi == old_next.psi);
+  assert(warm.surface.slices[1].rho == old_next.rho);
 }
-
 void localSolverUsesThreeBoundedStarts() {
   const auto previous_quotes = essvi::bench::realisticChain(1, 100, 7);
   const auto previous = essvi::calibrate(previous_quotes);
@@ -622,15 +659,14 @@ void localWarmRefitHonorsBudgetAndQuality() {
         std::max(maximum_weighted_excess_ratio, quote.weight * excess / width);
   }
   assert(maximum_weighted_excess_ratio <= options.quote_cap + 1e-12);
-  for (std::size_t i = 1; i < warm.surface.slices.size(); ++i) {
-    const auto& shorter = warm.surface.slices[i - 1];
-    const auto& longer = warm.surface.slices[i];
-    const double wing_ratio =
-        std::max((1.0 + shorter.rho) / (1.0 + longer.rho),
-                 (1.0 - shorter.rho) / (1.0 - longer.rho));
-    assert(longer.psi >=
-           shorter.psi * wing_ratio * 1.005 * (1.0 - 1e-9));
-  }
+  assert(warm.surface.slices.size() >= 2);
+  const auto& shorter = warm.surface.slices[warm.surface.slices.size() - 2];
+  const auto& longer = warm.surface.slices.back();
+  const double wing_ratio =
+      std::max((1.0 + shorter.rho) / (1.0 + longer.rho),
+               (1.0 - shorter.rho) / (1.0 - longer.rho));
+  assert(longer.psi >=
+         shorter.psi * wing_ratio * 1.005 * (1.0 - 1e-9));
   assert(warm.slices_refit == 1);
   assert(warm.slices_reused == 2);
   assert(warm.local_solver_slices == 1);
@@ -835,7 +871,8 @@ int main() {
   sequentialCalendarRepairRetriesRejectedCandidates();
   failedJacobiPrefitFallsBackWithoutRetry();
   rejectedInfeasiblePriorIsCountedAndRefit();
-  failedCalendarRepairIsCounted();
+  strictOnlyPriorSliceCanBeReused();
+  failedCalendarRepairRetainsStrictSafeCandidate();
   localWarmRefitHonorsBudgetAndQuality();
   localSolverUsesThreeBoundedStarts();
   localSolverKeepsNearOptimalCapPassingCandidate();

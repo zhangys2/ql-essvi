@@ -913,17 +913,28 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
                            const Slice* restricted_center = nullptr,
                            double quote_cap = INFINITY,
                            double* used_calendar_headroom = nullptr) {
-  if (used_calendar_headroom)
-    *used_calendar_headroom = kCalendarHeadroom;
-  auto out = fitSliceAtHeadroom(qs, t, prev, rho_workers, warm_start,
-                                restricted_center, quote_cap, kCalendarHeadroom);
-  // Near-flat total variance can leave no room for the headroom.
-  if (!prev || out.converged ||
-      out.error.rfind("empty feasible set", 0) != 0)
-    return out;
   if (used_calendar_headroom) *used_calendar_headroom = 0.0;
-  return fitSliceAtHeadroom(qs, t, prev, rho_workers, warm_start,
-                            restricted_center, quote_cap, 0.0);
+  auto strict = fitSliceAtHeadroom(qs, t, prev, rho_workers, warm_start,
+                                   restricted_center, quote_cap, 0.0);
+  if (!prev || !strict.converged) return strict;
+
+  const Slice& strict_candidate = strict.surface.slices.front();
+  if (calendarSafe(strict_candidate,
+                   calendarBounds(prev, t, strict_candidate.rho))) {
+    if (used_calendar_headroom)
+      *used_calendar_headroom = kCalendarHeadroom;
+    return strict;
+  }
+
+  auto with_headroom = fitSliceAtHeadroom(
+      qs, t, prev, rho_workers, warm_start, restricted_center, quote_cap,
+      kCalendarHeadroom);
+  if (with_headroom.converged) {
+    if (used_calendar_headroom)
+      *used_calendar_headroom = kCalendarHeadroom;
+    return with_headroom;
+  }
+  return strict;
 }
 
 bool hasInvalidIncludedWeight(const std::vector<Quote>& quotes) {
@@ -1180,7 +1191,7 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
         if (quotes_unchanged && reuse_age < 12) {
           BoundMemo safe_bound(false);
           const auto calendar = calendarBounds(plan.old_previous, expiry,
-                                               plan.warm_start->rho);
+                                               plan.warm_start->rho, 0.0);
           Slice reused = *plan.warm_start;
           reused.expiry = expiry;
           if (pairSafe(reused, safe_bound, calendar)) {
@@ -1189,6 +1200,11 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
                 passesQuoteCap(reused, plan.prepared, options.quote_cap)) {
               plan.candidate = reused;
               plan.candidate_loss = loss;
+              plan.candidate_headroom =
+                  calendarSafe(reused, calendarBounds(
+                                           plan.old_previous, expiry, reused.rho))
+                      ? kCalendarHeadroom
+                      : 0.0;
               plan.have_candidate = true;
               plan.candidate_reused = true;
               plan.candidate_from_warm = true;
@@ -1201,7 +1217,7 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
           Slice prior = *plan.warm_start;
           prior.expiry = expiry;
           const auto calendar = calendarBounds(plan.old_previous, expiry,
-                                               prior.rho);
+                                               prior.rho, 0.0);
           const bool prior_bound_safe = boundSafe(prior, safe_bound);
           if (!prior_bound_safe) {
             ++out.fallback_reason_counts.bound_check_failed;
@@ -1212,6 +1228,12 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
               plan.have_candidate = std::isfinite(plan.candidate_loss);
               plan.candidate_reused = plan.have_candidate;
               plan.candidate_from_warm = plan.have_candidate;
+              if (plan.have_candidate)
+                plan.candidate_headroom =
+                    calendarSafe(prior, calendarBounds(plan.old_previous,
+                                                       expiry, prior.rho))
+                        ? kCalendarHeadroom
+                        : 0.0;
             } else {
               ++out.fallback_reason_counts.loss_above_gate;
             }
@@ -1366,7 +1388,8 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
           const bool calendar_repair_needed =
               have_candidate &&
               !calendarSafe(candidate,
-                            calendarBounds(previous_slice, expiry, candidate.rho));
+                            calendarBounds(previous_slice, expiry, candidate.rho,
+                                           candidate_headroom));
 
           // Repair only candidates made infeasible by the updated predecessor.
           if (calendar_repair_needed && warm_start) {
@@ -1387,12 +1410,15 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
                 local.fallback_reason_counts.bound_check_failed;
             bound_calls += local_bound_calls;
             out.iterations += local.iterations;
-            if (local.converged &&
-                calendarSafe(local.surface.slices.front(),
+            const Slice* repaired =
+                local.converged ? &local.surface.slices.front() : nullptr;
+            const bool local_safe =
+                repaired &&
+                calendarSafe(*repaired,
                              calendarBounds(previous_slice, expiry,
-                                            local.surface.slices.front().rho,
-                                            local_headroom))) {
-              candidate = local.surface.slices.front();
+                                            repaired->rho, local_headroom));
+            if (local_safe && local_headroom == kCalendarHeadroom) {
+              candidate = *repaired;
               candidate_loss = local.objective;
               candidate_headroom = local_headroom;
               have_candidate = true;
@@ -1400,7 +1426,21 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
               candidate_from_warm = true;
             } else {
               ++out.fallback_reason_counts.calendar_repair_failed;
-              have_candidate = false;
+              if (have_candidate &&
+                  calendarSafe(candidate,
+                               calendarBounds(previous_slice, expiry,
+                                              candidate.rho, 0.0))) {
+                candidate_headroom = 0.0;
+              } else if (local_safe) {
+                candidate = *repaired;
+                candidate_loss = local.objective;
+                candidate_headroom = local_headroom;
+                have_candidate = true;
+                candidate_reused = false;
+                candidate_from_warm = true;
+              } else {
+                have_candidate = false;
+              }
             }
           }
 

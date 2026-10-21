@@ -71,8 +71,6 @@ void matchesColdBaselineAndIsDeterministic() {
   assert(baseline.good());
   std::string row;
   assert(std::getline(baseline, row));  // Header.
-  double previous_expected_psi = 0.0;
-  double previous_expected_rho = 0.0;
   for (std::size_t i = 0; i < result.surface.slices.size(); ++i) {
     assert(std::getline(baseline, row));
     const auto& slice = result.surface.slices[i];
@@ -81,28 +79,12 @@ void matchesColdBaselineAndIsDeterministic() {
     const double expected_psi = number(row, 2);
     const double expected_rho = number(row, 3);
     assert(slice.expiry == expected_expiry);
-    bool headroom_inactive = true;
-    if (i != 0) {
-      const double wing_ratio =
-          std::max((1.0 + previous_expected_rho) / (1.0 + expected_rho),
-                   (1.0 - previous_expected_rho) / (1.0 - expected_rho));
-      const double strict_floor =
-          previous_expected_psi * wing_ratio + 1e-8;
-      const double headroom_floor =
-          previous_expected_psi * wing_ratio * 1.005 + 1e-8;
-      // Compare baseline parameters only when CM1 leaves the interval unchanged.
-      headroom_inactive = headroom_floor <= strict_floor;
-    }
-    if (headroom_inactive) {
-      assert(std::abs(slice.theta - expected_theta) <=
-             1e-9 * std::abs(expected_theta));
-      assert(std::abs(slice.psi - expected_psi) <=
-             1e-9 * std::abs(expected_psi));
-      assert(std::abs(slice.rho - expected_rho) <=
-             1e-9 * std::abs(expected_rho));
-    }
-    previous_expected_psi = expected_psi;
-    previous_expected_rho = expected_rho;
+    assert(std::abs(slice.theta - expected_theta) <=
+           1e-9 * std::abs(expected_theta));
+    assert(std::abs(slice.psi - expected_psi) <=
+           1e-9 * std::abs(expected_psi));
+    assert(std::abs(slice.rho - expected_rho) <=
+           1e-9 * std::abs(expected_rho));
   }
   assert(!std::getline(baseline, row));
 }
