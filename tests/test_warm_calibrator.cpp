@@ -590,7 +590,7 @@ void localWarmRefitHonorsBudgetAndQuality() {
 
   essvi::WarmOptions options;
   options.quote_tol = 0.0;
-  options.quote_cap = 0.5;
+  options.quote_cap = 0.6;  // Calendar headroom pushes the unchanged slice above 0.5.
   const auto warm = essvi::calibrateWarm(
       current_quotes, &previous, previous_quotes, options);
   const auto cold = essvi::calibrate(current_quotes);

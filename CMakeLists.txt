@@ -66,6 +66,14 @@ if(BUILD_TESTING)
   target_link_libraries(essvi_warm_calibrator_tests PRIVATE essvi_core)
   add_test(NAME essvi_warm_calibrator_tests COMMAND essvi_warm_calibrator_tests)
 
+  add_executable(essvi_calendar_headroom_tests tests/test_calendar_headroom.cpp)
+  target_include_directories(essvi_calendar_headroom_tests PRIVATE bench)
+  target_compile_definitions(essvi_calendar_headroom_tests PRIVATE
+    ESSVI_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+  target_link_libraries(essvi_calendar_headroom_tests PRIVATE essvi_core)
+  add_test(NAME essvi_calendar_headroom_tests
+    COMMAND essvi_calendar_headroom_tests)
+
   # Opt-in market acceptance probe: long-running and threshold-gated, so it is
   # invoked separately from the default CTest suite.
   add_executable(essvi_warm_scenario_regression

@@ -23,6 +23,7 @@
 namespace essvi {
 namespace {
 constexpr double kEps = 1e-8;
+constexpr double kCalendarHeadroom = 0.005;
 constexpr std::size_t kMaxCalibrationThreads = ESSVI_MAX_CALIBRATION_THREADS;
 constexpr std::size_t kFullColdSearchBudget = 8;
 constexpr std::size_t kDegradedAgeBeforeForcedCold = 3;
@@ -383,7 +384,8 @@ struct CalendarBounds {
   double previous_psi_over_theta{};
 };
 
-CalendarBounds calendarBounds(const Slice* previous, double expiry, double rho) {
+CalendarBounds calendarBounds(const Slice* previous, double expiry, double rho,
+                              double headroom = kCalendarHeadroom) {
   if (!previous) return {};
   const double ratio =
       std::max((1 + previous->rho) / (1 + rho),
@@ -393,7 +395,7 @@ CalendarBounds calendarBounds(const Slice* previous, double expiry, double rho) 
           previous->psi > kEps,
           previous->theta + kEps,
           previous->psi + kEps,
-          previous->psi * ratio + kEps,
+          previous->psi * ratio * (1.0 + headroom) + kEps,
           previous->psi / previous->theta};
 }
 
@@ -476,11 +478,11 @@ struct RhoCandidate {
   int evaluations{};
 };
 
-CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
+CalibrationResult fitSliceAtHeadroom(const std::vector<PreparedQuote>& qs, double t,
                            const Slice* prev, RhoWorkerPool& rho_workers,
-                           const Slice* warm_start = nullptr,
-                           const Slice* restricted_center = nullptr,
-                           double quote_cap = INFINITY) {
+                           const Slice* warm_start,
+                           const Slice* restricted_center,
+                           double quote_cap, double calendar_headroom) {
   CalibrationResult out;
   const auto atm = [&] {
     Atm result = nearestAtm(qs, t);
@@ -529,7 +531,7 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
       RhoCandidate result;
       BoundMemo candidate_bound(true);
       BoundMemo safe_bound(false);
-      const auto calendar = calendarBounds(prev, t, rho);
+      const auto calendar = calendarBounds(prev, t, rho, calendar_headroom);
       const double lo = psiLower(prev, rho);
       const double hi = psiUpper(theta0, rho, candidate_bound);
       if (!(hi > lo)) return result;
@@ -672,7 +674,7 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
     incumbent.expiry = t;
     BoundMemo incumbent_bound(false);
     const auto incumbent_calendar =
-        calendarBounds(prev, t, incumbent.rho);
+        calendarBounds(prev, t, incumbent.rho, calendar_headroom);
     if (pairSafe(incumbent, incumbent_bound, incumbent_calendar)) {
       bestz = bandLoss(incumbent, qs);
       best = incumbent;
@@ -699,7 +701,7 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
       const double rho = std::clamp(warm_start->rho + rho_offsets[start_index],
                                     rho_lower, rho_upper);
       BoundMemo candidate_bound(true);
-      const auto calendar = calendarBounds(prev, t, rho);
+      const auto calendar = calendarBounds(prev, t, rho, calendar_headroom);
       const double psi_min = psiLower(prev, rho);
       const double theta_seed =
           prev ? std::max(atm.theta_star, prev->theta + kEps)
@@ -807,7 +809,7 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
           trial.psi = std::clamp(
               current.psi + alpha * parameter_scale[2] * matrix[2][3],
               trial_psi_min, trial_psi_max);
-          const auto trial_calendar = calendarBounds(prev, t, trial.rho);
+          const auto trial_calendar = calendarBounds(prev, t, trial.rho, calendar_headroom);
           if (!boundSafe(trial, safe_bound)) {
             ++out.fallback_reason_counts.bound_check_failed;
             continue;
@@ -880,7 +882,7 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
   if (!warm_start && bestz < INFINITY) {
     const double tlo = prev ? prev->theta + kEps : kEps;
     BoundMemo safe_bound(false);
-    const auto calendar = calendarBounds(prev, t, best.rho);
+    const auto calendar = calendarBounds(prev, t, best.rho, calendar_headroom);
     for (double multiplier : {0.90, 0.95, 1.00, 1.05, 1.10, 1.20}) {
       Slice slice = best;
       slice.theta = std::clamp(best.theta * multiplier, tlo, 5.0);
@@ -902,6 +904,19 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
   out.converged = out.error.empty();
   return out;
 }
+CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
+                           const Slice* prev, RhoWorkerPool& rho_workers,
+                           const Slice* warm_start = nullptr,
+                           const Slice* restricted_center = nullptr,
+                           double quote_cap = INFINITY) {
+  auto out = fitSliceAtHeadroom(qs, t, prev, rho_workers, warm_start,
+                                restricted_center, quote_cap, kCalendarHeadroom);
+  // Near-flat total variance can leave no room for the headroom.
+  if (out.converged || out.error.rfind("empty feasible set", 0) != 0) return out;
+  return fitSliceAtHeadroom(qs, t, prev, rho_workers, warm_start,
+                            restricted_center, quote_cap, 0.0);
+}
+
 bool hasInvalidIncludedWeight(const std::vector<Quote>& quotes) {
   for (const auto& quote : quotes)
     if (quote.included &&
