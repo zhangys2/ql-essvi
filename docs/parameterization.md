@@ -18,7 +18,7 @@ adjacent Mingone interval. **D20** (2026-09-17; [T11](../.wayfinder/tickets/T11-
 the joint product-of-intervals solver is retired; sequential never calendar-locked on this
 snapshot. D17's bid/ask band objective in total variance is unchanged.
 
-For numerical safety, calibration enforces strict versions of the following conditions:
+Surface validity and independent post-fit checks enforce the strict conditions below. Calibration may prefer the CM1 margin on top of the strict adjacent-slice condition.
 
 - `theta > 0`, `psi > 0`, `abs(rho) < 1`
 - butterfly (Martini--Mingone N&S, **D21**; [T10](../.wayfinder/tickets/T10-mm-butterfly.md)):
@@ -28,7 +28,11 @@ For numerical safety, calibration enforces strict versions of the following cond
   `theta_2 > theta_1`, `psi_2 > psi_1`,
   `psi_2 > psi_1*max((1+rho_1)/(1+rho_2), (1-rho_1)/(1-rho_2))`,
   and `psi_2 < psi_1/theta_1 * theta_2` (Mingone sufficient upper bound; without it this
-  snapshot produced dense-grid calendar violations even when the T01 lower bounds held)
+  snapshot produced dense-grid calendar violations even when the T01 lower bounds held).
+  Calibration fits this strict floor first. If the winner already clears a 0.5% proportional
+  margin on the psi-ratio lower bound, it is kept unchanged; otherwise calibration retries with
+  that margin and retains the strict winner if no headroom-safe fit converges. `validate()` and
+  dense-grid scans enforce the original strict conditions above.
 
 The scorer independently checks the generated surface on a dense grid from `k=-0.5` to `k=0.5`
 at 0.01 increments per expiry. Points outside the observed included quote range are marked
@@ -43,7 +47,7 @@ the Martini--Mingone infimum (D21), independently checked by the dense-grid scan
 |---|---|---|
 | `theta > 0`, `psi > 0`, `abs(rho) < 1` | per-slice domain | parameter CSV and diagnostics |
 | MM butterfly N&S infimum (D21) | hard Roger-Lee plus `psi^2 <= f_MM`, per slice | dense-grid butterfly scan |
-| HM/Corbetta calendar sufficient conditions | hard adjacent-slice inequalities with strict epsilon margin (sequential Mingone interval) | dense-grid calendar scan |
+| HM/Corbetta calendar sufficient conditions | strict-epsilon floor first; keep a strict-fit winner that already clears CM1's 0.5% proportional psi-ratio margin, otherwise retry with that margin and retain the strict winner if no headroom-safe fit converges | `validate()` and dense-grid scan check the original strict conditions |
 | solver failure | no unconstrained fallback; `converged=false` and error are emitted | diagnostics CSV |
 | tail safety | dense grid extends to `k in [-0.5,0.5]`; tail points are retained | all grid points included in arbitrage checks |
 

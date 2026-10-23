@@ -81,8 +81,10 @@ void matchesColdBaselineAndIsDeterministic() {
     assert(slice.expiry == expected_expiry);
     assert(std::abs(slice.theta - expected_theta) <=
            1e-9 * std::abs(expected_theta));
-    assert(std::abs(slice.psi - expected_psi) <= 1e-9 * std::abs(expected_psi));
-    assert(std::abs(slice.rho - expected_rho) <= 1e-9 * std::abs(expected_rho));
+    assert(std::abs(slice.psi - expected_psi) <=
+           1e-9 * std::abs(expected_psi));
+    assert(std::abs(slice.rho - expected_rho) <=
+           1e-9 * std::abs(expected_rho));
   }
   assert(!std::getline(baseline, row));
 }

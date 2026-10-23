@@ -17,14 +17,15 @@ Acceptance targets, with warm scenarios revised by Addendum A:
 | Warm front update, full chain, p99 | <= 3 ms | <= 10 ms | |
 | Warm fast update, full chain, p99 | <= 10 ms | <= 20 ms | fallback rate <= 10% |
 | Single slice, cold | <= 1 ms | <= 5 ms | |
-| Output parameters, cold path, vs baseline | within 1e-9 relative | 1e-6 | |
+| Output parameters, cold path, vs baseline | within 1e-9 relative when the strict-fit winner already meets CM1 headroom; report all headroom-driven changes | 1e-6 relative when the strict-fit winner already meets headroom | |
 | Dense-grid butterfly and calendar violations | 0 | 0 | |
 
 For every warm scenario: zero invalid surfaces and warm failures, summed band loss within 5% of cold, and a clean dense-grid arbitrage scan. Report any missed target rather than eliding it.
 
 ## 2. Non-goals
 
-- No change to the parameterization, the band-loss objective (D17), the Martini-Mingone butterfly bound (D21), the calendar conditions, or the "no unconstrained fallback" rule (D18-D22 stay in force).
+- No change to the parameterization, the band-loss objective (D17), the Martini-Mingone butterfly bound (D21), or the "no unconstrained fallback" rule (D18-D22 stay in force).
+- CM1 amendment: fit under the original strict-epsilon floor first. If that winner already clears a 0.5% proportional psi-ratio margin, keep it unchanged; otherwise retry with the headroom floor and retain the strict winner if no headroom-safe fit converges. `validate()` and the dense-grid scan retain the original strict calendar conditions.
 - No American implied-vol inversion, delta-knot spline, or projection stage (other tickets).
 - No change to the CSV contract headers (`docs/csv-contract.md` is exact-header). Timing goes in a new file.
 

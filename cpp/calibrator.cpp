@@ -23,6 +23,7 @@
 namespace essvi {
 namespace {
 constexpr double kEps = 1e-8;
+constexpr double kCalendarHeadroom = 0.005;
 constexpr std::size_t kMaxCalibrationThreads = ESSVI_MAX_CALIBRATION_THREADS;
 constexpr std::size_t kFullColdSearchBudget = 8;
 constexpr std::size_t kDegradedAgeBeforeForcedCold = 3;
@@ -383,7 +384,8 @@ struct CalendarBounds {
   double previous_psi_over_theta{};
 };
 
-CalendarBounds calendarBounds(const Slice* previous, double expiry, double rho) {
+CalendarBounds calendarBounds(const Slice* previous, double expiry, double rho,
+                              double headroom = kCalendarHeadroom) {
   if (!previous) return {};
   const double ratio =
       std::max((1 + previous->rho) / (1 + rho),
@@ -393,7 +395,7 @@ CalendarBounds calendarBounds(const Slice* previous, double expiry, double rho) 
           previous->psi > kEps,
           previous->theta + kEps,
           previous->psi + kEps,
-          previous->psi * ratio + kEps,
+          previous->psi * ratio * (1.0 + headroom) + kEps,
           previous->psi / previous->theta};
 }
 
@@ -476,11 +478,11 @@ struct RhoCandidate {
   int evaluations{};
 };
 
-CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
+CalibrationResult fitSliceAtHeadroom(const std::vector<PreparedQuote>& qs, double t,
                            const Slice* prev, RhoWorkerPool& rho_workers,
-                           const Slice* warm_start = nullptr,
-                           const Slice* restricted_center = nullptr,
-                           double quote_cap = INFINITY) {
+                           const Slice* warm_start,
+                           const Slice* restricted_center,
+                           double quote_cap, double calendar_headroom) {
   CalibrationResult out;
   const auto atm = [&] {
     Atm result = nearestAtm(qs, t);
@@ -529,8 +531,8 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
       RhoCandidate result;
       BoundMemo candidate_bound(true);
       BoundMemo safe_bound(false);
-      const auto calendar = calendarBounds(prev, t, rho);
-      const double lo = psiLower(prev, rho);
+      const auto calendar = calendarBounds(prev, t, rho, calendar_headroom);
+      const double lo = std::max(psiLower(prev, rho), calendar.ratio_lower);
       const double hi = psiUpper(theta0, rho, candidate_bound);
       if (!(hi > lo)) return result;
 
@@ -672,7 +674,7 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
     incumbent.expiry = t;
     BoundMemo incumbent_bound(false);
     const auto incumbent_calendar =
-        calendarBounds(prev, t, incumbent.rho);
+        calendarBounds(prev, t, incumbent.rho, calendar_headroom);
     if (pairSafe(incumbent, incumbent_bound, incumbent_calendar)) {
       bestz = bandLoss(incumbent, qs);
       best = incumbent;
@@ -699,8 +701,9 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
       const double rho = std::clamp(warm_start->rho + rho_offsets[start_index],
                                     rho_lower, rho_upper);
       BoundMemo candidate_bound(true);
-      const auto calendar = calendarBounds(prev, t, rho);
-      const double psi_min = psiLower(prev, rho);
+      const auto calendar = calendarBounds(prev, t, rho, calendar_headroom);
+      const double psi_min =
+          std::max(psiLower(prev, rho), calendar.ratio_lower);
       const double theta_seed =
           prev ? std::max(atm.theta_star, prev->theta + kEps)
                : atm.theta_star;
@@ -797,7 +800,10 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
           trial.rho = std::clamp(
               current.rho + alpha * parameter_scale[1] * matrix[1][3],
               rho_lower, rho_upper);
-          const double trial_psi_min = psiLower(prev, trial.rho);
+          const auto trial_calendar =
+              calendarBounds(prev, t, trial.rho, calendar_headroom);
+          const double trial_psi_min =
+              std::max(psiLower(prev, trial.rho), trial_calendar.ratio_lower);
           const double trial_psi_max =
               psiUpper(trial.theta, trial.rho, candidate_bound);
           if (!(trial_psi_max > trial_psi_min)) {
@@ -807,7 +813,6 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
           trial.psi = std::clamp(
               current.psi + alpha * parameter_scale[2] * matrix[2][3],
               trial_psi_min, trial_psi_max);
-          const auto trial_calendar = calendarBounds(prev, t, trial.rho);
           if (!boundSafe(trial, safe_bound)) {
             ++out.fallback_reason_counts.bound_check_failed;
             continue;
@@ -880,7 +885,7 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
   if (!warm_start && bestz < INFINITY) {
     const double tlo = prev ? prev->theta + kEps : kEps;
     BoundMemo safe_bound(false);
-    const auto calendar = calendarBounds(prev, t, best.rho);
+    const auto calendar = calendarBounds(prev, t, best.rho, calendar_headroom);
     for (double multiplier : {0.90, 0.95, 1.00, 1.05, 1.10, 1.20}) {
       Slice slice = best;
       slice.theta = std::clamp(best.theta * multiplier, tlo, 5.0);
@@ -902,6 +907,36 @@ CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
   out.converged = out.error.empty();
   return out;
 }
+CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
+                           const Slice* prev, RhoWorkerPool& rho_workers,
+                           const Slice* warm_start = nullptr,
+                           const Slice* restricted_center = nullptr,
+                           double quote_cap = INFINITY,
+                           double* used_calendar_headroom = nullptr) {
+  if (used_calendar_headroom) *used_calendar_headroom = 0.0;
+  auto strict = fitSliceAtHeadroom(qs, t, prev, rho_workers, warm_start,
+                                   restricted_center, quote_cap, 0.0);
+  if (!prev || !strict.converged) return strict;
+
+  const Slice& strict_candidate = strict.surface.slices.front();
+  if (calendarSafe(strict_candidate,
+                   calendarBounds(prev, t, strict_candidate.rho))) {
+    if (used_calendar_headroom)
+      *used_calendar_headroom = kCalendarHeadroom;
+    return strict;
+  }
+
+  auto with_headroom = fitSliceAtHeadroom(
+      qs, t, prev, rho_workers, warm_start, restricted_center, quote_cap,
+      kCalendarHeadroom);
+  if (with_headroom.converged) {
+    if (used_calendar_headroom)
+      *used_calendar_headroom = kCalendarHeadroom;
+    return with_headroom;
+  }
+  return strict;
+}
+
 bool hasInvalidIncludedWeight(const std::vector<Quote>& quotes) {
   for (const auto& quote : quotes)
     if (quote.included &&
@@ -1059,6 +1094,8 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
         double loss_scale{};
         Slice candidate{};
         double candidate_loss{INFINITY};
+        double candidate_headroom{kCalendarHeadroom};
+        double full_cold_headroom{kCalendarHeadroom};
         bool have_candidate{};
         bool candidate_reused{};
         bool candidate_from_warm{};
@@ -1125,8 +1162,9 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
               ++out.full_cold_searches;
               if (forced) ++out.forced_full_cold_searches;
             }
-            plan.full_cold_reference =
-                fitSlice(plan.prepared, expiry, previous, rho_workers);
+            plan.full_cold_reference = fitSlice(
+                plan.prepared, expiry, previous, rho_workers, nullptr, nullptr,
+                INFINITY, &plan.full_cold_headroom);
             out.iterations += plan.full_cold_reference.iterations;
           }
         }
@@ -1153,7 +1191,7 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
         if (quotes_unchanged && reuse_age < 12) {
           BoundMemo safe_bound(false);
           const auto calendar = calendarBounds(plan.old_previous, expiry,
-                                               plan.warm_start->rho);
+                                               plan.warm_start->rho, 0.0);
           Slice reused = *plan.warm_start;
           reused.expiry = expiry;
           if (pairSafe(reused, safe_bound, calendar)) {
@@ -1162,6 +1200,11 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
                 passesQuoteCap(reused, plan.prepared, options.quote_cap)) {
               plan.candidate = reused;
               plan.candidate_loss = loss;
+              plan.candidate_headroom =
+                  calendarSafe(reused, calendarBounds(
+                                           plan.old_previous, expiry, reused.rho))
+                      ? kCalendarHeadroom
+                      : 0.0;
               plan.have_candidate = true;
               plan.candidate_reused = true;
               plan.candidate_from_warm = true;
@@ -1174,7 +1217,7 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
           Slice prior = *plan.warm_start;
           prior.expiry = expiry;
           const auto calendar = calendarBounds(plan.old_previous, expiry,
-                                               prior.rho);
+                                               prior.rho, 0.0);
           const bool prior_bound_safe = boundSafe(prior, safe_bound);
           if (!prior_bound_safe) {
             ++out.fallback_reason_counts.bound_check_failed;
@@ -1185,6 +1228,12 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
               plan.have_candidate = std::isfinite(plan.candidate_loss);
               plan.candidate_reused = plan.have_candidate;
               plan.candidate_from_warm = plan.have_candidate;
+              if (plan.have_candidate)
+                plan.candidate_headroom =
+                    calendarSafe(prior, calendarBounds(plan.old_previous,
+                                                       expiry, prior.rho))
+                        ? kCalendarHeadroom
+                        : 0.0;
             } else {
               ++out.fallback_reason_counts.loss_above_gate;
             }
@@ -1233,7 +1282,8 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
                       plan.local = fitSlice(
                           plan.prepared, current_groups.expiries[i],
                           plan.old_previous, rho_workers, plan.warm_start,
-                          nullptr, options.quote_cap);
+                          nullptr, options.quote_cap,
+                          &plan.candidate_headroom);
                     }
                     if (plan.local.converged) {
                       plan.candidate = plan.local.surface.slices.front();
@@ -1267,37 +1317,45 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
         const Slice* warm_start = plan.warm_start;
         Slice candidate = plan.candidate;
         double candidate_loss = plan.candidate_loss;
+        double candidate_headroom = plan.candidate_headroom;
         bool have_candidate = plan.have_candidate;
         bool candidate_reused = plan.candidate_reused;
         bool candidate_from_warm = plan.candidate_from_warm;
   
         const auto selectBudgetFallback = [&](const Slice* restricted_slice,
-                                              double restricted_loss) {
+                                              double restricted_loss,
+                                              double restricted_headroom) {
           Slice best_slice{};
           double best_loss = INFINITY;
+          double best_headroom = 0.0;
           bool found = false;
           BoundMemo safe_bound(false);
-          const auto consider = [&](const Slice& possible, double loss) {
+          const auto consider = [&](const Slice& possible, double loss,
+                                    double headroom) {
             if (!std::isfinite(loss)) return;
             const auto calendar =
-                calendarBounds(previous_slice, expiry, possible.rho);
+                calendarBounds(previous_slice, expiry, possible.rho, headroom);
             if (!pairSafe(possible, safe_bound, calendar)) return;
             if (!found || loss < best_loss) {
               best_slice = possible;
               best_loss = loss;
+              best_headroom = headroom;
               found = true;
             }
           };
-          if (restricted_slice) consider(*restricted_slice, restricted_loss);
-          if (have_candidate) consider(candidate, candidate_loss);
+          if (restricted_slice)
+            consider(*restricted_slice, restricted_loss, restricted_headroom);
+          if (have_candidate)
+            consider(candidate, candidate_loss, candidate_headroom);
           if (warm_start) {
             Slice prior = *warm_start;
             prior.expiry = expiry;
-            consider(prior, bandLoss(prior, plan.prepared));
+            consider(prior, bandLoss(prior, plan.prepared), 0.0);
           }
           if (!found) return false;
           candidate = best_slice;
           candidate_loss = best_loss;
+          candidate_headroom = best_headroom;
           have_candidate = true;
           candidate_reused = false;
           candidate_from_warm = false;
@@ -1320,6 +1378,7 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
           }
           candidate = cold.surface.slices.front();
           candidate_loss = cold.objective;
+          candidate_headroom = plan.full_cold_headroom;
           have_candidate = true;
           candidate_reused = false;
           candidate_from_warm = false;
@@ -1329,18 +1388,20 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
           const bool calendar_repair_needed =
               have_candidate &&
               !calendarSafe(candidate,
-                            calendarBounds(previous_slice, expiry, candidate.rho));
+                            calendarBounds(previous_slice, expiry, candidate.rho,
+                                           candidate_headroom));
 
           // Repair only candidates made infeasible by the updated predecessor.
           if (calendar_repair_needed && warm_start) {
             ++out.local_solver_slices;
             std::uint64_t local_bound_calls = 0;
             CalibrationResult local;
+            double local_headroom = kCalendarHeadroom;
             {
               detail::MmBoundCallScope local_bound_scope(&local_bound_calls);
               local = fitSlice(plan.prepared, expiry, previous_slice,
                                rho_workers, warm_start, nullptr,
-                               options.quote_cap);
+                               options.quote_cap, &local_headroom);
             }
             out.local_solver_starts += local.local_solver_starts;
             out.local_objective_evaluations += local.objective_evaluations;
@@ -1349,18 +1410,37 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
                 local.fallback_reason_counts.bound_check_failed;
             bound_calls += local_bound_calls;
             out.iterations += local.iterations;
-            if (local.converged &&
-                calendarSafe(local.surface.slices.front(),
+            const Slice* repaired =
+                local.converged ? &local.surface.slices.front() : nullptr;
+            const bool local_safe =
+                repaired &&
+                calendarSafe(*repaired,
                              calendarBounds(previous_slice, expiry,
-                                            local.surface.slices.front().rho))) {
-              candidate = local.surface.slices.front();
+                                            repaired->rho, local_headroom));
+            if (local_safe && local_headroom == kCalendarHeadroom) {
+              candidate = *repaired;
               candidate_loss = local.objective;
+              candidate_headroom = local_headroom;
               have_candidate = true;
               candidate_reused = false;
               candidate_from_warm = true;
             } else {
               ++out.fallback_reason_counts.calendar_repair_failed;
-              have_candidate = false;
+              if (have_candidate &&
+                  calendarSafe(candidate,
+                               calendarBounds(previous_slice, expiry,
+                                              candidate.rho, 0.0))) {
+                candidate_headroom = 0.0;
+              } else if (local_safe) {
+                candidate = *repaired;
+                candidate_loss = local.objective;
+                candidate_headroom = local_headroom;
+                have_candidate = true;
+                candidate_reused = false;
+                candidate_from_warm = true;
+              } else {
+                have_candidate = false;
+              }
             }
           }
 
@@ -1373,8 +1453,10 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
               warm_start && (!have_candidate || candidate_fails_cap);
           if (needs_restricted) {
             ++out.restricted_cold_searches;
-            const auto restricted = fitSlice(plan.prepared, expiry, previous_slice,
-                                             rho_workers, nullptr, warm_start);
+            double restricted_headroom = kCalendarHeadroom;
+            const auto restricted = fitSlice(
+                plan.prepared, expiry, previous_slice, rho_workers, nullptr,
+                warm_start, INFINITY, &restricted_headroom);
             out.iterations += restricted.iterations;
             if (restricted.converged) {
               const Slice restricted_slice = restricted.surface.slices.front();
@@ -1382,6 +1464,7 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
                                  options.quote_cap)) {
                 candidate = restricted_slice;
                 candidate_loss = restricted.objective;
+                candidate_headroom = restricted_headroom;
                 have_candidate = true;
                 candidate_reused = false;
                 candidate_from_warm = false;
@@ -1395,7 +1478,8 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
                     fullColdReference(plan, expiry, previous_slice);
                 if (plan.full_cold_budget_exhausted) {
                   if (!selectBudgetFallback(&restricted_slice,
-                                            restricted.objective)) {
+                                            restricted.objective,
+                                            restricted_headroom)) {
                     out.timings.slice_fitting_seconds =
                         secondsSince(fitting_started);
                     out.error = "budget exhausted without feasible candidate at t=" +
@@ -1421,9 +1505,11 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
                                              plan.prepared, options.quote_cap)) {
                     candidate = restricted_slice;
                     candidate_loss = restricted.objective;
+                    candidate_headroom = restricted_headroom;
                   } else {
                     candidate = cold_slice;
                     candidate_loss = cold.objective;
+                    candidate_headroom = plan.full_cold_headroom;
                   }
                   have_candidate = true;
                   candidate_reused = false;
@@ -1436,7 +1522,7 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
               const auto& cold =
                   fullColdReference(plan, expiry, previous_slice);
               if (plan.full_cold_budget_exhausted) {
-                if (!selectBudgetFallback(nullptr, INFINITY)) {
+                if (!selectBudgetFallback(nullptr, INFINITY, 0.0)) {
                   out.timings.slice_fitting_seconds =
                       secondsSince(fitting_started);
                   out.error = "budget exhausted without feasible candidate at t=" +
@@ -1454,6 +1540,7 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
               } else {
                 candidate = cold.surface.slices.front();
                 candidate_loss = cold.objective;
+                candidate_headroom = plan.full_cold_headroom;
                 have_candidate = true;
                 candidate_reused = false;
                 candidate_from_warm = false;
@@ -1475,6 +1562,7 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
             }
             candidate = cold.surface.slices.front();
             candidate_loss = cold.objective;
+            candidate_headroom = plan.full_cold_headroom;
             have_candidate = true;
             candidate_reused = false;
             candidate_from_warm = false;
