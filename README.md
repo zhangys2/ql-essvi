@@ -53,6 +53,8 @@ For in-memory input, construct `essvi.Quotes` from an iterable of `essvi.Quote(i
 
 Expiries are year fractions, IVs are decimal volatilities, and evaluator argument `k` is forward log-moneyness, `log(strike / forward)`. The result also exposes solver counts, quality metrics, `timings`, and `fallback_reason_counts`. `WarmOptions` exposes `quote_tol` and `quote_cap`; the deprecated C++ `loss_tol` setting is not exposed.
 
+The read-only `posterior_covariances` property returns an outer tuple aligned with `surface.slices`; each inner tuple packs `[00, 01, 02, 11, 12, 22]` in `(log(theta), atanh(rho), log(psi))` coordinates. At this API stage, every successful result uses the cold diagonal variance `0.25`; it is not yet an observation-updated uncertainty estimate.
+
 Calibration releases the GIL. Do not mutate any input `Quotes` container or `WarmOptions` object while a calibration is reading it. Separate calls can run from Python threads with immutable inputs.
 
 For development, use `uv pip install --python .venv/bin/python -e '.[test]'`. Rerun that command after changing C++ sources.
