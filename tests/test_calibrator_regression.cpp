@@ -104,6 +104,7 @@ void legacyAndWeightedCsvControlColdObjective() {
   const auto legacy_path = directory / "legacy.csv";
   const auto weighted_path = directory / "weighted.csv";
   const auto diagnostics_path = directory / "diagnostics.csv";
+  const auto warm_diagnostics_path = directory / "warm-diagnostics.csv";
   const auto blank_weight_path = directory / "blank-weight.csv";
   const auto invalid_weight_path = directory / "invalid-weight.csv";
   const auto malformed_weight_path = directory / "malformed-weight.csv";
@@ -163,6 +164,56 @@ void legacyAndWeightedCsvControlColdObjective() {
   assert(std::getline(diagnostics, header));
   assert(header ==
          "model,converged,objective,iterations,runtime_seconds,error");
+
+  auto warm_quotes = weighted_quotes;
+  for (auto & quote : warm_quotes) {
+    if (quote.expiry != weighted_result.surface.slices.front().expiry) {
+      quote.included = false;
+      continue;
+    }
+    auto target = weighted_result.surface.slices.front();
+    target.rho = std::clamp(target.rho + 0.03, -0.95, 0.95);
+    const double k = std::log(quote.strike / quote.forward);
+    const double iv =
+        std::sqrt(essvi::sliceTotalVariance(target, k) / quote.expiry);
+    quote.bid_iv = std::max(0.001, iv - 2e-5);
+    quote.ask_iv = iv + 2e-5;
+    quote.mid_iv = iv;
+  }
+  essvi::WarmOptions warm_options;
+  warm_options.quote_tol = 0.0;
+  warm_options.quote_cap = 5.0;
+  const auto warm_result = essvi::calibrateWarm(
+      warm_quotes, &weighted_result, weighted_quotes, warm_options);
+  assert(warm_result.converged);
+  assert(warm_result.path == essvi::CalibrationPath::warm);
+  assert(warm_result.local_solver_starts > 0);
+
+  double expected_warm_raw_loss = 0.0;
+  for (const auto& quote : warm_quotes) {
+    if (!quote.included) continue;
+    const auto slice = std::find_if(
+        warm_result.surface.slices.begin(), warm_result.surface.slices.end(),
+        [&](const auto& candidate) { return candidate.expiry == quote.expiry; });
+    assert(slice != warm_result.surface.slices.end());
+    const double variance = essvi::sliceTotalVariance(
+        *slice, std::log(quote.strike / quote.forward));
+    const double bid = quote.expiry * quote.bid_iv * quote.bid_iv;
+    const double ask = quote.expiry * quote.ask_iv * quote.ask_iv;
+    const double residual = variance - std::clamp(variance, bid, ask);
+    expected_warm_raw_loss += quote.weight * quote.weight * residual * residual;
+  }
+  assert(std::abs(warm_result.objective - expected_warm_raw_loss) <=
+         1e-12 * (1.0 + expected_warm_raw_loss));
+  essvi::writeDiagnostics(warm_result, warm_diagnostics_path.string());
+  std::ifstream warm_diagnostics(warm_diagnostics_path);
+  assert(std::getline(warm_diagnostics, header));
+  assert(header ==
+         "model,converged,objective,iterations,runtime_seconds,error");
+  std::string warm_row;
+  assert(std::getline(warm_diagnostics, warm_row));
+  assert(std::abs(number(warm_row, 2) - expected_warm_raw_loss) <=
+         1e-12 * (1.0 + expected_warm_raw_loss));
 
   std::filesystem::remove_all(directory);
 }
