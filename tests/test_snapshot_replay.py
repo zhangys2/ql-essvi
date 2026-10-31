@@ -13,7 +13,7 @@ from replay_snapshots import (
     matched_iv_changes,
     prepare_snapshot,
 )
-from run_snapshot_replay import _daily_result, split_replay_segments
+from run_snapshot_replay import split_replay_segments
 
 
 def _contract(
@@ -132,77 +132,3 @@ def test_replay_modes_cold_restart_after_skips_and_timestamp_gaps():
     segments = split_replay_segments(replay_rows)
 
     assert [[row["timestamp_ms"] for row in segment] for segment in segments] == [[0, 300_000], [1_800_000], [2_400_000], [1_800_000]]
-
-
-def test_daily_replay_aggregates_surface_movement_metrics_by_update():
-    rows = [{
-        "asset": "IBIT", "session_date": "2026-10-15",
-        "status": "usable", "mode": "cold", "restart_reason": "session_start",
-        "missing_intervals": 0, "excluded_locked": 0,
-        "excluded_crossed": 0, "excluded_other": 0,
-    }]
-    summaries = [
-        {
-            "surface_movement_updates": 2,
-            "warm_movement_rms_total_variance": 0.2,
-            "warm_movement_matched_expiries": 6,
-            "warm_movement_grid_points": 606,
-            "cold_movement_rms_total_variance": 0.4,
-            "cold_movement_matched_expiries": 6,
-            "cold_movement_grid_points": 606,
-        },
-        {
-            "surface_movement_updates": 1,
-            "warm_movement_rms_total_variance": 0.5,
-            "warm_movement_matched_expiries": 2,
-            "warm_movement_grid_points": 202,
-            "cold_movement_rms_total_variance": 0.7,
-            "cold_movement_matched_expiries": 2,
-            "cold_movement_grid_points": 202,
-        },
-    ]
-
-    result = _daily_result(rows, summaries)
-
-    assert result["surface_movement_updates"] == 3
-    assert result["warm_movement_rms_total_variance"] == 0.3
-    assert result["warm_movement_matched_expiries"] == 8
-    assert result["warm_movement_grid_points"] == 808
-    assert result["cold_movement_rms_total_variance"] == 0.5
-    assert result["cold_movement_matched_expiries"] == 8
-    assert result["cold_movement_grid_points"] == 808
-
-
-def test_daily_replay_reports_unavailable_surface_movement_as_null():
-    rows = [{
-        "asset": "IBIT", "session_date": "2026-10-15",
-        "status": "usable", "mode": "cold", "restart_reason": "session_start",
-        "missing_intervals": 0, "excluded_locked": 0,
-        "excluded_crossed": 0, "excluded_other": 0,
-    }]
-
-    result = _daily_result(rows, [])
-
-    assert result["surface_movement_updates"] == 0
-    for path in ("warm", "cold"):
-        assert result[f"{path}_movement_rms_total_variance"] is None
-        assert result[f"{path}_movement_matched_expiries"] is None
-        assert result[f"{path}_movement_grid_points"] is None
-
-
-def test_daily_replay_fallback_rate_includes_degraded_updates():
-    rows = [{
-        "asset": "IBIT", "session_date": "2026-10-15",
-        "status": "usable", "mode": "cold", "restart_reason": "session_start",
-        "missing_intervals": 0, "excluded_locked": 0,
-        "excluded_crossed": 0, "excluded_other": 0,
-    }]
-    summaries = [{
-        "samples": 4,
-        "path_counts": {"cold": 1, "warm": 1, "fallback": 1, "degraded": 1},
-    }]
-
-    result = _daily_result(rows, summaries)
-
-    assert result["fallback_updates"] == 2
-    assert result["fallback_rate_percent"] == 50.0

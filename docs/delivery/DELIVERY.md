@@ -16,16 +16,6 @@
 - Typecheck/lint: not applicable (the build uses -Wall -Wextra -Wpedantic; no linter is configured)
   - Proven able to fail: unproven
 
-## Replay reporting
-
-Run the declared held-out replay from the repository root after the configured build:
-
-`export PATH="$PWD/.venv/bin:$PATH"; cmake --build build --target essvi_bench -j2 && .venv/bin/python python/run_snapshot_replay.py --data-root "$HOME/vol-rv/data" --output-dir build/eba4-heldout-replay --bench build/essvi_bench`
-
-The data root must contain the supported IBIT/SPY snapshot corpus (the default is `$HOME/vol-rv/data`; pass another `--data-root` when needed). The runner prepares normalized quotes and writes JSON/CSV results under the ignored `build/eba4-heldout-replay` directory. Each uninterrupted five-minute segment starts cold; each later snapshot is compared one step ahead against the preceding warm state.
-
-The snapshot replay JSON and CSV report paired warm/cold band loss, feasibility, fallback rate, latency, and per-update RMS total-variance surface movement over exact matched expiries on the deterministic 101-point log-moneyness grid from -0.5 to 0.5. Daily movement RMS values are means across measured updates; matched-expiry and grid-point fields are summed counts. Movement fields are null when no paired update has comparable surfaces. Snapshot IVs use the documented Black--Scholes European stand-in for American IVs; this replay is a pipeline comparison, not market evidence or a performance/predictive claim.
-
 ## Review
 
 - Review rounds: 5

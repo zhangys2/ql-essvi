@@ -136,7 +136,7 @@ def _daily_result(rows, summaries):
     samples = sum(summary.get("samples", 0) for summary in summaries)
     path_counts = {
         name: sum(summary.get("path_counts", {}).get(name, 0) for summary in summaries)
-        for name in ("cold", "warm", "fallback", "degraded")
+        for name in ("cold", "warm", "fallback")
     }
     warm_times = [
         value
@@ -148,31 +148,6 @@ def _daily_result(rows, summaries):
         for summary in summaries
         for value in summary.get("cold_seconds_samples", [])
     ]
-    movement_updates = sum(
-        summary.get("surface_movement_updates", 0) for summary in summaries
-    )
-    movement = {}
-    for path in ("warm", "cold"):
-        rms_key = f"{path}_movement_rms_total_variance"
-        movement[f"{path}_movement_rms_total_variance"] = (
-            sum(
-                summary.get(rms_key, 0.0) * summary.get("surface_movement_updates", 0)
-                for summary in summaries
-                if summary.get(rms_key) is not None
-            ) / movement_updates
-            if movement_updates
-            else None
-        )
-        movement[f"{path}_movement_matched_expiries"] = (
-            sum(summary.get(f"{path}_movement_matched_expiries", 0) or 0
-                for summary in summaries)
-            if movement_updates else None
-        )
-        movement[f"{path}_movement_grid_points"] = (
-            sum(summary.get(f"{path}_movement_grid_points", 0) or 0
-                for summary in summaries)
-            if movement_updates else None
-        )
     caps = []
     for index, cap in enumerate((0.05, 0.1, 0.2)):
         warm_above = sum(
@@ -209,8 +184,6 @@ def _daily_result(rows, summaries):
     return {
         "asset": rows[0]["asset"],
         "session_date": rows[0]["session_date"],
-        "surface_movement_updates": movement_updates,
-        **movement,
         "snapshots": len(rows),
         "usable_snapshots": sum(row["status"] == "usable" for row in rows),
         "skipped_snapshots": sum(row["status"] != "usable" for row in rows),
@@ -229,10 +202,9 @@ def _daily_result(rows, summaries):
         "warm_p99_ms": None if not warm_times else 1000.0 * _percentile(warm_times, 0.99),
         "cold_p50_ms": None if not cold_times else 1000.0 * _percentile(cold_times, 0.50),
         "cold_p99_ms": None if not cold_times else 1000.0 * _percentile(cold_times, 0.99),
-        "fallback_updates": path_counts["fallback"] + path_counts["degraded"],
+        "fallback_updates": path_counts["fallback"],
         "fallback_rate_percent": (
-            100.0 * (path_counts["fallback"] + path_counts["degraded"]) / warm_pairs
-            if warm_pairs else None
+            100.0 * path_counts["fallback"] / warm_pairs if warm_pairs else None
         ),
         "warm_failures": sum(summary.get("warm_failures", 0) for summary in summaries),
         "cold_failures": sum(summary.get("cold_failures", 0) for summary in summaries),
@@ -341,16 +313,7 @@ def run_replay(bench, manifest_path, output_dir):
             "excluded_other",
             "warm_p50_ms",
             "warm_p99_ms",
-            "cold_p50_ms",
-            "cold_p99_ms",
             "fallback_rate_percent",
-            "surface_movement_updates",
-            "warm_movement_rms_total_variance",
-            "warm_movement_matched_expiries",
-            "warm_movement_grid_points",
-            "cold_movement_rms_total_variance",
-            "cold_movement_matched_expiries",
-            "cold_movement_grid_points",
             "warm_share_above_cap",
             "cold_share_above_cap",
             "share_delta_pp",
@@ -382,8 +345,7 @@ def run_replay(bench, manifest_path, output_dir):
     print(
         "asset session snapshots usable skipped warm_pairs cold_restarts "
         "gap_events missing_intervals excluded_locked excluded_crossed excluded_other "
-        "warm_p50_ms warm_p99_ms cold_p50_ms cold_p99_ms fallback_percent "
-        "movement_updates warm_movement_rms cold_movement_rms"
+        "warm_p50_ms warm_p99_ms fallback_percent"
     )
     for result in daily:
         print(
@@ -393,11 +355,7 @@ def run_replay(bench, manifest_path, output_dir):
             f"{result['missing_intervals']} {result['excluded_locked']} "
             f"{result['excluded_crossed']} {result['excluded_other']} "
             f"{result['warm_p50_ms']} {result['warm_p99_ms']} "
-            f"{result['cold_p50_ms']} {result['cold_p99_ms']} "
-            f"{result['fallback_rate_percent']} "
-            f"{result['surface_movement_updates']} "
-            f"{result['warm_movement_rms_total_variance']} "
-            f"{result['cold_movement_rms_total_variance']}"
+            f"{result['fallback_rate_percent']}"
         )
         for sensitivity in result["cap_sensitivity"]:
             print(

@@ -84,14 +84,6 @@ struct Summary {
   double quote_cap{0.1};
   std::string load_average_before;
   std::string load_average_after;
-  double warm_movement_rms_sum{};
-  double cold_movement_rms_sum{};
-  std::size_t warm_movement_matched_expiries{};
-  std::size_t cold_movement_matched_expiries{};
-  std::size_t warm_movement_grid_points{};
-  std::size_t cold_movement_grid_points{};
-  std::size_t warm_movement_updates{};
-  std::size_t cold_movement_updates{};
 };
 
 struct LegacyOptions {
@@ -204,60 +196,6 @@ std::size_t denseGridViolationCount(const essvi::Surface& surface) {
     has_previous = true;
   }
   return violations;
-}
-
-struct SurfaceMovement {
-  double rms{};
-  std::size_t matched_expiries{};
-  std::size_t grid_points{};
-};
-
-SurfaceMovement surfaceMovement(const essvi::Surface& previous,
-                                const essvi::Surface& current) {
-  constexpr std::size_t kGridPointsPerExpiry = 101;
-  constexpr double kMinK = -0.5;
-  constexpr double kMaxK = 0.5;
-  double squared_delta_sum = 0.0;
-  SurfaceMovement movement;
-  for (const auto& prior : previous.slices) {
-    const auto current_slice = std::find_if(
-        current.slices.begin(), current.slices.end(),
-        [&](const essvi::Slice& slice) { return slice.expiry == prior.expiry; });
-    if (current_slice == current.slices.end()) continue;
-    ++movement.matched_expiries;
-    for (std::size_t point = 0; point < kGridPointsPerExpiry; ++point) {
-      const double fraction = static_cast<double>(point) /
-                              static_cast<double>(kGridPointsPerExpiry - 1);
-      const double k = kMinK + fraction * (kMaxK - kMinK);
-      const double delta = essvi::sliceTotalVariance(*current_slice, k) -
-                           essvi::sliceTotalVariance(prior, k);
-      squared_delta_sum += delta * delta;
-      ++movement.grid_points;
-    }
-  }
-  if (movement.grid_points)
-    movement.rms = std::sqrt(squared_delta_sum /
-                             static_cast<double>(movement.grid_points));
-  return movement;
-}
-
-void recordSurfaceMovement(Summary& summary,
-                           const essvi::Surface& previous,
-                           const essvi::CalibrationResult& warm,
-                           const essvi::CalibrationResult& cold) {
-  if (!warm.converged || !cold.converged) return;
-  const auto warm_movement = surfaceMovement(previous, warm.surface);
-  const auto cold_movement = surfaceMovement(previous, cold.surface);
-  if (warm_movement.grid_points && cold_movement.grid_points) {
-    summary.warm_movement_rms_sum += warm_movement.rms;
-    summary.warm_movement_matched_expiries += warm_movement.matched_expiries;
-    summary.warm_movement_grid_points += warm_movement.grid_points;
-    ++summary.warm_movement_updates;
-    summary.cold_movement_rms_sum += cold_movement.rms;
-    summary.cold_movement_matched_expiries += cold_movement.matched_expiries;
-    summary.cold_movement_grid_points += cold_movement.grid_points;
-    ++summary.cold_movement_updates;
-  }
 }
 
 void record(Summary& summary, const essvi::CalibrationResult& warm,
@@ -388,18 +326,6 @@ void printSummary(const Summary& summary) {
             << "warm_gate_quote_cap=" << summary.quote_cap << '\n';
   printTimes("warm", summary.warm_seconds);
   printTimes("cold", summary.cold_seconds);
-  std::cout << "surface_movement_updates=" << summary.warm_movement_updates << '\n';
-  if (summary.warm_movement_updates) {
-    std::cout << "warm_movement_rms_total_variance="
-              << summary.warm_movement_rms_sum /
-                     static_cast<double>(summary.warm_movement_updates) << '\n'
-              << "cold_movement_rms_total_variance="
-              << summary.cold_movement_rms_sum /
-                     static_cast<double>(summary.cold_movement_updates) << '\n';
-  } else {
-    std::cout << "warm_movement_rms_total_variance=unavailable\n"
-              << "cold_movement_rms_total_variance=unavailable\n";
-  }
   std::cout << "mean_slices_refit="
             << (samples ? summary.slices_refit / samples : 0.0) << '\n'
             << "mean_slices_reused="
@@ -605,34 +531,7 @@ void writeJsonSummary(std::ostream& output, const Summary& summary) {
          << summary.cold_surface_quality.dense_grid_violations
          << ",\"summed_warm_objective\":" << summary.warm_loss
          << ",\"summed_cold_objective\":" << summary.cold_loss
-         << ",\"paired_updates\":" << summary.quality.paired_updates
-         << ",\"surface_movement_updates\":"
-         << summary.warm_movement_updates
-         << ",\"warm_movement_rms_total_variance\":";
-  if (summary.warm_movement_updates)
-    output << summary.warm_movement_rms_sum /
-                   static_cast<double>(summary.warm_movement_updates);
-  else
-    output << "null";
-  output << ",\"warm_movement_matched_expiries\":";
-  if (summary.warm_movement_updates) output << summary.warm_movement_matched_expiries;
-  else output << "null";
-  output << ",\"warm_movement_grid_points\":";
-  if (summary.warm_movement_updates) output << summary.warm_movement_grid_points;
-  else output << "null";
-  output << ",\"cold_movement_rms_total_variance\":";
-  if (summary.cold_movement_updates)
-    output << summary.cold_movement_rms_sum /
-                   static_cast<double>(summary.cold_movement_updates);
-  else
-    output << "null";
-  output << ",\"cold_movement_matched_expiries\":";
-  if (summary.cold_movement_updates) output << summary.cold_movement_matched_expiries;
-  else output << "null";
-  output << ",\"cold_movement_grid_points\":";
-  if (summary.cold_movement_updates) output << summary.cold_movement_grid_points;
-  else output << "null";
-  output << ',';
+         << ",\"paired_updates\":" << summary.quality.paired_updates << ',';
   writeJsonQuoteMetrics(output, "warm_quality", summary.quality.warm);
   output << ',';
   {
@@ -765,7 +664,6 @@ void runScenario(const Options& options, essvi::bench::WarmScenario scenario,
     const auto cold = essvi::calibrate(current_quotes);
     const double cold_seconds =
         std::chrono::duration<double>(Clock::now() - cold_start).count();
-    recordSurfaceMovement(summary, previous_result.surface, warm, cold);
     record(summary, warm, cold, current_quotes, warm_seconds, cold_seconds);
 
     if (warm.converged)
@@ -814,7 +712,6 @@ void runReplay(const Options& options, Summary& summary) {
     const auto cold = essvi::calibrate(current_quotes);
     const double cold_seconds =
         std::chrono::duration<double>(Clock::now() - cold_start).count();
-    recordSurfaceMovement(summary, previous_result.surface, warm, cold);
     record(summary, warm, cold, current_quotes, warm_seconds, cold_seconds);
 
     if (warm.converged)
