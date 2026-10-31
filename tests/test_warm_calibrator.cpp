@@ -964,6 +964,43 @@ void constrainedPosteriorModeUsesGaussianPriorAndIgnoresPreviousQuotes() {
   assert(original_history_result.objective == shifted_history_result.objective);
 }
 
+void posteriorModeEscapesLocalWarmRhoWindow() {
+  const auto previous_quotes = essvi::bench::realisticChain(1, 100, 4);
+  const auto previous = essvi::calibrate(previous_quotes);
+  assert(previous.converged);
+  const auto prior_slice = previous.surface.slices.front();
+  const double rho_direction = prior_slice.rho < 0.0 ? 1.0 : -1.0;
+  const double target_rho = std::clamp(
+      prior_slice.rho + 0.45 * rho_direction, -0.9, 0.9);
+  assert(std::abs(target_rho - prior_slice.rho) > 0.3);
+  const essvi::Slice target{prior_slice.expiry, prior_slice.theta,
+                            prior_slice.psi, target_rho};
+  assert(essvi::butterflySafe(target));
+
+  auto current_quotes = previous_quotes;
+  for (auto& quote : current_quotes) {
+    const double k = std::log(quote.strike / quote.forward);
+    const double iv = std::sqrt(
+        essvi::sliceTotalVariance(target, k) / quote.expiry);
+    const double half_spread = 5e-4 * (1.0 + std::abs(k));
+    quote.bid_iv = std::max(0.001, iv - half_spread);
+    quote.ask_iv = iv + half_spread;
+    quote.mid_iv = iv;
+  }
+
+  essvi::WarmOptions options;
+  options.quote_tol = 0.0;
+  options.quote_cap = 1e6;
+  const auto warm = essvi::calibrateWarm(
+      current_quotes, &previous, previous_quotes, options);
+  assert(warm.converged && warm.fallback_slices == 0);
+  checkDenseGrid(warm.surface);
+
+  const auto& fitted = warm.surface.slices.front();
+  assert(std::abs(fitted.rho - prior_slice.rho) > 0.2);
+  assert(std::abs(fitted.rho - target_rho) < 0.1);
+}
+
 void multivariatePosteriorMatchesIndependentScore() {
   const auto previous_quotes = essvi::bench::realisticChain(1, 100, 4);
   const auto previous = essvi::calibrate(previous_quotes);
@@ -1239,6 +1276,7 @@ int main() {
   fastScenarioPreservesQuoteSpreadsAtIvFloor();
   highFallbackShortcutUsesFastScenarioMoveScale();
   constrainedPosteriorModeUsesGaussianPriorAndIgnoresPreviousQuotes();
+  posteriorModeEscapesLocalWarmRhoWindow();
   multivariatePosteriorMatchesIndependentScore();
   covarianceStateIsAlignedAndInvalidStateColdStarts();
   stagedFallbackBudgetReturnsValidDegradedResults();

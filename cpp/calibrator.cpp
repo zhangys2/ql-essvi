@@ -737,10 +737,10 @@ CalibrationResult fitSliceAtHeadroom(
     constexpr std::array<double, 3> rho_offsets{0.0, -0.05, 0.05};
     constexpr std::array<double, 5> alphas{1.0, 0.5, 0.25, 0.125, 0.0625};
     const int local_evaluation_budget = prior_precision ? 100 : 25;
-    // Starts remain within rho ±0.05; LM may traverse the staged ±0.15
-    // fallback radius before resorting to a cold search.
-    const double rho_lower = std::max(-0.979999, warm_start->rho - 0.15);
-    const double rho_upper = std::min(0.979999, warm_start->rho + 0.15);
+    // Posterior refinement searches the full feasible rho range; ordinary warm
+    // fits remain local.
+    const double rho_lower = prior_precision ? -0.979999 : std::max(-0.979999, warm_start->rho - 0.15);
+    const double rho_upper = prior_precision ? 0.979999 : std::min(0.979999, warm_start->rho + 0.15);
     const double theta_min = prev ? prev->theta + kEps : kEps;
 
     for (std::size_t start_index = 0; start_index < rho_offsets.size();
