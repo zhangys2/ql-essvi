@@ -127,5 +127,7 @@ if(ESSVI_BUILD_PYTHON)
   target_link_libraries(_core PRIVATE essvi_core)
   target_compile_options(_core PRIVATE -Wall -Wextra -Wpedantic)
 
-  install(TARGETS _core LIBRARY DESTINATION ql_essvi)
+  install(TARGETS _core
+    LIBRARY DESTINATION ql_essvi
+    RUNTIME DESTINATION ql_essvi)
 endif()

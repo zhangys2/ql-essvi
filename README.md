@@ -45,6 +45,10 @@ print(updated.path, updated.slices_reused, updated.slices_refit)
 
 `calibrate_warm(current_quotes, previous_result, previous_quotes, options)` retains the complete native calibration state, including reuse and degradation ages. Pass the matching previous quote snapshot, and retain the returned result and current quotes for the next update. Passing `None` as `previous_result` requests a cold start. Warm calls can take the existing fallback/degraded paths; inspect `path` and the result's diagnostics rather than assuming reuse.
 
+`read_quotes` accepts strings and `os.PathLike` objects, including `pathlib.Path`. It raises `RuntimeError` for file-open/read failures and `ValueError` for missing required columns, malformed rows, invalid inclusion flags, or invalid non-weight numeric fields. Parse errors identify the input path and, for row errors, the line and field where applicable; no malformed quote row is silently discarded. Malformed weights remain NaN in the native quotes so calibration can reject included invalid weights through its existing fail-closed result.
+
+Always check `converged` before using a fit as a model. A failed cold fit can retain partial surface slices for diagnostics; those slices and their read-only parameter views remain inspectable but do not constitute a successful complete fit.
+
 For in-memory input, construct `essvi.Quotes` from an iterable of `essvi.Quote(id, expiry, forward, discount_factor, strike, bid_iv, ask_iv, mid_iv, included=True, weight=1.0)`. Calibration requires this native container explicitly, avoiding a Python-list-to-C++-vector copy on every fit. Quote fields and result fields are read-only; replace container elements with newly constructed quotes when preparing a new snapshot. `surface.slices`, `reuse_ages`, and `degraded_ages` return Python list snapshots, not mutable views of the native state.
 
 Expiries are year fractions, IVs are decimal volatilities, and evaluator argument `k` is forward log-moneyness, `log(strike / forward)`. The result also exposes solver counts, quality metrics, `timings`, and `fallback_reason_counts`. `WarmOptions` exposes `quote_tol` and `quote_cap`; the deprecated C++ `loss_tol` setting is not exposed.
@@ -52,6 +56,8 @@ Expiries are year fractions, IVs are decimal volatilities, and evaluator argumen
 Calibration releases the GIL. Do not mutate any input `Quotes` container or `WarmOptions` object while a calibration is reading it. Separate calls can run from Python threads with immutable inputs.
 
 For development, use `uv pip install --python .venv/bin/python -e '.[test]'`. Rerun that command after changing C++ sources.
+
+Native and NumPy test dependencies are loaded during fixture setup, not pytest collection. Collecting tests or running pure-Python modules does not require the extension. Run the package installation step above before the full suite; missing native dependencies are reported as setup errors rather than silently skipped tests.
 
 ### Zero-copy parameters
 

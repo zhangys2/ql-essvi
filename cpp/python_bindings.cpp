@@ -1,12 +1,14 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
 #include <nanobind/stl/bind_vector.h>
+#include <nanobind/stl/filesystem.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 
 #include "calibrator.hpp"
 
 #include <cstddef>
+#include <filesystem>
 #include <limits>
 #include <type_traits>
 
@@ -129,7 +131,9 @@ NB_MODULE(_core, m) {
       .def_ro("runtime_seconds", &CalibrationResult::runtime_seconds)
       .def_ro("error", &CalibrationResult::error);
 
-  m.def("read_quotes", &readQuotes, "path"_a);
+  m.def("read_quotes", [](const std::filesystem::path& path) {
+    return readQuotes(path.string());
+  }, "path"_a);
   m.def("calibrate", &calibrate, nb::arg("quotes").noconvert(),
         nb::call_guard<nb::gil_scoped_release>());
   m.def("calibrate_warm", &calibrateWarm,

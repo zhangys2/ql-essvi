@@ -9,6 +9,7 @@
 #include <memory>
 #include <mutex>
 #include <sstream>
+#include <stdexcept>
 #include <system_error>
 #include <thread>
 #include <type_traits>
@@ -43,7 +44,6 @@ std::vector<std::string> split(const std::string& s) {
   if (!s.empty() && s.back() == ',') r.emplace_back();
   return r;
 }
-double val(const std::string& s) { return s.empty() ? NAN : std::stod(s); }
 
 double secondsSince(Clock::time_point start) {
   return std::chrono::duration<double>(Clock::now() - start).count();
@@ -954,39 +954,72 @@ void finishResult(CalibrationResult& result, Clock::time_point started,
 }  // namespace
 
 std::vector<Quote> readQuotes(const std::string& path) {
-  std::ifstream f(path);
+  std::ifstream file(path);
+  if (!file) throw std::runtime_error(path + ": cannot open quote CSV");
   std::string line;
-  std::getline(f, line);
-  auto h = split(line);
-  std::unordered_map<std::string, size_t> ix;
-  for (size_t i = 0; i < h.size(); ++i) ix[h[i]] = i;
-  const auto weight_column = ix.find("weight");
-  std::vector<Quote> out;
-  while (std::getline(f, line)) {
-    auto v = split(line);
-    if (v.size() < h.size()) continue;
-    try {
-      const bool included = v[ix["included"]] == "true";
-      double weight = 1.0;
-      if (weight_column != ix.end() && weight_column->second < v.size() &&
-          !v[weight_column->second].empty()) {
-        const auto& weight_text = v[weight_column->second];
-        try {
-          std::size_t parsed = 0;
-          weight = std::stod(weight_text, &parsed);
-          if (parsed != weight_text.size()) weight = NAN;
-        } catch (...) {
-          weight = NAN;
-        }
-      }
-      out.push_back({v[ix["quote_id"]], val(v[ix["time_to_expiry"]]),
-                     val(v[ix["forward"]]), val(v[ix["discount_factor"]]),
-                     val(v[ix["strike"]]), val(v[ix["bid_iv"]]),
-                     val(v[ix["ask_iv"]]), val(v[ix["mid_iv"]]), included,
-                     weight});
-    } catch (...) {
-    }
+  if (!std::getline(file, line)) {
+    if (file.bad()) throw std::runtime_error(path + ": cannot read quote CSV");
+    throw std::invalid_argument(path + ": missing quote CSV header");
   }
+  const auto header = split(line);
+  constexpr std::array<const char*, 9> required_columns{
+      "quote_id", "time_to_expiry", "forward", "discount_factor", "strike",
+      "bid_iv", "ask_iv", "mid_iv", "included"};
+  std::array<std::size_t, 9> columns{};
+  for (std::size_t i = 0; i < required_columns.size(); ++i) {
+    const auto column = std::find(header.begin(), header.end(), required_columns[i]);
+    if (column == header.end())
+      throw std::invalid_argument(path + ": missing required column " +
+                                  required_columns[i]);
+    columns[i] = static_cast<std::size_t>(column - header.begin());
+  }
+  const auto weight_column = std::find(header.begin(), header.end(), "weight");
+  const auto weight_index = static_cast<std::size_t>(weight_column - header.begin());
+  std::vector<Quote> out;
+  std::size_t line_number = 1;
+  while (std::getline(file, line)) {
+    ++line_number;
+    const auto fields = split(line);
+    const auto rowError = [&](const std::string& message) {
+      return std::invalid_argument(path + ":" + std::to_string(line_number) +
+                                   ": " + message);
+    };
+    if (fields.size() != header.size())
+      throw rowError("expected " + std::to_string(header.size()) + " columns");
+    const auto& included_text = fields[columns[8]];
+    if (included_text != "true" && included_text != "false")
+      throw rowError("invalid included flag");
+    const bool included = included_text == "true";
+    const auto readNumber = [&](std::size_t column) -> double {
+      const auto& text = fields[columns[column]];
+      if (text.empty() && !included) return NAN;
+      std::size_t parsed = 0;
+      double value;
+      try {
+        value = std::stod(text, &parsed);
+      } catch (const std::logic_error&) {
+        throw rowError(std::string("invalid ") + required_columns[column]);
+      }
+      if (parsed != text.size() || !std::isfinite(value))
+        throw rowError(std::string("invalid ") + required_columns[column]);
+      return value;
+    };
+    double weight = 1.0;
+    if (weight_index < header.size() && !fields[weight_index].empty()) {
+      const auto& text = fields[weight_index];
+      try {
+        std::size_t parsed = 0;
+        weight = std::stod(text, &parsed);
+        if (parsed != text.size()) weight = NAN;
+      } catch (const std::logic_error&) {
+        weight = NAN;
+      }
+    }
+    out.push_back({fields[columns[0]], readNumber(1), readNumber(2),
+                   readNumber(3), readNumber(4), readNumber(5), readNumber(6),
+                   readNumber(7), included, weight});
+  }
+  if (file.bad()) throw std::runtime_error(path + ": cannot read quote CSV");
   return out;
 }
 
