@@ -251,22 +251,28 @@ bool quoteGroupReusable(const std::vector<const Quote*>& current,
   return true;
 }
 
-double meanAbsoluteMidIvMove(const QuoteGroups& current,
-                             const QuoteGroups& previous) {
+double meanAbsoluteMidIvMoveFromPrior(const QuoteGroups& current,
+                                      const Surface& previous) {
   double absolute_move_sum = 0.0;
   std::size_t matched_quotes = 0;
   for (std::size_t group = 0; group < current.expiries.size(); ++group) {
-    const auto* previous_quotes =
-        quoteGroupAt(previous, current.expiries[group]);
-    if (!previous_quotes || previous_quotes->size() != current.slices[group].size())
-      continue;
-    for (std::size_t quote = 0; quote < current.slices[group].size(); ++quote) {
-      const auto& now = *current.slices[group][quote];
-      const auto& before = *(*previous_quotes)[quote];
-      if (now.id != before.id || !std::isfinite(now.mid_iv) ||
-          !std::isfinite(before.mid_iv))
+    const double expiry = current.expiries[group];
+    const Slice* prior = surfaceSliceAt(previous, expiry);
+    if (!prior || !(expiry > 0.0) || !std::isfinite(expiry)) continue;
+    for (const Quote* quote : current.slices[group]) {
+      const auto& now = *quote;
+      if (!std::isfinite(now.mid_iv) || !(now.forward > 0.0) ||
+          !std::isfinite(now.forward) || !(now.strike > 0.0) ||
+          !std::isfinite(now.strike))
         continue;
-      absolute_move_sum += std::abs(now.mid_iv - before.mid_iv);
+      const double k = std::log(now.strike / now.forward);
+      const double total_variance = sliceTotalVariance(*prior, k);
+      if (!std::isfinite(k) || !(total_variance > 0.0) ||
+          !std::isfinite(total_variance))
+        continue;
+      const double prior_iv = std::sqrt(total_variance / expiry);
+      if (!std::isfinite(prior_iv)) continue;
+      absolute_move_sum += std::abs(now.mid_iv - prior_iv);
       ++matched_quotes;
     }
   }
@@ -1299,8 +1305,9 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
           has_previous &&
           previous_result->fallback_slices * 2 > previous_surface.slices.size();
       const double mean_absolute_move =
-          has_previous ? meanAbsoluteMidIvMove(current_groups, previous_groups)
-                       : 0.0;
+          has_previous
+              ? meanAbsoluteMidIvMoveFromPrior(current_groups, previous_surface)
+              : 0.0;
       const bool skip_local_for_large_move =
           prior_fallback_majority &&
           mean_absolute_move >= kFastScenarioMeanAbsoluteMove;

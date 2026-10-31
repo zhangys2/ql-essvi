@@ -255,8 +255,12 @@ void perQuoteGateChecksSingleOutlierAgainstColdReference() {
   assert(options.quote_cap == 0.1);
   options.quote_tol = 0.01;
   options.quote_cap = 0.1;
+  auto covariance_prior = previous;
+  const std::array<double, 6> prior_covariance{0.4, 0.0, 0.0, 0.6, 0.0, 0.8};
+  for (auto& covariance : covariance_prior.posterior_covariances)
+    covariance = prior_covariance;
   const auto warm = essvi::calibrateWarm(
-      current_quotes, &previous, previous_quotes, options);
+      current_quotes, &covariance_prior, previous_quotes, options);
   assert(warm.converged);
   assert(warm.quality_checks > 0);
   assert(warm.slices_refit > 0);
@@ -265,10 +269,16 @@ void perQuoteGateChecksSingleOutlierAgainstColdReference() {
   assert(warm.fallback_reason_counts.loss_above_gate > 0);
   assert(warm.path == essvi::CalibrationPath::fallback);
   checkPosteriorCovariances(warm);
+  const std::array<double, 6> predicted_covariance{
+      0.41, 0.0, 0.0, 5.6, 0.0, 5.8};
+  for (const auto& covariance : warm.posterior_covariances)
+    for (std::size_t entry = 0; entry < covariance.size(); ++entry)
+      assert(std::abs(covariance[entry] - predicted_covariance[entry]) < 1e-12);
   essvi::WarmOptions different_legacy_tolerance = options;
   different_legacy_tolerance.loss_tol = 1e6;
   const auto same_gate = essvi::calibrateWarm(
-      current_quotes, &previous, previous_quotes, different_legacy_tolerance);
+      current_quotes, &covariance_prior, previous_quotes,
+      different_legacy_tolerance);
   assert(same_gate.converged);
   sameParameters(warm.surface, same_gate.surface);
   assert(warm.quality_checks == same_gate.quality_checks);
@@ -476,6 +486,9 @@ void failedCalendarRepairKeepsPosteriorFeasible() {
   assert(essvi::validate(warm.surface).empty());
   assert(warm.fallback_reason_counts.calendar_repair_failed == 1);
   assert(warm.surface.slices.size() == previous.surface.slices.size());
+  assert(warm.surface.slices[1].theta == old_next.theta);
+  assert(warm.surface.slices[1].psi == old_next.psi);
+  assert(warm.surface.slices[1].rho == old_next.rho);
   assert(essvi::calendarSafe(warm.surface.slices[0],
                             warm.surface.slices[1]));
   checkDenseGrid(warm.surface);
@@ -928,6 +941,26 @@ void constrainedPosteriorModeUsesGaussianPriorAndIgnoresPreviousQuotes() {
   sameParameters(diffuse.surface, changed_history.surface);
   assert(diffuse.objective == changed_history.objective);
   checkDenseGrid(diffuse.surface);
+
+  auto fallback_majority_prior = previous;
+  fallback_majority_prior.fallback_slices = 1;
+  auto shifted_history_mids = previous_quotes;
+  for (auto& quote : shifted_history_mids) quote.mid_iv += 0.2;
+  auto history_options = options;
+  history_options.quote_cap = 0.1;
+  const auto original_history_result = essvi::calibrateWarm(
+      current_quotes, &fallback_majority_prior, previous_quotes,
+      history_options);
+  const auto shifted_history_result = essvi::calibrateWarm(
+      current_quotes, &fallback_majority_prior, shifted_history_mids,
+      history_options);
+  assert(original_history_result.converged && shifted_history_result.converged);
+  assert(original_history_result.local_solver_slices > 0);
+  assert(original_history_result.local_solver_slices ==
+         shifted_history_result.local_solver_slices);
+  sameParameters(original_history_result.surface,
+                 shifted_history_result.surface);
+  assert(original_history_result.objective == shifted_history_result.objective);
 }
 
 void covarianceStateIsAlignedAndInvalidStateColdStarts() {
@@ -986,6 +1019,23 @@ void covarianceStateIsAlignedAndInvalidStateColdStarts() {
   assert(absent.surface.slices.front().rho ==
          cold.surface.slices.front().rho);
   checkPosteriorCovariances(absent);
+
+  auto mismatched_expiry = previous;
+  assert(mismatched_expiry.posterior_covariances.front() == cold_diagonal);
+  mismatched_expiry.surface.slices.front().expiry *= 0.5;
+  const auto unmatched = essvi::calibrateWarm(
+      previous_quotes, &mismatched_expiry, previous_quotes);
+  assert(unmatched.converged);
+  assert(unmatched.surface.slices.front().expiry ==
+         previous.surface.slices.front().expiry);
+  assert(unmatched.surface.slices.front().theta ==
+         cold.surface.slices.front().theta);
+  assert(unmatched.surface.slices.front().psi ==
+         cold.surface.slices.front().psi);
+  assert(unmatched.surface.slices.front().rho ==
+         cold.surface.slices.front().rho);
+  assert(unmatched.posterior_covariances.front() == cold_diagonal);
+  checkPosteriorCovariances(unmatched);
 }
 
 }  // namespace
