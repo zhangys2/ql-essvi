@@ -12,6 +12,8 @@
 
 namespace {
 
+void checkPosteriorCovariances(const essvi::CalibrationResult& result);
+
 double normalizedCall(double forward, double strike, double variance) {
   if (variance <= 0.0) return std::max(forward - strike, 0.0);
   const double root = std::sqrt(variance);
@@ -265,6 +267,7 @@ void perQuoteGateChecksSingleOutlierAgainstColdReference() {
   assert(warm.fallback_slices > 0);
   assert(warm.fallback_reason_counts.loss_above_gate > 0);
   assert(warm.path == essvi::CalibrationPath::fallback);
+  checkPosteriorCovariances(warm);
   assert(warm.objective <= cold.objective * 1.05 + 1e-12);
   essvi::WarmOptions different_legacy_tolerance = options;
   different_legacy_tolerance.loss_tol = 1e6;
@@ -842,6 +845,9 @@ void covarianceStateIsAlignedAndInvalidStateColdStarts() {
   const auto previous = essvi::calibrate(previous_quotes);
   assert(previous.converged);
   checkPosteriorCovariances(previous);
+  const std::array<double, 6> cold_diagonal{0.25, 0.0, 0.0, 0.25, 0.0, 0.25};
+  for (const auto& covariance : previous.posterior_covariances)
+    assert(covariance == cold_diagonal);
 
   const auto warm = essvi::calibrateWarm(previous_quotes, &previous,
                                           previous_quotes);
@@ -850,10 +856,14 @@ void covarianceStateIsAlignedAndInvalidStateColdStarts() {
 
   const auto& cold = previous;
   auto malformed = previous;
-  malformed.posterior_covariances.front()[0] = -1.0;
+  for (auto& covariance : malformed.posterior_covariances)
+    covariance[0] = -1.0;
   const auto invalid = essvi::calibrateWarm(previous_quotes, &malformed,
                                              previous_quotes);
   assert(invalid.converged);
+  assert(invalid.path == essvi::CalibrationPath::cold);
+  assert(invalid.slices_reused == 0);
+  assert(invalid.slices_refit == invalid.surface.slices.size());
   assert(invalid.surface.slices.front().theta ==
          cold.surface.slices.front().theta);
   assert(invalid.surface.slices.front().psi ==
@@ -867,6 +877,9 @@ void covarianceStateIsAlignedAndInvalidStateColdStarts() {
   const auto absent = essvi::calibrateWarm(previous_quotes, &missing,
                                             previous_quotes);
   assert(absent.converged);
+  assert(absent.path == essvi::CalibrationPath::cold);
+  assert(absent.slices_reused == 0);
+  assert(absent.slices_refit == absent.surface.slices.size());
   assert(absent.surface.slices.front().theta ==
          cold.surface.slices.front().theta);
   assert(absent.surface.slices.front().psi ==
