@@ -615,8 +615,9 @@ CalibrationResult fitSliceAtHeadroom(
       const double parameter_scale[3] = {
           std::max(slice.theta * 0.1, 1e-3), 0.1,
           std::max(slice.psi * 0.1, 1e-3)};
-      const double evidence_scale =
-          prior_precision && loss_scale > 0.0 ? 0.5 / loss_scale : 1.0;
+      const double evidence_scale = prior_precision && loss_scale > 0.0
+                                       ? 1.0 / loss_scale
+                                       : 1.0;
       double loss = 0.0;
       score = 0.0;
       double maximum_excess_ratio = 0.0;
@@ -639,7 +640,8 @@ CalibrationResult fitSliceAtHeadroom(
         const double residual =
             variance - std::clamp(variance, quote.bid_variance, quote.ask_variance);
         loss += weight_squared * residual * residual;
-        score += evidence_scale * weight_squared * residual * residual;
+        score += (prior_precision ? 0.5 * evidence_scale : 1.0) *
+                 weight_squared * residual * residual;
         const double quote_width =
             std::max(quote.ask_variance - quote.bid_variance, 1e-6);
         const double excess_ratio = quote.weight * std::abs(residual) / quote_width;
@@ -1052,7 +1054,8 @@ const StateCovariance* posteriorCovarianceAt(
 }
 
 bool priorPrecisionFor(const StateCovariance& covariance,
-                       StateMatrix& precision) {
+                       StateMatrix& precision,
+                       StateCovariance& predicted_covariance) {
   StateMatrix predicted = unpackCovariance(covariance);
   for (int index = 0; index < 3; ++index)
     predicted[index][index] += kStateProcessVariance[index];
@@ -1073,6 +1076,7 @@ bool priorPrecisionFor(const StateCovariance& covariance,
   for (const auto& row : precision)
     for (const double value : row)
       if (!std::isfinite(value)) return false;
+  predicted_covariance = {a, b, c, d, e, f};
   return true;
 }
 
@@ -1749,9 +1753,14 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
         const auto* prior_covariance =
             has_previous ? posteriorCovarianceAt(previous_result, expiry)
                          : nullptr;
+        StateCovariance result_covariance = coldCovariance();
         StateMatrix prior_precision{};
-        if (candidate_from_warm && warm_start && prior_covariance &&
-            priorPrecisionFor(*prior_covariance, prior_precision)) {
+        const bool have_predicted_covariance =
+            prior_covariance && priorPrecisionFor(*prior_covariance,
+                                                  prior_precision,
+                                                  result_covariance);
+        if (candidate_from_warm && warm_start &&
+            have_predicted_covariance) {
           const Slice before = candidate;
           const StateVector prior_mean = stateCoordinates(*warm_start);
           std::uint64_t posterior_bound_calls = 0;
@@ -1780,7 +1789,7 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
           }
         }
         out.surface.slices.push_back(candidate);
-        out.posterior_covariances.push_back(coldCovariance());
+        out.posterior_covariances.push_back(result_covariance);
         out.reuse_ages.push_back(candidate_reused
                                      ? previousReuseAge(expiry) + 1
                                      : 0);

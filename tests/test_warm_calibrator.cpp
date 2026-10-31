@@ -888,6 +888,40 @@ void constrainedPosteriorModeUsesGaussianPriorAndIgnoresPreviousQuotes() {
   const double diffuse_move = std::abs(std::log(
       diffuse.surface.slices.front().theta / prior_slice.theta));
   assert(diffuse_move > concentrated_move + 1e-4);
+  auto scalar_quote = previous_quotes.front();
+  scalar_quote.strike = scalar_quote.forward;
+  const double scalar_bid_variance = prior_slice.theta * 1.125;
+  const double scalar_ask_variance = prior_slice.theta * 1.375;
+  scalar_quote.bid_iv =
+      std::sqrt(scalar_bid_variance / scalar_quote.expiry);
+  scalar_quote.ask_iv =
+      std::sqrt(scalar_ask_variance / scalar_quote.expiry);
+  scalar_quote.mid_iv =
+      0.5 * (scalar_quote.bid_iv + scalar_quote.ask_iv);
+  auto scalar_prior = previous;
+  scalar_prior.posterior_covariances.front() =
+      {1e-5, 0.0, 0.0, 1e-5, 0.0, 1e-5};
+  const auto scalar_mode = essvi::calibrateWarm(
+      {scalar_quote}, &scalar_prior, previous_quotes, options);
+  assert(scalar_mode.converged);
+  const double scalar_width = scalar_ask_variance - scalar_bid_variance;
+  const double predicted_theta_variance = 1e-5 + 1e-2;
+  const auto theta_score_derivative = [&](double theta) {
+    return (theta - scalar_bid_variance) / (scalar_width * scalar_width) +
+           std::log(theta / prior_slice.theta) /
+               (predicted_theta_variance * theta);
+  };
+  double lower = prior_slice.theta, upper = scalar_bid_variance;
+  for (int step = 0; step < 80; ++step) {
+    const double midpoint = 0.5 * (lower + upper);
+    if (theta_score_derivative(midpoint) < 0.0)
+      lower = midpoint;
+    else
+      upper = midpoint;
+  }
+  const double scalar_mode_theta = scalar_mode.surface.slices.front().theta;
+  assert(std::abs(std::log(scalar_mode_theta / (0.5 * (lower + upper)))) <
+         2e-3);
   assert(std::abs(diffuse.objective -
                   rawBandLossForSingleExpiry(current_quotes, diffuse.surface)) <=
          1e-12 * (1.0 + diffuse.objective));
@@ -909,6 +943,15 @@ void covarianceStateIsAlignedAndInvalidStateColdStarts() {
                                           previous_quotes);
   assert(warm.converged);
   checkPosteriorCovariances(warm);
+  const std::array<double, 6> first_prediction{
+      0.26, 0.0, 0.0, 5.25, 0.0, 5.25};
+  assert(warm.posterior_covariances.front() == first_prediction);
+  const auto second_warm = essvi::calibrateWarm(
+      previous_quotes, &warm, previous_quotes);
+  assert(second_warm.converged);
+  const std::array<double, 6> second_prediction{
+      0.27, 0.0, 0.0, 10.25, 0.0, 10.25};
+  assert(second_warm.posterior_covariances.front() == second_prediction);
 
   const auto& cold = previous;
   auto malformed = previous;
