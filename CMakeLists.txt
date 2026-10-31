@@ -114,3 +114,20 @@ if(ESSVI_WITH_QUANTLIB)
     add_test(NAME essvi_ql_tests COMMAND essvi_ql_tests)
   endif()
 endif()
+
+option(ESSVI_BUILD_PYTHON "Build the Python extension" OFF)
+
+if(ESSVI_BUILD_PYTHON)
+  find_package(Python 3.10 REQUIRED
+    COMPONENTS Interpreter Development.Module)
+  find_package(nanobind CONFIG REQUIRED)
+
+  set_target_properties(essvi_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  nanobind_add_module(_core cpp/python_bindings.cpp)
+  target_link_libraries(_core PRIVATE essvi_core)
+  target_compile_options(_core PRIVATE -Wall -Wextra -Wpedantic)
+
+  install(TARGETS _core
+    LIBRARY DESTINATION ql_essvi
+    RUNTIME DESTINATION ql_essvi)
+endif()

@@ -1,16 +1,24 @@
 #include "calibrator.hpp"
 #include <algorithm>
+#include <exception>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <vector>
 
 int main(int argc, char** argv) {
   if (argc != 6) {
     std::cerr << "usage: essvi_fit normalized_quotes.csv parameters.csv fitted_quotes.csv surface_grid.csv diagnostics.csv\n";
     return 2;
   }
-  auto quotes = essvi::readQuotes(argv[1]);
+  std::vector<essvi::Quote> quotes;
+  try {
+    quotes = essvi::readQuotes(argv[1]);
+  } catch (const std::exception& error) {
+    std::cerr << "input error: " << error.what() << '\n';
+    return 1;
+  }
   auto result = essvi::calibrate(quotes);
   essvi::writeDiagnostics(result, argv[5]);
   if (!result.converged) {

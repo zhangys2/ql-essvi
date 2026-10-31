@@ -11,7 +11,7 @@
 
 - Focused tests: `ctest --test-dir build -R <test-name> --output-on-failure` (cwd: repository root; run the build step first)
   - Proven able to fail: yes, 2026-10-16
-- Full suite: `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && .venv/bin/python -m pytest -q` (cwd: repository root; needs `.venv/bin` on PATH for cmake; about 30 s plus build)
+- Full suite: `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && uv pip install --python .venv/bin/python '.[test]' && .venv/bin/python -m pytest -q` (cwd: repository root; needs `.venv/bin` on PATH for cmake; about 30 s plus build)
   - Proven able to fail: yes, 2026-10-16
 - Typecheck/lint: not applicable (the build uses -Wall -Wextra -Wpedantic; no linter is configured)
   - Proven able to fail: unproven

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "nanobind>=3.1"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "ql-essvi"
+version = "0.1.0"
+description = "Python bindings for the eSSVI calibrator"
+readme = "README.md"
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+test = ["pytest>=8", "numpy>=1.23"]
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+cmake.build-type = "Release"
+build-dir = "build/python/{wheel_tag}"
+build.targets = ["_core"]
+wheel.packages = ["src/ql_essvi"]
+sdist.exclude = ["build-cm/**"]
+
+[tool.scikit-build.cmake.define]
+ESSVI_BUILD_PYTHON = "ON"
+ESSVI_WITH_QUANTLIB = "OFF"
+ESSVI_NATIVE_OPTIMIZATION = "OFF"
+BUILD_SHARED_LIBS = "OFF"
+BUILD_TESTING = "OFF"
