@@ -2,11 +2,20 @@
 
 ## State
 
-- Current: draft
-- Last transition: none
-- At: 2026-10-31
-- Reason/evidence: Sequential implementation slice under the user-approved parent spec; depends on EBA-2 covariance state.
-- Blocker: EBA-2
+- Current: implementing
+- Last transition: baseline-passed -> implementing
+- At: 2026-10-31T14:08:51Z
+- Reason/evidence: Baseline passed; `calibrateWarm` and `CalibrationResult` public seam confirmed for prior influence, feasibility, and raw-objective behavior.
+- Blocker: None
+
+## State history
+
+| At | Transition | Evidence |
+|---|---|---|
+| 2026-10-31T14:06:25Z | draft -> ready | Approved parent spec; EBA-2 finished at `f2335ed4b26e4c9275f8f85a27f163502740df0b`; EBA-3 acceptance criteria and test plan are settled. |
+| 2026-10-31T14:07:20Z | ready -> baseline-checking | Claimed branch `delivery/essvi-bayesian-update/EBA-3`; baseline worktree `/tmp/ql-essvi-eba3-baseline` is detached at the declared base. |
+| 2026-10-31T14:08:18Z | baseline-checking -> baseline-passed | Exact-base checkout at `f2335ed4b26e4c9275f8f85a27f163502740df0b` passed the configured Release build, CTest 6/6, and pytest 81/81. |
+| 2026-10-31T14:08:51Z | baseline-passed -> implementing | Baseline timeline row recorded; public `calibrateWarm`/`CalibrationResult` seam confirmed. |
 
 ## Claim
 
@@ -61,6 +70,12 @@ Use the exact-expiry previous mean and usable covariance as a Gaussian prior in 
 
 | At | Phase | Command | CWD | Commit | Result | Evidence |
 |---|---|---|---|---|---|---|
+| 2026-10-31T14:08:18Z | Baseline | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && uv pip install --python .venv/bin/python '.[test]' && .venv/bin/python -m pytest -q` | `/tmp/ql-essvi-eba3-baseline` | `f2335ed4b26e4c9275f8f85a27f163502740df0b` | passed | Release build; CTest 6/6; pytest 81/81. |
+| 2026-10-31T14:09:51Z | Red | `cmake --build build --target essvi_warm_calibrator_tests -j2 && ctest --test-dir build -R essvi_warm_calibrator_tests --output-on-failure` | primary checkout | `f2335ed4b26e4c9275f8f85a27f163502740df0b` + test-only working tree | expected failure (exit 8) | `constrainedPosteriorModeUsesGaussianPrior` failed because diffuse prior movement did not exceed concentrated movement; covariance currently does not influence the fitted surface (DEC-002, with DEC-001 band evidence). |
+| 2026-10-31T14:15:50Z | Green | `cmake --build build --target essvi_warm_calibrator_tests -j2 && ctest --test-dir build -R essvi_warm_calibrator_tests --output-on-failure` | primary checkout | `f2335ed4b26e4c9275f8f85a27f163502740df0b` + implementation working tree | passed | Constrained warm MAP now responds to concentrated versus diffuse transformed-state covariance; current-only band evidence is used and `CalibrationResult::objective` matches independently computed raw band loss. Prior covariance prediction adds one process-noise step; hard feasibility and quote cap gate every accepted step. |
+| 2026-10-31T14:15:50Z | Green | Same focused warm CTest command | primary checkout | implementation working tree | passed | Varying only `previous_quotes` bid/ask/mid values while holding the prior result and current quotes fixed leaves the fitted surface and raw objective unchanged. |
+| 2026-10-31T14:15:50Z | Refactor | Same focused warm CTest command | primary checkout | implementation working tree | passed | Replaced stale exact-reuse/raw-loss-versus-cold assertions with public invariants: cap acceptance, slice accounting, strict calendar feasibility, dense-grid feasibility, deterministic repeats, and raw-objective consistency. |
+| 2026-10-31T14:38:05Z | Refactor/Green | `cmake --build build --target essvi_warm_calibrator_tests -j2 && ctest --test-dir build -R essvi_warm_calibrator_tests --output-on-failure` | primary checkout | implementation working tree | passed | Reused the existing constrained LM for Gaussian posterior scoring; covariance influence, previous_quotes independence, raw objective, quote-cap, and feasibility regressions passed. |
 
 ## Review dispositions
 
@@ -69,8 +84,8 @@ Use the exact-expiry previous mean and usable covariance as a Gaussian prior in 
 
 ## Delivery record
 
-- Base commit: set when EBA-2 is implemented and committed
-- Baseline status: pending
+- Base commit: `f2335ed4b26e4c9275f8f85a27f163502740df0b`
+- Baseline status: passed
 - Branch: `delivery/essvi-bayesian-update/EBA-3`
-- Worktree: primary checkout
+- Worktree: primary checkout; clean detached baseline checkout at `/tmp/ql-essvi-eba3-baseline`
 - GitHub Issue: none (local tracker)

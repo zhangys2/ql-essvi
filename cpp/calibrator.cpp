@@ -478,11 +478,17 @@ struct RhoCandidate {
   int evaluations{};
 };
 
-CalibrationResult fitSliceAtHeadroom(const std::vector<PreparedQuote>& qs, double t,
-                           const Slice* prev, RhoWorkerPool& rho_workers,
-                           const Slice* warm_start,
-                           const Slice* restricted_center,
-                           double quote_cap, double calendar_headroom) {
+using StateVector = std::array<double, 3>;
+using StateMatrix = std::array<std::array<double, 3>, 3>;
+using StateCovariance = std::array<double, 6>;
+constexpr StateVector kStateProcessVariance{1e-2, 5.0, 5.0};
+
+CalibrationResult fitSliceAtHeadroom(
+    const std::vector<PreparedQuote>& qs, double t, const Slice* prev,
+    RhoWorkerPool& rho_workers, const Slice* warm_start,
+    const Slice* restricted_center, double quote_cap, double calendar_headroom,
+    const StateVector* prior_mean = nullptr,
+    const StateMatrix* prior_precision = nullptr, double loss_scale = 0.0) {
   CalibrationResult out;
   const auto atm = [&] {
     Atm result = nearestAtm(qs, t);
@@ -600,26 +606,25 @@ CalibrationResult fitSliceAtHeadroom(const std::vector<PreparedQuote>& qs, doubl
   if (warm_start) {
     BoundMemo safe_bound(false);
     const auto lossAndNormal = [&](const Slice& slice, double normal[3][3],
-                                   double gradient[3]) {
+                                   double gradient[3], double& score) {
       for (int row = 0; row < 3; ++row) {
         gradient[row] = 0.0;
         for (int column = 0; column < 3; ++column)
           normal[row][column] = 0.0;
       }
-
       const double parameter_scale[3] = {
           std::max(slice.theta * 0.1, 1e-3), 0.1,
           std::max(slice.psi * 0.1, 1e-3)};
+      const double evidence_scale =
+          prior_precision && loss_scale > 0.0 ? 0.5 / loss_scale : 1.0;
       double loss = 0.0;
+      score = 0.0;
       double maximum_excess_ratio = 0.0;
       for (const auto& quote : qs) {
         if (!quote.has_band) continue;
         const double weight_squared = quote.weight * quote.weight;
-        const double theta = slice.theta;
-        const double rho = slice.rho;
-        const double psi = slice.psi;
-        const double k = quote.k;
-        const double a = psi * k + rho * theta;
+        const double theta = slice.theta, rho = slice.rho, psi = slice.psi;
+        const double k = quote.k, a = psi * k + rho * theta;
         const double d = std::sqrt(std::max(
             1e-30, a * a + theta * theta * (1.0 - rho * rho)));
         const double jacobian[3] = {
@@ -634,6 +639,7 @@ CalibrationResult fitSliceAtHeadroom(const std::vector<PreparedQuote>& qs, doubl
         const double residual =
             variance - std::clamp(variance, quote.bid_variance, quote.ask_variance);
         loss += weight_squared * residual * residual;
+        score += evidence_scale * weight_squared * residual * residual;
         const double quote_width =
             std::max(quote.ask_variance - quote.bid_variance, 1e-6);
         const double excess_ratio = quote.weight * std::abs(residual) / quote_width;
@@ -643,27 +649,52 @@ CalibrationResult fitSliceAtHeadroom(const std::vector<PreparedQuote>& qs, doubl
                 : INFINITY;
         if (residual == 0.0) continue;
         for (int row = 0; row < 3; ++row) {
-          gradient[row] += weight_squared * scaled_jacobian[row] * residual;
+          gradient[row] += weight_squared * evidence_scale *
+                           scaled_jacobian[row] * residual;
           for (int column = 0; column < 3; ++column)
-            normal[row][column] += weight_squared * scaled_jacobian[row] *
-                                   scaled_jacobian[column];
+            normal[row][column] += weight_squared * evidence_scale *
+                                   scaled_jacobian[row] * scaled_jacobian[column];
         }
+      }
+      if (prior_precision) {
+        const StateVector delta{std::log(slice.theta) - (*prior_mean)[0],
+                                std::atanh(slice.rho) - (*prior_mean)[1],
+                                std::log(slice.psi) - (*prior_mean)[2]};
+        const StateVector state_scale{
+            parameter_scale[0] / slice.theta,
+            parameter_scale[1] / (1.0 - slice.rho * slice.rho),
+            parameter_scale[2] / slice.psi};
+        for (int row = 0; row < 3; ++row)
+          for (int column = 0; column < 3; ++column) {
+            score += 0.5 * delta[row] * (*prior_precision)[row][column] *
+                     delta[column];
+            gradient[row] += state_scale[row] *
+                             (*prior_precision)[row][column] * delta[column];
+            normal[row][column] += state_scale[row] *
+                                   (*prior_precision)[row][column] *
+                                   state_scale[column];
+          }
       }
       return std::pair<double, double>{loss, maximum_excess_ratio};
     };
 
-    // Keep the best raw-loss candidate and the best gate-passing candidate separately.
+    // Compare posterior scores while preserving the raw result objective.
     Slice best_quote_cap_candidate{};
+    double best_score = INFINITY;
+    double best_quote_cap_score = INFINITY;
     double best_quote_cap_loss = INFINITY;
     bool have_quote_cap_candidate = false;
     const auto considerLocalCandidate = [&](const Slice& candidate, double loss,
+                                            double score,
                                             double maximum_excess_ratio) {
-      if (loss < bestz) {
+      if (score < best_score) {
+        best_score = score;
         bestz = loss;
         best = candidate;
       }
       if (std::isfinite(maximum_excess_ratio) &&
-          !(maximum_excess_ratio > quote_cap) && loss < best_quote_cap_loss) {
+          !(maximum_excess_ratio > quote_cap) && score < best_quote_cap_score) {
+        best_quote_cap_score = score;
         best_quote_cap_loss = loss;
         best_quote_cap_candidate = candidate;
         have_quote_cap_candidate = true;
@@ -676,9 +707,18 @@ CalibrationResult fitSliceAtHeadroom(const std::vector<PreparedQuote>& qs, doubl
     const auto incumbent_calendar =
         calendarBounds(prev, t, incumbent.rho, calendar_headroom);
     if (pairSafe(incumbent, incumbent_bound, incumbent_calendar)) {
-      bestz = bandLoss(incumbent, qs);
+      if (prior_precision) {
+        double normal[3][3], gradient[3];
+        const auto evaluation =
+            lossAndNormal(incumbent, normal, gradient, best_score);
+        bestz = evaluation.first;
+      } else {
+        bestz = bandLoss(incumbent, qs);
+        best_score = bestz;
+      }
       best = incumbent;
       if (passesQuoteCap(incumbent, qs, quote_cap)) {
+        best_quote_cap_score = best_score;
         best_quote_cap_loss = bestz;
         best_quote_cap_candidate = incumbent;
         have_quote_cap_candidate = true;
@@ -729,12 +769,14 @@ CalibrationResult fitSliceAtHeadroom(const std::vector<PreparedQuote>& qs, doubl
       ++out.local_solver_starts;
       double normal[3][3];
       double gradient[3];
+      double current_score = INFINITY;
       const auto current_evaluation =
-          lossAndNormal(current, normal, gradient);
+          lossAndNormal(current, normal, gradient, current_score);
       double current_loss = current_evaluation.first;
-      considerLocalCandidate(current, current_loss, current_evaluation.second);
+      considerLocalCandidate(current, current_loss, current_score,
+                             current_evaluation.second);
       ++evals;
-      if (current_loss == 0.0) break;
+      if (current_score == 0.0) break;
 
       const int starts_remaining =
           static_cast<int>(rho_offsets.size() - start_index);
@@ -743,7 +785,7 @@ CalibrationResult fitSliceAtHeadroom(const std::vector<PreparedQuote>& qs, doubl
       double damping = 1e-6;
       for (int iteration = 0;
            iteration < 12 && evals < start_evaluation_limit &&
-           theta_min < 5.0 && current_loss > 0.0;
+           theta_min < 5.0 && current_score > 0.0;
            ++iteration) {
         double matrix[3][4]{};
         for (int row = 0; row < 3; ++row) {
@@ -788,6 +830,7 @@ CalibrationResult fitSliceAtHeadroom(const std::vector<PreparedQuote>& qs, doubl
             std::max(current.psi * 0.1, 1e-3)};
         Slice selected = current;
         double selected_loss = current_loss;
+        double selected_score = current_score;
         double selected_normal[3][3];
         double selected_gradient[3];
         bool found_improvement = false;
@@ -821,14 +864,17 @@ CalibrationResult fitSliceAtHeadroom(const std::vector<PreparedQuote>& qs, doubl
 
           double trial_normal[3][3];
           double trial_gradient[3];
+          double trial_score = INFINITY;
           const auto trial_evaluation =
-              lossAndNormal(trial, trial_normal, trial_gradient);
+              lossAndNormal(trial, trial_normal, trial_gradient, trial_score);
           const double trial_loss = trial_evaluation.first;
-          considerLocalCandidate(trial, trial_loss, trial_evaluation.second);
+          considerLocalCandidate(trial, trial_loss, trial_score,
+                                 trial_evaluation.second);
           ++evals;
-          if (trial_loss < current_loss) {
+          if (trial_score < current_score) {
             selected = trial;
             selected_loss = trial_loss;
+            selected_score = trial_score;
             for (int row = 0; row < 3; ++row) {
               selected_gradient[row] = trial_gradient[row];
               for (int column = 0; column < 3; ++column)
@@ -846,20 +892,18 @@ CalibrationResult fitSliceAtHeadroom(const std::vector<PreparedQuote>& qs, doubl
 
         current = selected;
         current_loss = selected_loss;
+        current_score = selected_score;
         for (int row = 0; row < 3; ++row) {
           gradient[row] = selected_gradient[row];
           for (int column = 0; column < 3; ++column)
             normal[row][column] = selected_normal[row][column];
         }
         damping = std::max(damping * 0.3, 1e-12);
-        if (current_loss < bestz) {
-          bestz = current_loss;
-          best = current;
-        }
       }
-      if (bestz == 0.0) break;
+      if (best_score == 0.0) break;
     }
     if (have_quote_cap_candidate) {
+      best_score = best_quote_cap_score;
       bestz = best_quote_cap_loss;
       best = best_quote_cap_candidate;
     }
@@ -907,15 +951,14 @@ CalibrationResult fitSliceAtHeadroom(const std::vector<PreparedQuote>& qs, doubl
   out.converged = out.error.empty();
   return out;
 }
-CalibrationResult fitSlice(const std::vector<PreparedQuote>& qs, double t,
-                           const Slice* prev, RhoWorkerPool& rho_workers,
-                           const Slice* warm_start = nullptr,
-                           const Slice* restricted_center = nullptr,
-                           double quote_cap = INFINITY,
-                           double* used_calendar_headroom = nullptr) {
+CalibrationResult fitSlice(
+    const std::vector<PreparedQuote>& qs, double t, const Slice* prev,
+    RhoWorkerPool& rho_workers, const Slice* warm_start = nullptr,
+    const Slice* restricted_center = nullptr, double quote_cap = INFINITY,
+    double* used_calendar_headroom = nullptr) {
   if (used_calendar_headroom) *used_calendar_headroom = 0.0;
-  auto strict = fitSliceAtHeadroom(qs, t, prev, rho_workers, warm_start,
-                                   restricted_center, quote_cap, 0.0);
+  auto strict = fitSliceAtHeadroom(
+      qs, t, prev, rho_workers, warm_start, restricted_center, quote_cap, 0.0);
   if (!prev || !strict.converged) return strict;
 
   const Slice& strict_candidate = strict.surface.slices.front();
@@ -952,8 +995,6 @@ void finishResult(CalibrationResult& result, Clock::time_point started,
   result.runtime_seconds = secondsSince(started);
 }
 
-using StateMatrix = std::array<std::array<double, 3>, 3>;
-using StateCovariance = std::array<double, 6>;
 constexpr double kColdStateVariance = 0.25;
 
 StateMatrix unpackCovariance(const StateCovariance& packed) {
@@ -1008,6 +1049,35 @@ const StateCovariance* posteriorCovarianceAt(
     return validCovariance(covariance) ? &covariance : nullptr;
   }
   return nullptr;
+}
+
+bool priorPrecisionFor(const StateCovariance& covariance,
+                       StateMatrix& precision) {
+  StateMatrix predicted = unpackCovariance(covariance);
+  for (int index = 0; index < 3; ++index)
+    predicted[index][index] += kStateProcessVariance[index];
+  const double a = predicted[0][0], b = predicted[0][1];
+  const double c = predicted[0][2], d = predicted[1][1];
+  const double e = predicted[1][2], f = predicted[2][2];
+  const double determinant = a * (d * f - e * e) -
+                             b * (b * f - c * e) +
+                             c * (b * e - c * d);
+  if (!(determinant > 0.0) || !std::isfinite(determinant)) return false;
+  precision = {{{
+      (d * f - e * e) / determinant, (c * e - b * f) / determinant,
+      (b * e - c * d) / determinant},
+      {(c * e - b * f) / determinant, (a * f - c * c) / determinant,
+       (b * c - a * e) / determinant},
+      {(b * e - c * d) / determinant, (b * c - a * e) / determinant,
+       (a * d - b * b) / determinant}}};
+  for (const auto& row : precision)
+    for (const double value : row)
+      if (!std::isfinite(value)) return false;
+  return true;
+}
+
+StateVector stateCoordinates(const Slice& slice) {
+  return {std::log(slice.theta), std::atanh(slice.rho), std::log(slice.psi)};
 }
 }  // namespace
 
@@ -1676,6 +1746,39 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
           return out;
         }
   
+        const auto* prior_covariance =
+            has_previous ? posteriorCovarianceAt(previous_result, expiry)
+                         : nullptr;
+        StateMatrix prior_precision{};
+        if (candidate_from_warm && warm_start && prior_covariance &&
+            priorPrecisionFor(*prior_covariance, prior_precision)) {
+          const Slice before = candidate;
+          const StateVector prior_mean = stateCoordinates(*warm_start);
+          std::uint64_t posterior_bound_calls = 0;
+          CalibrationResult posterior;
+          {
+            detail::MmBoundCallScope posterior_bound_scope(
+                &posterior_bound_calls);
+            posterior = fitSliceAtHeadroom(
+                plan.prepared, expiry, previous_slice, rho_workers, &before,
+                nullptr, options.quote_cap, candidate_headroom, &prior_mean,
+                &prior_precision, plan.loss_scale);
+          }
+          out.iterations += posterior.iterations;
+          out.fallback_reason_counts.bound_check_failed +=
+              posterior.fallback_reason_counts.bound_check_failed;
+          bound_calls += posterior_bound_calls;
+          if (posterior.converged &&
+              passesQuoteCap(posterior.surface.slices.front(), plan.prepared,
+                             options.quote_cap)) {
+            candidate = posterior.surface.slices.front();
+            candidate_reused = candidate_reused &&
+                               candidate.theta == before.theta &&
+                               candidate.psi == before.psi &&
+                               candidate.rho == before.rho;
+            candidate_loss = bandLoss(candidate, plan.prepared);
+          }
+        }
         out.surface.slices.push_back(candidate);
         out.posterior_covariances.push_back(coldCovariance());
         out.reuse_ages.push_back(candidate_reused
