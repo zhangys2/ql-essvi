@@ -76,6 +76,7 @@ Use the exact-expiry previous mean and usable covariance as a Gaussian prior in 
 | 2026-10-31T14:15:50Z | Green | Same focused warm CTest command | primary checkout | implementation working tree | passed | Varying only `previous_quotes` bid/ask/mid values while holding the prior result and current quotes fixed leaves the fitted surface and raw objective unchanged. |
 | 2026-10-31T14:15:50Z | Refactor | Same focused warm CTest command | primary checkout | implementation working tree | passed | Replaced stale exact-reuse/raw-loss-versus-cold assertions with public invariants: cap acceptance, slice accounting, strict calendar feasibility, dense-grid feasibility, deterministic repeats, and raw-objective consistency. |
 | 2026-10-31T14:38:05Z | Refactor/Green | `cmake --build build --target essvi_warm_calibrator_tests -j2 && ctest --test-dir build -R essvi_warm_calibrator_tests --output-on-failure` | primary checkout | implementation working tree | passed | Reused the existing constrained LM for Gaussian posterior scoring; covariance influence, previous_quotes independence, raw objective, quote-cap, and feasibility regressions passed. |
+| 2026-10-31T14:40:39Z | Final | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && uv pip install --python .venv/bin/python '.[test]' && .venv/bin/python -m pytest -q` | primary checkout | `6cc0213415f5885e0f6a5e970d123cae3f50b9e3` | passed | Release build; CTest 6/6; pytest 81/81. |
 
 ## Review dispositions
 
@@ -87,5 +88,5 @@ Use the exact-expiry previous mean and usable covariance as a Gaussian prior in 
 - Base commit: `f2335ed4b26e4c9275f8f85a27f163502740df0b`
 - Baseline status: passed
 - Branch: `delivery/essvi-bayesian-update/EBA-3`
-- Worktree: primary checkout; clean detached baseline checkout at `/tmp/ql-essvi-eba3-baseline`
+- Worktree: primary checkout
 - GitHub Issue: none (local tracker)
