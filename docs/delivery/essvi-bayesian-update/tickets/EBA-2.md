@@ -2,11 +2,18 @@
 
 ## State
 
-- Current: draft
-- Last transition: none
-- At: 2026-10-31
-- Reason/evidence: First sequential implementation slice under the user-approved constrained Bayesian eSSVI spec and selected ticket split.
+- Current: baseline-checking
+- Last transition: ready -> baseline-checking
+- At: 2026-10-31T13:26:02+00:00
+- Reason/evidence: Claimed on branch `delivery/essvi-bayesian-update/EBA-2`; primary checkout at the exact ticket base commit.
 - Blocker: None
+
+## State history
+
+| At | Transition | Evidence |
+|---|---|---|
+| 2026-10-31T13:26:02+00:00 | draft -> ready | Approved parent spec and user-selected sequential ticket split. |
+| 2026-10-31T13:26:02+00:00 | ready -> baseline-checking | Claimed branch `delivery/essvi-bayesian-update/EBA-2` in the primary checkout at base `75ff14e`. |
 
 ## Claim
 
@@ -69,7 +76,7 @@ None
 
 ## Delivery record
 
-- Base commit: `497f0c37d27056ec2e6df631c0f570d80fe332f4` (source baseline)
+- Base commit: `75ff14e` (ticket branch base; source is unchanged from `497f0c37d27056ec2e6df631c0f570d80fe332f4`)
 - Baseline status: pending
 - Branch: `delivery/essvi-bayesian-update/EBA-2`
 - Worktree: primary checkout
