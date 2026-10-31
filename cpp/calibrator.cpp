@@ -1059,16 +1059,32 @@ const StateCovariance* posteriorCovarianceAt(
   return nullptr;
 }
 
+bool invertPositiveDefinite(const StateMatrix& matrix, StateMatrix& inverse);
+
 bool priorPrecisionFor(const StateCovariance& covariance,
                        StateMatrix& precision,
                        StateCovariance& predicted_covariance) {
   StateMatrix predicted = unpackCovariance(covariance);
   for (int index = 0; index < 3; ++index)
     predicted[index][index] += kStateProcessVariance[index];
-  StateMatrix lower{};
-  if (!cholesky(predicted, lower)) return false;
+  if (!invertPositiveDefinite(predicted, precision)) return false;
+  predicted_covariance = {predicted[0][0], predicted[0][1],
+                          predicted[0][2], predicted[1][1],
+                          predicted[1][2], predicted[2][2]};
+  return true;
+}
 
-  precision = {};
+StateVector stateCoordinates(const Slice& slice) {
+  return {std::log(slice.theta), std::atanh(slice.rho), std::log(slice.psi)};
+}
+
+// Keep weakly identified transformed-state variances numerically nonzero.
+constexpr double kPosteriorVarianceFloor = 1e-8;
+
+bool invertPositiveDefinite(const StateMatrix& matrix, StateMatrix& inverse) {
+  StateMatrix lower{};
+  if (!cholesky(matrix, lower)) return false;
+  inverse = {};
   for (int column = 0; column < 3; ++column) {
     StateVector forward{};
     StateVector solution{};
@@ -1084,27 +1100,93 @@ bool priorPrecisionFor(const StateCovariance& covariance,
         value -= lower[index][row] * solution[index];
       solution[row] = value / lower[row][row];
     }
-    for (int row = 0; row < 3; ++row)
-      precision[row][column] = solution[row];
+    for (int row = 0; row < 3; ++row) {
+      if (!std::isfinite(solution[row])) return false;
+      inverse[row][column] = solution[row];
+    }
   }
   for (int row = 0; row < 3; ++row)
     for (int column = row + 1; column < 3; ++column) {
       const double symmetric =
-          0.5 * (precision[row][column] + precision[column][row]);
-      precision[row][column] = precision[column][row] = symmetric;
+          0.5 * (inverse[row][column] + inverse[column][row]);
+      inverse[row][column] = inverse[column][row] = symmetric;
     }
-  for (const auto& row : precision)
+  for (const auto& row : inverse)
     for (const double value : row)
       if (!std::isfinite(value)) return false;
-  predicted_covariance = {predicted[0][0], predicted[0][1],
-                          predicted[0][2], predicted[1][1],
-                          predicted[1][2], predicted[2][2]};
   return true;
 }
 
-StateVector stateCoordinates(const Slice& slice) {
-  return {std::log(slice.theta), std::atanh(slice.rho), std::log(slice.psi)};
+StateCovariance packCovariance(const StateMatrix& covariance) {
+  return {covariance[0][0], covariance[0][1], covariance[0][2],
+          covariance[1][1], covariance[1][2], covariance[2][2]};
 }
+
+bool activeQuoteInformation(const Slice& slice,
+                            const std::vector<PreparedQuote>& quotes,
+                            double loss_scale, StateMatrix& information) {
+  information = {};
+  if (!(loss_scale > 0.0) || !std::isfinite(loss_scale)) return false;
+  bool has_active_quote = false;
+  for (const auto& quote : quotes) {
+    if (!quote.has_band) continue;
+    const double variance = sliceTotalVariance(slice, quote.k);
+    if (!std::isfinite(variance) ||
+        (variance >= quote.bid_variance && variance <= quote.ask_variance))
+      continue;
+    const double theta = slice.theta;
+    const double rho = slice.rho;
+    const double psi = slice.psi;
+    const double a = psi * quote.k + rho * theta;
+    const double d = std::sqrt(std::max(
+        1e-30, a * a + theta * theta * (1.0 - rho * rho)));
+    const double state_jacobian[3] = {
+        0.5 * (1.0 + (a * rho + theta * (1.0 - rho * rho)) / d) * theta,
+        0.5 * (psi * quote.k + (a * theta - theta * theta * rho) / d) *
+            (1.0 - rho * rho),
+        0.5 * (rho * quote.k + a * quote.k / d) * psi};
+    const double weight_squared = quote.weight * quote.weight;
+    const double scale = weight_squared / loss_scale;
+    if (!std::isfinite(scale)) return false;
+    for (int row = 0; row < 3; ++row) {
+      if (!std::isfinite(state_jacobian[row])) return false;
+      for (int column = 0; column < 3; ++column) {
+        information[row][column] +=
+            scale * state_jacobian[row] * state_jacobian[column];
+        if (!std::isfinite(information[row][column])) return false;
+      }
+    }
+    has_active_quote = true;
+  }
+  return has_active_quote;
+}
+
+StateCovariance refreshCovariance(
+    const StateCovariance& predicted, const Slice& fitted,
+    const std::vector<PreparedQuote>& quotes, double loss_scale) {
+  StateMatrix information{};
+  if (!activeQuoteInformation(fitted, quotes, loss_scale, information))
+    return predicted;
+
+  StateMatrix precision{};
+  if (!invertPositiveDefinite(unpackCovariance(predicted), precision))
+    return predicted;
+  for (int row = 0; row < 3; ++row)
+    for (int column = 0; column < 3; ++column) {
+      precision[row][column] += information[row][column];
+      if (!std::isfinite(precision[row][column])) return predicted;
+    }
+
+  StateMatrix covariance{};
+  if (!invertPositiveDefinite(precision, covariance)) return predicted;
+  for (int coordinate = 0; coordinate < 3; ++coordinate)
+    covariance[coordinate][coordinate] =
+        std::max(covariance[coordinate][coordinate],
+                 kPosteriorVarianceFloor);
+  const StateCovariance packed = packCovariance(covariance);
+  return validCovariance(packed) ? packed : predicted;
+}
+
 }  // namespace
 
 std::vector<Quote> readQuotes(const std::string& path) {
@@ -1215,9 +1297,12 @@ CalibrationResult calibrate(const std::vector<Quote>& quotes) {
       finishResult(out, started, bound_calls);
       return out;
     }
-    out.surface.slices.push_back(part.surface.slices.front());
+    const Slice& fitted = part.surface.slices.front();
+    out.surface.slices.push_back(fitted);
     out.reuse_ages.push_back(0);
-    out.posterior_covariances.push_back(coldCovariance());
+    out.posterior_covariances.push_back(
+        refreshCovariance(coldCovariance(), fitted, prepared,
+                          bandLossScale(prepared)));
     ++out.slices_refit;
   }
   out.timings.slice_fitting_seconds = secondsSince(fitting_started);
@@ -1297,6 +1382,7 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
         CalibrationResult full_cold_reference;
         bool full_cold_reference_attempted{};
         bool full_cold_budget_exhausted{};
+        bool force_full_cold{};
       };
       std::vector<WarmCandidate> candidates(current_groups.expiries.size());
       const auto previousReuseAge = [&](double expiry) {
@@ -1344,8 +1430,9 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
           -> const CalibrationResult& {
         if (!plan.full_cold_reference_attempted) {
           plan.full_cold_reference_attempted = true;
-          const bool forced =
-              previousDegradedAge(expiry) >= kDegradedAgeBeforeForcedCold;
+          const bool forced = plan.force_full_cold ||
+                              previousDegradedAge(expiry) >=
+                                  kDegradedAgeBeforeForcedCold;
           if (has_previous && !forced &&
               out.full_cold_searches >= kFullColdSearchBudget) {
             plan.full_cold_budget_exhausted = true;
@@ -1369,13 +1456,18 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
         auto& plan = candidates[i];
         plan.prepared = prepareQuotes(current_groups.slices[i]);
         plan.loss_scale = bandLossScale(plan.prepared);
+        const Slice* matched_previous_slice =
+            has_previous ? surfaceSliceAt(previous_surface, expiry) : nullptr;
         const auto* prior_covariance =
             has_previous ? posteriorCovarianceAt(previous_result, expiry)
                          : nullptr;
         if (prior_covariance &&
             priorPrecisionFor(*prior_covariance, plan.prior_precision,
-                              plan.predicted_covariance))
-          plan.warm_start = surfaceSliceAt(previous_surface, expiry);
+                              plan.predicted_covariance)) {
+          plan.warm_start = matched_previous_slice;
+        } else if (matched_previous_slice) {
+          plan.force_full_cold = true;
+        }
         plan.old_previous = previousSliceBefore(expiry);
         if (!plan.warm_start ||
             previousDegradedAge(expiry) >= kDegradedAgeBeforeForcedCold)
@@ -1778,7 +1870,6 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
           return out;
         }
   
-        const StateCovariance result_covariance = plan.predicted_covariance;
         if (candidate_from_warm && warm_start) {
           const Slice before = candidate;
           const StateVector prior_mean = stateCoordinates(*warm_start);
@@ -1807,6 +1898,9 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
             candidate_loss = bandLoss(candidate, plan.prepared);
           }
         }
+        const StateCovariance result_covariance = refreshCovariance(
+            plan.predicted_covariance, candidate, plan.prepared,
+            plan.loss_scale);
         out.surface.slices.push_back(candidate);
         out.posterior_covariances.push_back(result_covariance);
         out.reuse_ages.push_back(candidate_reused

@@ -269,11 +269,6 @@ void perQuoteGateChecksSingleOutlierAgainstColdReference() {
   assert(warm.fallback_reason_counts.loss_above_gate > 0);
   assert(warm.path == essvi::CalibrationPath::fallback);
   checkPosteriorCovariances(warm);
-  const std::array<double, 6> predicted_covariance{
-      0.41, 0.0, 0.0, 5.6, 0.0, 5.8};
-  for (const auto& covariance : warm.posterior_covariances)
-    for (std::size_t entry = 0; entry < covariance.size(); ++entry)
-      assert(std::abs(covariance[entry] - predicted_covariance[entry]) < 1e-12);
   essvi::WarmOptions different_legacy_tolerance = options;
   different_legacy_tolerance.loss_tol = 1e6;
   const auto same_gate = essvi::calibrateWarm(
@@ -840,7 +835,8 @@ void checkPosteriorCovariances(const essvi::CalibrationResult& result) {
     const double f = covariance[5];
     assert(std::isfinite(a) && std::isfinite(b) && std::isfinite(c));
     assert(std::isfinite(d) && std::isfinite(e) && std::isfinite(f));
-    assert(a > 0.0 && a * d - b * b > 0.0);
+    assert(a >= 1e-8 && d >= 1e-8 && f >= 1e-8);
+    assert(a * d - b * b > 0.0);
     assert(a * (d * f - e * e) - b * (b * f - c * e) +
                c * (b * e - c * d) > 0.0);
   }
@@ -1120,25 +1116,42 @@ void covarianceStateIsAlignedAndInvalidStateColdStarts() {
   const auto previous = essvi::calibrate(previous_quotes);
   assert(previous.converged);
   checkPosteriorCovariances(previous);
+  const auto& cold = previous;
+  auto wide_quotes = previous_quotes;
+  for (auto& quote : wide_quotes) {
+    const auto slice = std::find_if(
+        previous.surface.slices.begin(), previous.surface.slices.end(),
+        [&](const essvi::Slice& candidate) { return candidate.expiry == quote.expiry; });
+    assert(slice != previous.surface.slices.end());
+    const double k = std::log(quote.strike / quote.forward);
+    const double fitted_iv = std::sqrt(
+        essvi::sliceTotalVariance(*slice, k) / quote.expiry);
+    quote.bid_iv = std::max(0.001, fitted_iv - 0.2);
+    quote.ask_iv = fitted_iv + 0.2;
+    quote.mid_iv = fitted_iv;
+  }
+  const auto wide_cold = essvi::calibrate(wide_quotes);
+  assert(wide_cold.converged);
   const std::array<double, 6> cold_diagonal{0.25, 0.0, 0.0, 0.25, 0.0, 0.25};
-  for (const auto& covariance : previous.posterior_covariances)
+  for (const auto& covariance : wide_cold.posterior_covariances)
     assert(covariance == cold_diagonal);
 
-  const auto warm = essvi::calibrateWarm(previous_quotes, &previous,
+  const auto warm = essvi::calibrateWarm(wide_quotes, &previous,
                                           previous_quotes);
   assert(warm.converged);
   checkPosteriorCovariances(warm);
-  const std::array<double, 6> first_prediction{
-      0.26, 0.0, 0.0, 5.25, 0.0, 5.25};
-  assert(warm.posterior_covariances.front() == first_prediction);
-  const auto second_warm = essvi::calibrateWarm(
-      previous_quotes, &warm, previous_quotes);
+  const auto add_process_noise = [](std::array<double, 6> covariance) {
+    covariance[0] += 0.01;
+    covariance[3] += 5.0;
+    covariance[5] += 5.0;
+    return covariance;
+  };
+  assert(warm.posterior_covariances.front() ==
+         add_process_noise(previous.posterior_covariances.front()));
+  const auto second_warm = essvi::calibrateWarm(wide_quotes, &warm, wide_quotes);
   assert(second_warm.converged);
-  const std::array<double, 6> second_prediction{
-      0.27, 0.0, 0.0, 10.25, 0.0, 10.25};
-  assert(second_warm.posterior_covariances.front() == second_prediction);
-
-  const auto& cold = previous;
+  assert(second_warm.posterior_covariances.front() ==
+         add_process_noise(warm.posterior_covariances.front()));
   auto malformed = previous;
   for (auto& covariance : malformed.posterior_covariances)
     covariance[0] = -1.0;
@@ -1154,6 +1167,7 @@ void covarianceStateIsAlignedAndInvalidStateColdStarts() {
          cold.surface.slices.front().psi);
   assert(invalid.surface.slices.front().rho ==
          cold.surface.slices.front().rho);
+  assert(invalid.posterior_covariances == cold.posterior_covariances);
   checkPosteriorCovariances(invalid);
 
   auto missing = previous;
@@ -1170,10 +1184,12 @@ void covarianceStateIsAlignedAndInvalidStateColdStarts() {
          cold.surface.slices.front().psi);
   assert(absent.surface.slices.front().rho ==
          cold.surface.slices.front().rho);
+  assert(absent.posterior_covariances == cold.posterior_covariances);
   checkPosteriorCovariances(absent);
 
   auto mismatched_expiry = previous;
-  assert(mismatched_expiry.posterior_covariances.front() == cold_diagonal);
+  assert(mismatched_expiry.posterior_covariances.front() ==
+         cold.posterior_covariances.front());
   mismatched_expiry.surface.slices.front().expiry *= 0.5;
   const auto unmatched = essvi::calibrateWarm(
       previous_quotes, &mismatched_expiry, previous_quotes);
@@ -1186,7 +1202,8 @@ void covarianceStateIsAlignedAndInvalidStateColdStarts() {
          cold.surface.slices.front().psi);
   assert(unmatched.surface.slices.front().rho ==
          cold.surface.slices.front().rho);
-  assert(unmatched.posterior_covariances.front() == cold_diagonal);
+  assert(unmatched.posterior_covariances.front() ==
+         cold.posterior_covariances.front());
   checkPosteriorCovariances(unmatched);
 
   auto large_covariance_prior = previous;
@@ -1209,10 +1226,86 @@ void covarianceStateIsAlignedAndInvalidStateColdStarts() {
   assert(large_covariance_warm.converged);
   assert(std::abs(std::log(large_covariance_warm.surface.slices.front().theta /
                            previous.surface.slices.front().theta)) > 1e-4);
+  bool large_prior_refreshed = false;
   for (const auto& covariance : large_covariance_warm.posterior_covariances)
-    assert(covariance[0] > 1e100 && covariance[3] > 1e100 &&
-           covariance[5] > 1e100);
+    large_prior_refreshed = large_prior_refreshed || covariance[0] < 1e100 ||
+                            covariance[3] < 1e100 || covariance[5] < 1e100;
+  assert(large_prior_refreshed);
   checkPosteriorCovariances(large_covariance_warm);
+}
+
+void activeQuoteInformationRefreshesColdAndWarmCovariance() {
+  const auto previous_quotes = essvi::bench::realisticChain(1, 100, 4);
+  const auto previous = essvi::calibrate(previous_quotes);
+  assert(previous.converged);
+
+  auto prior = previous;
+  prior.posterior_covariances.front() =
+      {0.4, 0.0, 0.0, 0.6, 0.0, 0.8};
+  auto current_quotes = previous_quotes;
+  for (std::size_t index = 0; index < current_quotes.size(); ++index) {
+    auto& quote = current_quotes[index];
+    const double k = std::log(quote.strike / quote.forward);
+    const double fitted_iv = std::sqrt(
+        essvi::sliceTotalVariance(previous.surface.slices.front(), k) /
+        quote.expiry);
+    const double direction = index % 2 == 0 ? 1.0 : -1.0;
+    const double target_iv =
+        fitted_iv + direction * 0.004 * (1.0 + std::abs(k));
+    quote.bid_iv = target_iv;
+    quote.ask_iv = target_iv;
+    quote.mid_iv = target_iv;
+  }
+
+  essvi::WarmOptions options;
+  options.quote_tol = 0.0;
+  options.quote_cap = 1e6;
+  const auto warm = essvi::calibrateWarm(
+      current_quotes, &prior, previous_quotes, options);
+  assert(warm.converged);
+  assert(warm.fallback_slices == 0);
+  checkPosteriorCovariances(warm);
+  const auto& warm_covariance = warm.posterior_covariances.front();
+  assert(warm_covariance[0] < 0.41 || warm_covariance[3] < 5.6 ||
+         warm_covariance[5] < 5.8);
+
+  auto fallback_options = options;
+  fallback_options.quote_cap = 0.1;
+  const auto fallback = essvi::calibrateWarm(
+      current_quotes, &prior, previous_quotes, fallback_options);
+  assert(fallback.converged);
+  assert(fallback.fallback_slices > 0);
+  checkPosteriorCovariances(fallback);
+  const auto& fallback_covariance = fallback.posterior_covariances.front();
+  assert(fallback_covariance[0] < 0.41 || fallback_covariance[3] < 5.6 ||
+         fallback_covariance[5] < 5.8);
+
+  const auto cold = essvi::calibrate(current_quotes);
+  assert(cold.converged);
+  checkPosteriorCovariances(cold);
+  const auto& cold_covariance = cold.posterior_covariances.front();
+  assert(cold_covariance[0] < 0.25 || cold_covariance[3] < 0.25 ||
+         cold_covariance[5] < 0.25);
+  checkDenseGrid(warm.surface);
+  checkDenseGrid(cold.surface);
+}
+
+void unusableMatchedCovarianceForcesColdBeyondOrdinaryBudget() {
+  const auto quotes = essvi::bench::realisticChain(10, 100, 11);
+  const auto calibrated = essvi::calibrate(quotes);
+  assert(calibrated.converged);
+
+  auto unusable = calibrated;
+  for (auto& covariance : unusable.posterior_covariances)
+    covariance[0] = -1.0;
+  const auto result = essvi::calibrateWarm(quotes, &unusable, quotes);
+  assert(result.converged);
+  assert(result.full_cold_searches == 10);
+  assert(result.forced_full_cold_searches == 10);
+  assert(result.slices_refit == 10);
+  assert(result.slices_reused == 0);
+  checkPosteriorCovariances(result);
+  checkDenseGrid(result.surface);
 }
 
 }  // namespace
@@ -1279,6 +1372,8 @@ int main() {
   posteriorModeEscapesLocalWarmRhoWindow();
   multivariatePosteriorMatchesIndependentScore();
   covarianceStateIsAlignedAndInvalidStateColdStarts();
+  activeQuoteInformationRefreshesColdAndWarmCovariance();
+  unusableMatchedCovarianceForcesColdBeyondOrdinaryBudget();
   stagedFallbackBudgetReturnsValidDegradedResults();
   return 0;
 }
