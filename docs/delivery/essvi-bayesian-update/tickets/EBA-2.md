@@ -2,10 +2,10 @@
 
 ## State
 
-- Current: baseline-checking
-- Last transition: ready -> baseline-checking
-- At: 2026-10-31T13:26:02+00:00
-- Reason/evidence: Claimed on branch `delivery/essvi-bayesian-update/EBA-2`; primary checkout at the exact ticket base commit.
+- Current: implementing
+- Last transition: baseline-passed -> implementing
+- At: 2026-10-31T13:28:46+00:00
+- Reason/evidence: Exact-base Release baseline passed; covariance result/API seam confirmed.
 - Blocker: None
 
 ## State history
@@ -13,7 +13,9 @@
 | At | Transition | Evidence |
 |---|---|---|
 | 2026-10-31T13:26:02+00:00 | draft -> ready | Approved parent spec and user-selected sequential ticket split. |
-| 2026-10-31T13:26:02+00:00 | ready -> baseline-checking | Claimed branch `delivery/essvi-bayesian-update/EBA-2` in the primary checkout at base `75ff14e`. |
+| 2026-10-31T13:26:02+00:00 | ready -> baseline-checking | Claimed branch `delivery/essvi-bayesian-update/EBA-2` in the primary checkout. |
+| 2026-10-31T13:28:46+00:00 | baseline-checking -> baseline-passed | Exact-base Release build, CTest 6/6, pytest 80/80 passed at `d7abde372760d8a16427ca4b91cbfed067f893c7`. |
+| 2026-10-31T13:28:46+00:00 | baseline-passed -> implementing | Baseline passed; public C++/Python covariance result seam confirmed. |
 
 ## Claim
 
@@ -68,6 +70,7 @@ None
 
 | At | Phase | Command | CWD | Commit | Result | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-31T13:28:46+00:00 | Baseline | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && uv pip install --python .venv/bin/python '.[test]' && .venv/bin/python -m pytest -q` | repository root | `d7abde372760d8a16427ca4b91cbfed067f893c7` | passed | Release build; CTest 6/6; pytest 80/80. Source baseline ancestor: `497f0c37d27056ec2e6df631c0f570d80fe332f4`. |
 
 ## Review dispositions
 
@@ -76,8 +79,9 @@ None
 
 ## Delivery record
 
-- Base commit: `75ff14e` (ticket branch base; source is unchanged from `497f0c37d27056ec2e6df631c0f570d80fe332f4`)
-- Baseline status: pending
+- Base commit: `d7abde372760d8a16427ca4b91cbfed067f893c7`
+- Source baseline commit: `497f0c37d27056ec2e6df631c0f570d80fe332f4`
+- Baseline status: passed
 - Branch: `delivery/essvi-bayesian-update/EBA-2`
 - Worktree: primary checkout
 - GitHub Issue: none (local tracker)
