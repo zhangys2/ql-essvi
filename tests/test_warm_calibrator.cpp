@@ -585,6 +585,7 @@ void posteriorModePreservesQuoteCapBoundary() {
   assert(relaxed.quality_maximum_excess_ratio <=
          relaxed_options.quote_cap + 1e-10);
   checkDenseGrid(warm.surface);
+  checkDenseGrid(relaxed.surface);
 }
 
 void localSolverTraversesFallbackRhoRangeForNormalTilt() {
@@ -963,6 +964,120 @@ void constrainedPosteriorModeUsesGaussianPriorAndIgnoresPreviousQuotes() {
   assert(original_history_result.objective == shifted_history_result.objective);
 }
 
+void multivariatePosteriorMatchesIndependentScore() {
+  const auto previous_quotes = essvi::bench::realisticChain(1, 100, 4);
+  const auto previous = essvi::calibrate(previous_quotes);
+  assert(previous.converged);
+  const auto prior_slice = previous.surface.slices.front();
+  const essvi::Slice target{prior_slice.expiry, prior_slice.theta * 1.08,
+                            prior_slice.psi * 0.96,
+                            std::clamp(prior_slice.rho + 0.025, -0.9, 0.9)};
+  assert(essvi::butterflySafe(target));
+
+  auto prior = previous;
+  prior.posterior_covariances.front() =
+      {0.2, 0.3, -0.1, 1.0, 0.2, 1.0};
+  std::vector<essvi::Quote> current_quotes;
+  current_quotes.reserve(5);
+  const std::array<double, 5> log_moneyness{-0.35, -0.16, 0.0, 0.18, 0.34};
+  for (std::size_t index = 0; index < log_moneyness.size(); ++index) {
+    auto quote = previous_quotes.front();
+    quote.id = "posterior-score-" + std::to_string(index);
+    quote.strike = quote.forward * std::exp(log_moneyness[index]);
+    const double target_iv = std::sqrt(
+        essvi::sliceTotalVariance(target, log_moneyness[index]) /
+        quote.expiry);
+    const double half_spread = 1e-3 * (1.0 + std::abs(log_moneyness[index]));
+    const double quote_shift =
+        index == 0 ? 0.004
+                   : (index + 1 == log_moneyness.size() ? -0.004 : 0.0);
+    quote.bid_iv = target_iv + quote_shift - half_spread;
+    quote.ask_iv = target_iv + quote_shift + half_spread;
+    quote.mid_iv = target_iv + quote_shift;
+    current_quotes.push_back(quote);
+  }
+
+  essvi::WarmOptions options;
+  options.quote_tol = 0.0;
+  options.quote_cap = 1e6;
+  const auto warm = essvi::calibrateWarm(
+      current_quotes, &prior, previous_quotes, options);
+  assert(warm.converged);
+  assert(warm.fallback_slices == 0);
+  checkDenseGrid(warm.surface);
+
+  std::array<double, 3> prior_mean{
+      std::log(prior_slice.theta), std::atanh(prior_slice.rho),
+      std::log(prior_slice.psi)};
+  double covariance[3][3] = {{0.21, 0.3, -0.1},
+                             {0.3, 6.0, 0.2},
+                             {-0.1, 0.2, 6.0}};
+  double lower[3][3]{};
+  lower[0][0] = std::sqrt(covariance[0][0]);
+  lower[1][0] = covariance[1][0] / lower[0][0];
+  lower[2][0] = covariance[2][0] / lower[0][0];
+  lower[1][1] =
+      std::sqrt(covariance[1][1] - lower[1][0] * lower[1][0]);
+  lower[2][1] = (covariance[2][1] - lower[2][0] * lower[1][0]) /
+                lower[1][1];
+  lower[2][2] = std::sqrt(covariance[2][2] -
+                          lower[2][0] * lower[2][0] -
+                          lower[2][1] * lower[2][1]);
+
+  const auto independent_score = [&](const std::array<double, 3>& state) {
+    const essvi::Slice slice{prior_slice.expiry, std::exp(state[0]),
+                             std::exp(state[2]), std::tanh(state[1])};
+    double loss = 0.0;
+    double loss_scale = 0.0;
+    for (const auto& quote : current_quotes) {
+      const double k = std::log(quote.strike / quote.forward);
+      const double variance = essvi::sliceTotalVariance(slice, k);
+      const double bid = quote.expiry * quote.bid_iv * quote.bid_iv;
+      const double ask = quote.expiry * quote.ask_iv * quote.ask_iv;
+      const double residual = variance - std::clamp(variance, bid, ask);
+      const double width = std::max(ask - bid, 1e-6);
+      loss += quote.weight * quote.weight * residual * residual;
+      loss_scale += quote.weight * quote.weight * width * width;
+    }
+    const std::array<double, 3> delta{state[0] - prior_mean[0],
+                                      state[1] - prior_mean[1],
+                                      state[2] - prior_mean[2]};
+    double whitened[3]{};
+    for (int row = 0; row < 3; ++row) {
+      double value = delta[row];
+      for (int column = 0; column < row; ++column)
+        value -= lower[row][column] * whitened[column];
+      whitened[row] = value / lower[row][row];
+    }
+    double prior_quadratic = 0.0;
+    for (const double value : whitened) prior_quadratic += value * value;
+    return 0.5 * (loss / loss_scale + prior_quadratic);
+  };
+
+  const auto& fitted = warm.surface.slices.front();
+  const std::array<double, 3> fitted_state{
+      std::log(fitted.theta), std::atanh(fitted.rho), std::log(fitted.psi)};
+  std::size_t active_quotes = 0;
+  for (const auto& quote : current_quotes) {
+    const double variance = essvi::sliceTotalVariance(
+        fitted, std::log(quote.strike / quote.forward));
+    const double bid = quote.expiry * quote.bid_iv * quote.bid_iv;
+    const double ask = quote.expiry * quote.ask_iv * quote.ask_iv;
+    active_quotes += variance < bid || variance > ask;
+  }
+  for (std::size_t coordinate = 0; coordinate < fitted_state.size();
+       ++coordinate) {
+    auto upper = fitted_state;
+    auto lower_state = fitted_state;
+    upper[coordinate] += 1e-5;
+    lower_state[coordinate] -= 1e-5;
+    const double score_gradient =
+        (independent_score(upper) - independent_score(lower_state)) / 2e-5;
+    assert(std::abs(score_gradient) < 1e-3);
+  }
+  assert(active_quotes >= 2);
+}
+
 void covarianceStateIsAlignedAndInvalidStateColdStarts() {
   const auto previous_quotes = essvi::bench::realisticChain(2, 100, 6);
   const auto previous = essvi::calibrate(previous_quotes);
@@ -1036,6 +1151,31 @@ void covarianceStateIsAlignedAndInvalidStateColdStarts() {
          cold.surface.slices.front().rho);
   assert(unmatched.posterior_covariances.front() == cold_diagonal);
   checkPosteriorCovariances(unmatched);
+
+  auto large_covariance_prior = previous;
+  const std::array<double, 6> large_finite_diagonal{
+      1e110, 0.0, 0.0, 1e110, 0.0, 1e110};
+  for (auto& covariance : large_covariance_prior.posterior_covariances)
+    covariance = large_finite_diagonal;
+  auto shifted_quotes = previous_quotes;
+  for (auto& quote : shifted_quotes) {
+    quote.bid_iv += 0.015;
+    quote.ask_iv += 0.015;
+    quote.mid_iv += 0.015;
+  }
+  essvi::WarmOptions large_covariance_options;
+  large_covariance_options.quote_tol = 0.0;
+  large_covariance_options.quote_cap = 1e6;
+  const auto large_covariance_warm = essvi::calibrateWarm(
+      shifted_quotes, &large_covariance_prior, previous_quotes,
+      large_covariance_options);
+  assert(large_covariance_warm.converged);
+  assert(std::abs(std::log(large_covariance_warm.surface.slices.front().theta /
+                           previous.surface.slices.front().theta)) > 1e-4);
+  for (const auto& covariance : large_covariance_warm.posterior_covariances)
+    assert(covariance[0] > 1e100 && covariance[3] > 1e100 &&
+           covariance[5] > 1e100);
+  checkPosteriorCovariances(large_covariance_warm);
 }
 
 }  // namespace
@@ -1099,6 +1239,7 @@ int main() {
   fastScenarioPreservesQuoteSpreadsAtIvFloor();
   highFallbackShortcutUsesFastScenarioMoveScale();
   constrainedPosteriorModeUsesGaussianPriorAndIgnoresPreviousQuotes();
+  multivariatePosteriorMatchesIndependentScore();
   covarianceStateIsAlignedAndInvalidStateColdStarts();
   stagedFallbackBudgetReturnsValidDegradedResults();
   return 0;

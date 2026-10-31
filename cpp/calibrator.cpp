@@ -736,7 +736,7 @@ CalibrationResult fitSliceAtHeadroom(
 
     constexpr std::array<double, 3> rho_offsets{0.0, -0.05, 0.05};
     constexpr std::array<double, 5> alphas{1.0, 0.5, 0.25, 0.125, 0.0625};
-    constexpr int local_evaluation_budget = 25;
+    const int local_evaluation_budget = prior_precision ? 100 : 25;
     // Starts remain within rho ±0.05; LM may traverse the staged ±0.15
     // fallback radius before resorting to a cold search.
     const double rho_lower = std::max(-0.979999, warm_start->rho - 0.15);
@@ -1065,24 +1065,40 @@ bool priorPrecisionFor(const StateCovariance& covariance,
   StateMatrix predicted = unpackCovariance(covariance);
   for (int index = 0; index < 3; ++index)
     predicted[index][index] += kStateProcessVariance[index];
-  const double a = predicted[0][0], b = predicted[0][1];
-  const double c = predicted[0][2], d = predicted[1][1];
-  const double e = predicted[1][2], f = predicted[2][2];
-  const double determinant = a * (d * f - e * e) -
-                             b * (b * f - c * e) +
-                             c * (b * e - c * d);
-  if (!(determinant > 0.0) || !std::isfinite(determinant)) return false;
-  precision = {{{
-      (d * f - e * e) / determinant, (c * e - b * f) / determinant,
-      (b * e - c * d) / determinant},
-      {(c * e - b * f) / determinant, (a * f - c * c) / determinant,
-       (b * c - a * e) / determinant},
-      {(b * e - c * d) / determinant, (b * c - a * e) / determinant,
-       (a * d - b * b) / determinant}}};
+  StateMatrix lower{};
+  if (!cholesky(predicted, lower)) return false;
+
+  precision = {};
+  for (int column = 0; column < 3; ++column) {
+    StateVector forward{};
+    StateVector solution{};
+    for (int row = 0; row < 3; ++row) {
+      double value = row == column ? 1.0 : 0.0;
+      for (int index = 0; index < row; ++index)
+        value -= lower[row][index] * forward[index];
+      forward[row] = value / lower[row][row];
+    }
+    for (int row = 2; row >= 0; --row) {
+      double value = forward[row];
+      for (int index = row + 1; index < 3; ++index)
+        value -= lower[index][row] * solution[index];
+      solution[row] = value / lower[row][row];
+    }
+    for (int row = 0; row < 3; ++row)
+      precision[row][column] = solution[row];
+  }
+  for (int row = 0; row < 3; ++row)
+    for (int column = row + 1; column < 3; ++column) {
+      const double symmetric =
+          0.5 * (precision[row][column] + precision[column][row]);
+      precision[row][column] = precision[column][row] = symmetric;
+    }
   for (const auto& row : precision)
     for (const double value : row)
       if (!std::isfinite(value)) return false;
-  predicted_covariance = {a, b, c, d, e, f};
+  predicted_covariance = {predicted[0][0], predicted[0][1],
+                          predicted[0][2], predicted[1][1],
+                          predicted[1][2], predicted[2][2]};
   return true;
 }
 
@@ -1270,6 +1286,8 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
         double candidate_loss{INFINITY};
         double candidate_headroom{kCalendarHeadroom};
         double full_cold_headroom{kCalendarHeadroom};
+        StateMatrix prior_precision{};
+        StateCovariance predicted_covariance{coldCovariance()};
         bool have_candidate{};
         bool candidate_reused{};
         bool candidate_from_warm{};
@@ -1351,10 +1369,13 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
         auto& plan = candidates[i];
         plan.prepared = prepareQuotes(current_groups.slices[i]);
         plan.loss_scale = bandLossScale(plan.prepared);
-        plan.warm_start =
-            posteriorCovarianceAt(previous_result, expiry)
-                ? surfaceSliceAt(previous_surface, expiry)
-                : nullptr;
+        const auto* prior_covariance =
+            has_previous ? posteriorCovarianceAt(previous_result, expiry)
+                         : nullptr;
+        if (prior_covariance &&
+            priorPrecisionFor(*prior_covariance, plan.prior_precision,
+                              plan.predicted_covariance))
+          plan.warm_start = surfaceSliceAt(previous_surface, expiry);
         plan.old_previous = previousSliceBefore(expiry);
         if (!plan.warm_start ||
             previousDegradedAge(expiry) >= kDegradedAgeBeforeForcedCold)
@@ -1757,17 +1778,8 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
           return out;
         }
   
-        const auto* prior_covariance =
-            has_previous ? posteriorCovarianceAt(previous_result, expiry)
-                         : nullptr;
-        StateCovariance result_covariance = coldCovariance();
-        StateMatrix prior_precision{};
-        const bool have_predicted_covariance =
-            prior_covariance && priorPrecisionFor(*prior_covariance,
-                                                  prior_precision,
-                                                  result_covariance);
-        if (candidate_from_warm && warm_start &&
-            have_predicted_covariance) {
+        const StateCovariance result_covariance = plan.predicted_covariance;
+        if (candidate_from_warm && warm_start) {
           const Slice before = candidate;
           const StateVector prior_mean = stateCoordinates(*warm_start);
           std::uint64_t posterior_bound_calls = 0;
@@ -1778,7 +1790,7 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
             posterior = fitSliceAtHeadroom(
                 plan.prepared, expiry, previous_slice, rho_workers, &before,
                 nullptr, options.quote_cap, candidate_headroom, &prior_mean,
-                &prior_precision, plan.loss_scale);
+                &plan.prior_precision, plan.loss_scale);
           }
           out.iterations += posterior.iterations;
           out.fallback_reason_counts.bound_check_failed +=

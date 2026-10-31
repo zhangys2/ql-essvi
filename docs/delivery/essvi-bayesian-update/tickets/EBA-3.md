@@ -2,27 +2,17 @@
 
 ## State
 
-- Current: changes-requested
-- Last transition: reviewing -> changes-requested
-- At: 2026-10-31T15:22:26Z
-- Reason/evidence: Round 3 reviewers matched the frozen input (base f2335ed4b26e4c9275f8f85a27f163502740df0b to snapshot HEAD 87c049411c04784cff2210ac56579bb02522e72f; SHA-256 16f34823c8137c123d8d62ebcc8a1c312de390af16a029a65032dfe9e54ec39e; spec SHA-256 5e634c44225a6aa8ac7124a18ba64343f0ad08fcddf567112828a4b54a7b8cea). Independent spec, standards, and verification axes returned two P2 findings and one UNTESTED P2 gap; all accepted below. Round 3 is the final available review round.
-- Blocker: None
+- Current: blocked
+- Last transition: changes-requested -> blocked
+- At: 2026-10-31T15:40:02Z
+- Reason/evidence: Round 3 corrections are implemented; focused and configured full verification pass. The three-round cap is exhausted, so no fresh independent review can approve these corrections. EBA-3 remains unapproved and EBA-4 cannot start.
+- Blocker: The round-three corrections have not received independent review; no review round remains under the cap.
 
 ## State history
 
 | At | Transition | Evidence |
 |---|---|---|
-| 2026-10-31T14:06:25Z | draft -> ready | Approved parent spec; EBA-2 finished at `f2335ed4b26e4c9275f8f85a27f163502740df0b`; EBA-3 acceptance criteria and test plan are settled. |
-| 2026-10-31T14:07:20Z | ready -> baseline-checking | Claimed branch `delivery/essvi-bayesian-update/EBA-3`; baseline worktree `/tmp/ql-essvi-eba3-baseline` is detached at the declared base. |
-| 2026-10-31T14:08:18Z | baseline-checking -> baseline-passed | Exact-base checkout at `f2335ed4b26e4c9275f8f85a27f163502740df0b` passed the configured Release build, CTest 6/6, and pytest 81/81. |
-| 2026-10-31T14:08:51Z | baseline-passed -> implementing | Baseline timeline row recorded; public `calibrateWarm`/`CalibrationResult` seam confirmed. |
-| 2026-10-31T14:43:34Z | implementing -> implemented | Implementation commit `6cc0213415f5885e0f6a5e970d123cae3f50b9e3`; focused and configured final verification passed. |
-| 2026-10-31T14:44:58Z | implemented -> reviewing | Round 1 input pinned to base f2335ed4b26e4c9275f8f85a27f163502740df0b, HEAD 8639750b4879406f0ece579164c74ebb46611c9c, snapshot SHA-256 ca9a84873d2c557f9e10ddf039cc185a4ada083d02e39c55aee135ec6214db4c, and spec SHA-256 5e634c44225a6aa8ac7124a18ba64343f0ad08fcddf567112828a4b54a7b8cea. |
-| 2026-10-31T14:47:30Z | reviewing -> changes-requested | Round 1 invalidated after identifying half-scaled data gradient/Hessian; old base/HEAD/snapshot identity is recorded in the preceding transition and the round-1 input manifest. New review requires a committed correction and fresh final verification. |
-| 2026-10-31T14:59:16Z | changes-requested -> reviewing | Corrections committed; final configured verification passed; round-1 provisional findings dispositioned; request round 2 under the three-round review cap. |
-| 2026-10-31T15:07:19Z | reviewing -> changes-requested | Round 2 input identity matched; independent spec, standards, and verification axes require corrections; round 3 is the last available review round. |
-| 2026-10-31T15:14:37Z | changes-requested -> reviewing | Corrections committed; focused and configured final verification passed; all Round 2 findings dispositioned. Round 3 frozen input and preflight checks are recorded below; last available round. |
-| 2026-10-31T15:22:26Z | reviewing -> changes-requested | Round 3 completed on the exact frozen snapshot. Spec and standards returned P2 corrections; verification reported a multivariate-score UNTESTED P2 gap while the configured suite passed. All findings accepted; no review round remains. |
+| 2026-10-31T15:40:02Z | changes-requested -> blocked | Round-three corrections implemented and full verification passed; earlier transitions are recorded in the verification timeline, and no review round remains. |
 
 ## Claim
 
@@ -38,27 +28,20 @@ Use the exact-expiry previous mean and usable covariance as a Gaussian prior in 
 
 ## Acceptance criteria
 
-- With the same informative current snapshot, changing the prior covariance changes the fitted mode; the update is not merely a warm start for raw band loss.
-- The posterior objective is the existing weighted band energy normalized by `bandLossScale` plus the Gaussian prior quadratic in `(log(theta), atanh(rho), log(psi))`.
+- With the same informative current snapshot, changing prior covariance changes the fitted mode; the posterior objective is normalized weighted band energy plus the Gaussian prior quadratic in `(log(theta), atanh(rho), log(psi))`.
 - `previous_quotes` affects identity/reuse decisions only; varying it independently while holding prior result and current quotes fixed does not add likelihood evidence.
 - Every posterior-refined candidate passes existing butterfly/calendar hard checks and the existing quote-cap gate; rejected candidates continue through the established fallback sequence.
-- `CalibrationResult::objective`, diagnostics, and CSV contracts continue to report the existing raw band loss and remain compatible.
-- The covariance state is carried for every returned slice; covariance information refresh is completed in EBA-4.
+- `CalibrationResult::objective`, diagnostics, and CSV contracts continue to report existing raw band loss; every returned slice carries covariance, with quote-information refresh completed in EBA-4.
 
 ## Out of scope
 
-- Replacing band loss with a generative interval-censored model or using mid/band-center fitting.
-- Updating posterior covariance from current observations (EBA-4).
-- Changing fallback policy, no-arbitrage bounds, quality thresholds, or schemas.
+- Replacing band loss with a generative interval-censored/midpoint model; refreshing posterior covariance from current observations (EBA-4); or changing fallback policy, no-arbitrage bounds, quality thresholds, or schemas.
 
 ## Test plan
 
-- Add public-seam tests that vary the prior under fixed informative current quotes and independently vary `previous_quotes` while keeping the prior and current quotes fixed.
-- Assert raw-objective consistency, quote-cap behavior, deterministic output, and dense-grid feasibility for posterior-refined results.
-- Assert the predicted covariance is carried across successive warm results and malformed covariance cold-starts.
-- Cross the large-move threshold using only historical quote mids; verify the MAP route depends on the prior state and current snapshot, not historical quote values.
-- Cover valid covariance on an unmatched expiry and assert predicted covariance is retained through a fallback result.
-- Run focused warm CTest and the configured full verification command before review.
+- Add public-seam tests that vary the prior under fixed informative current quotes, independently vary `previous_quotes`, and verify an independent multivariate posterior-score reference with active strikes and correlated prior; assert raw-objective consistency, deterministic output, and dense-grid feasibility for both quote-cap outcomes.
+- Assert predicted covariance carry across successive warm results, malformed covariance cold-starts, and a large finite SPD prior remains usable; cross the large-move threshold using only historical quote mids and verify the MAP route depends on the prior state and current snapshot.
+- Cover valid covariance on an unmatched expiry and predicted covariance through a fallback; run focused warm CTest and configured full verification before review.
 
 ## Blocked by
 
@@ -100,6 +83,10 @@ Use the exact-expiry previous mean and usable covariance as a Gaussian prior in 
 | 2026-10-31T15:13:46Z | Final | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && uv pip install --python .venv/bin/python '.[test]' && .venv/bin/python -m pytest -q` | primary checkout | `358df311742cf24b4d842bbdf54ec2486af0dc02` | passed | Release build; CTest 6/6; pytest 81/81. |
 | 2026-10-31T15:14:37Z | Review round 3 input | Base f2335ed4b26e4c9275f8f85a27f163502740df0b; HEAD 87c049411c04784cff2210ac56579bb02522e72f; snapshot SHA-256 16f34823c8137c123d8d62ebcc8a1c312de390af16a029a65032dfe9e54ec39e; spec SHA-256 5e634c44225a6aa8ac7124a18ba64343f0ad08fcddf567112828a4b54a7b8cea. | primary checkout | 87c049411c04784cff2210ac56579bb02522e72f | frozen | Readiness PASS; diff/spec audit PASS (3 implementation files, 226 added lines, 1 test file); zero untracked files. User-owned EBA-2 metadata edit explicitly excluded from the frozen ticket range. |
 | 2026-10-31T15:22:26Z | Review round 3 | Three independent axes (EBA3SpecRound3, EBA3StandardsRound3, EBA3VerificationRound3); verification reran the exact configured full command | primary checkout | base f2335ed4b26e4c9275f8f85a27f163502740df0b to snapshot HEAD 87c049411c04784cff2210ac56579bb02522e72f | changes required | Spec P2: finite SPD covariance `diag(1e110)` overflows direct determinant inversion and skips MAP/covariance carry. Standards P2: `checkDenseGrid(relaxed.surface)` was removed from quote-cap regression. Verification: CTest 6/6 and pytest 81/81; UNTESTED P2: no independent multivariate/multiple-strike posterior-score oracle for correlated prior. |
+| 2026-10-31 | Red | `cmake --build build --target essvi_warm_calibrator_tests -j2 && ctest --test-dir build -R essvi_warm_calibrator_tests --output-on-failure` | primary checkout | `65c751ad325f8871b335fb660e270bae068e1091` + large-covariance regression working tree | expected failure | With the original determinant-based inversion, valid `diag(1e110)` prior did not move the posterior-mode theta; warm MAP refinement was skipped. |
+| 2026-10-31 | Red | Same focused warm CTest command | primary checkout | `65c751ad325f8871b335fb660e270bae068e1091` + multivariate-score regression and 25-evaluation budget | expected failure | The independent score's coordinate gradient exceeded `1e-3` under the 25-evaluation local budget. |
+| 2026-10-31 | Green | Same focused warm CTest command | primary checkout | `65c751ad325f8871b335fb660e270bae068e1091` + corrections working tree | passed | Cholesky solves preserve the large finite SPD prior; the multivariate independent score oracle, all-coordinate gradient checks, restored relaxed-result dense-grid assertion, and covariance checks pass with the posterior-only local budget of 100 evaluations. |
+| 2026-10-31T15:39:27Z | Final | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && uv pip install --python .venv/bin/python '.[test]' && .venv/bin/python -m pytest -q` | primary checkout | `65c751ad325f8871b335fb660e270bae068e1091` + final correction working tree | passed | Release build; CTest 6/6; pytest 81/81. The diff/spec helper also passed at exactly 250 added non-fixture lines. |
 
 ## Review dispositions
 
