@@ -2,10 +2,10 @@
 
 ## State
 
-- Current: reviewing
-- Last transition: changes-requested -> reviewing
-- At: 2026-10-31T15:14:37Z
-- Reason/evidence: Round 3 input frozen at base f2335ed4b26e4c9275f8f85a27f163502740df0b to HEAD 87c049411c04784cff2210ac56579bb02522e72f; snapshot SHA-256 16f34823c8137c123d8d62ebcc8a1c312de390af16a029a65032dfe9e54ec39e; spec SHA-256 5e634c44225a6aa8ac7124a18ba64343f0ad08fcddf567112828a4b54a7b8cea. All Round 2 findings were corrected and committed; focused and full verification passed. Readiness and diff/spec checks passed. This is the final available review round.
+- Current: changes-requested
+- Last transition: reviewing -> changes-requested
+- At: 2026-10-31T15:22:26Z
+- Reason/evidence: Round 3 reviewers matched the frozen input (base f2335ed4b26e4c9275f8f85a27f163502740df0b to snapshot HEAD 87c049411c04784cff2210ac56579bb02522e72f; SHA-256 16f34823c8137c123d8d62ebcc8a1c312de390af16a029a65032dfe9e54ec39e; spec SHA-256 5e634c44225a6aa8ac7124a18ba64343f0ad08fcddf567112828a4b54a7b8cea). Independent spec, standards, and verification axes returned two P2 findings and one UNTESTED P2 gap; all accepted below. Round 3 is the final available review round.
 - Blocker: None
 
 ## State history
@@ -22,6 +22,7 @@
 | 2026-10-31T14:59:16Z | changes-requested -> reviewing | Corrections committed; final configured verification passed; round-1 provisional findings dispositioned; request round 2 under the three-round review cap. |
 | 2026-10-31T15:07:19Z | reviewing -> changes-requested | Round 2 input identity matched; independent spec, standards, and verification axes require corrections; round 3 is the last available review round. |
 | 2026-10-31T15:14:37Z | changes-requested -> reviewing | Corrections committed; focused and configured final verification passed; all Round 2 findings dispositioned. Round 3 frozen input and preflight checks are recorded below; last available round. |
+| 2026-10-31T15:22:26Z | reviewing -> changes-requested | Round 3 completed on the exact frozen snapshot. Spec and standards returned P2 corrections; verification reported a multivariate-score UNTESTED P2 gap while the configured suite passed. All findings accepted; no review round remains. |
 
 ## Claim
 
@@ -98,6 +99,7 @@ Use the exact-expiry previous mean and usable covariance as a Gaussian prior in 
 | 2026-10-31T15:13:46Z | Green | Same focused warm CTest command | primary checkout | `358df311742cf24b4d842bbdf54ec2486af0dc02` | passed | Movement shortcut now compares current mids with the exact-expiry prior surface; varying only historical mids leaves local route, MAP surface, and raw objective unchanged. Restored strict-safe fallback equality checks; unmatched-expiry cold-start and non-default fallback covariance propagation regressions pass. |
 | 2026-10-31T15:13:46Z | Final | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && uv pip install --python .venv/bin/python '.[test]' && .venv/bin/python -m pytest -q` | primary checkout | `358df311742cf24b4d842bbdf54ec2486af0dc02` | passed | Release build; CTest 6/6; pytest 81/81. |
 | 2026-10-31T15:14:37Z | Review round 3 input | Base f2335ed4b26e4c9275f8f85a27f163502740df0b; HEAD 87c049411c04784cff2210ac56579bb02522e72f; snapshot SHA-256 16f34823c8137c123d8d62ebcc8a1c312de390af16a029a65032dfe9e54ec39e; spec SHA-256 5e634c44225a6aa8ac7124a18ba64343f0ad08fcddf567112828a4b54a7b8cea. | primary checkout | 87c049411c04784cff2210ac56579bb02522e72f | frozen | Readiness PASS; diff/spec audit PASS (3 implementation files, 226 added lines, 1 test file); zero untracked files. User-owned EBA-2 metadata edit explicitly excluded from the frozen ticket range. |
+| 2026-10-31T15:22:26Z | Review round 3 | Three independent axes (EBA3SpecRound3, EBA3StandardsRound3, EBA3VerificationRound3); verification reran the exact configured full command | primary checkout | base f2335ed4b26e4c9275f8f85a27f163502740df0b to snapshot HEAD 87c049411c04784cff2210ac56579bb02522e72f | changes required | Spec P2: finite SPD covariance `diag(1e110)` overflows direct determinant inversion and skips MAP/covariance carry. Standards P2: `checkDenseGrid(relaxed.surface)` was removed from quote-cap regression. Verification: CTest 6/6 and pytest 81/81; UNTESTED P2: no independent multivariate/multiple-strike posterior-score oracle for correlated prior. |
 
 ## Review dispositions
 
@@ -111,6 +113,9 @@ Use the exact-expiry previous mean and usable covariance as a Gaussian prior in 
 | 2 (standards P2) | README says warm results always use cold diagonal covariance | accepted | README now distinguishes cold `0.25` initialization from valid matched warm/fallback covariance plus one process-noise step, and states that EBA-3 does not refresh covariance from quotes. |
 | 2 (verification P2) | Valid covariance on an unmatched expiry is not tested | accepted | Added a public-seam case retaining a valid covariance while changing the prior expiry key; the current expiry reproduces the cold-fit parameters and cold covariance. Focused test passes. |
 | 2 (verification P2) | Fallback covariance propagation is checked only for SPD, not retained prior state | accepted | Fallback regression now seeds non-default valid diagonal covariance and checks every output against prior plus exactly one process-noise step; focused and full suites pass. |
+| 3 (spec P2) | Direct determinant inversion overflows on large finite SPD covariance, skipping posterior refinement and returning cold covariance | accepted | Replace determinant-based inversion with scale-stable Cholesky solves (or reject the prior before warm selection) and add a public regression using valid large finite SPD covariance. Current Round 3 snapshot demonstrates loss of a valid matched prior. |
+| 3 (standards P2, mechanical) | Quote-cap regression no longer checks dense-grid feasibility for the relaxed-cap result | accepted | Restore `checkDenseGrid(relaxed.surface)` in `posteriorModePreservesQuoteCapBoundary`; retain the focused warm CTest as the deterministic gate. |
+| 3 (verification UNTESTED P2) | Full multivariate posterior score with multiple active strikes and correlated prior lacks an independent reference | accepted | Add a public warm-API regression with multiple active strikes and non-diagonal SPD prior, checked against an independent posterior-score reference. The reviewer rated the gap non-blocking on its axis, but it remains required for verification confidence. |
 
 ## Delivery record
 
