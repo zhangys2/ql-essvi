@@ -93,9 +93,9 @@ Use the exact-expiry previous mean and usable covariance as a Gaussian prior in 
 
 | Round | Finding | Disposition | Evidence |
 |---|---|---|---|
-| 1 (invalidated; provisional spec) | MISSING P2 — warm output reset covariance instead of carrying the prior state | Accepted; EBA-3 criterion 42 requires covariance state on every returned slice; output now carries the once-predicted covariance, while EBA-4 remains responsible for active quote-information refresh. | Focused covariance-chain Red/Green regression below. |
-| 1 (invalidated; provisional standards) | Blocking — 251 added non-fixture lines | Rejected; the count included test additions, while the deterministic helper budgets implementation/non-fixture additions separately. Current `cpp/calibrator.cpp` plus this ticket total 189 added lines; the fresh round-2 snapshot will be checked with `check_diff_spec.py`. | Current `git diff --numstat` reports 154 source additions and 35 ticket additions; fresh checker result is required before round 2. |
-| 1 (invalidated; provisional verification) | UNTESTED — valid covariance attached to a nonmatching expiry | Accepted for EBA-4; the parent spec requires unmatched expiries to cold-start, and EBA-4 will add a public regression for that boundary. | EBA-4 exact-expiry/cold-start test plan. |
+| 1 (invalidated; provisional spec) | MISSING P2 — warm output reset covariance instead of carrying the prior state | accepted | EBA-3 criterion 42 requires covariance state on every returned slice; output now carries the once-predicted covariance. EBA-4 remains responsible for active quote-information refresh; the focused covariance-chain regression passes. |
+| 1 (invalidated; provisional standards) | Blocking — 251 added non-fixture lines | rejected | The provisional count included test additions; the deterministic helper sizes implementation/non-fixture additions separately. The fresh round-2 snapshot will be checked with `check_diff_spec.py`; its result is the gate evidence. |
+| 1 (invalidated; provisional verification) | UNTESTED — valid covariance attached to a nonmatching expiry | accepted | EBA-4 will test a valid covariance attached to a different expiry and require the exact-expiry cold-start path, as required by the parent spec. |
 
 ## Delivery record
 
