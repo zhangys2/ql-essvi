@@ -2,10 +2,10 @@
 
 ## State
 
-- Current: changes-requested
-- Last transition: reviewing -> changes-requested
-- At: 2026-10-31T15:07:19Z
-- Reason/evidence: Round 2 matched base f2335ed4b26e4c9275f8f85a27f163502740df0b, HEAD ac824419f95014026932c225d31ef1ff71878c42, snapshot SHA-256 07aaecf3f426bf88343e30af9abb83fa760b36bcd10ff5397556e62e26d6e7a5, and spec SHA-256 5e634c44225a6aa8ac7124a18ba64343f0ad08fcddf567112828a4b54a7b8cea. Independent review found one spec P2, one standards blocker plus one standards P2, and two verification P2 coverage gaps; all are accepted below. Implement and verify before round 3, the final available round.
+- Current: reviewing
+- Last transition: changes-requested -> reviewing
+- At: 2026-10-31T15:14:37Z
+- Reason/evidence: Round 3 input frozen at base f2335ed4b26e4c9275f8f85a27f163502740df0b to HEAD 87c049411c04784cff2210ac56579bb02522e72f; snapshot SHA-256 16f34823c8137c123d8d62ebcc8a1c312de390af16a029a65032dfe9e54ec39e; spec SHA-256 5e634c44225a6aa8ac7124a18ba64343f0ad08fcddf567112828a4b54a7b8cea. All Round 2 findings were corrected and committed; focused and full verification passed. Readiness and diff/spec checks passed. This is the final available review round.
 - Blocker: None
 
 ## State history
@@ -21,6 +21,7 @@
 | 2026-10-31T14:47:30Z | reviewing -> changes-requested | Round 1 invalidated after identifying half-scaled data gradient/Hessian; old base/HEAD/snapshot identity is recorded in the preceding transition and the round-1 input manifest. New review requires a committed correction and fresh final verification. |
 | 2026-10-31T14:59:16Z | changes-requested -> reviewing | Corrections committed; final configured verification passed; round-1 provisional findings dispositioned; request round 2 under the three-round review cap. |
 | 2026-10-31T15:07:19Z | reviewing -> changes-requested | Round 2 input identity matched; independent spec, standards, and verification axes require corrections; round 3 is the last available review round. |
+| 2026-10-31T15:14:37Z | changes-requested -> reviewing | Corrections committed; focused and configured final verification passed; all Round 2 findings dispositioned. Round 3 frozen input and preflight checks are recorded below; last available round. |
 
 ## Claim
 
@@ -96,14 +97,15 @@ Use the exact-expiry previous mean and usable covariance as a Gaussian prior in 
 | 2026-10-31T15:13:46Z | Red | `cmake --build build --target essvi_warm_calibrator_tests -j2 && ctest --test-dir build -R essvi_warm_calibrator_tests --output-on-failure` | primary checkout | `df62c08` + threshold-crossing regression working tree | expected failure (exit 8) | With fallback-majority prior and quote cap forcing a local fit, changing only historical mids across the large-move threshold changed `local_solver_slices`; posterior result equality assertion failed. |
 | 2026-10-31T15:13:46Z | Green | Same focused warm CTest command | primary checkout | `358df311742cf24b4d842bbdf54ec2486af0dc02` | passed | Movement shortcut now compares current mids with the exact-expiry prior surface; varying only historical mids leaves local route, MAP surface, and raw objective unchanged. Restored strict-safe fallback equality checks; unmatched-expiry cold-start and non-default fallback covariance propagation regressions pass. |
 | 2026-10-31T15:13:46Z | Final | `export PATH="$PWD/.venv/bin:$PATH"; cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && cmake --build build -j2 && ctest --test-dir build --output-on-failure && uv pip install --python .venv/bin/python '.[test]' && .venv/bin/python -m pytest -q` | primary checkout | `358df311742cf24b4d842bbdf54ec2486af0dc02` | passed | Release build; CTest 6/6; pytest 81/81. |
+| 2026-10-31T15:14:37Z | Review round 3 input | Base f2335ed4b26e4c9275f8f85a27f163502740df0b; HEAD 87c049411c04784cff2210ac56579bb02522e72f; snapshot SHA-256 16f34823c8137c123d8d62ebcc8a1c312de390af16a029a65032dfe9e54ec39e; spec SHA-256 5e634c44225a6aa8ac7124a18ba64343f0ad08fcddf567112828a4b54a7b8cea. | primary checkout | 87c049411c04784cff2210ac56579bb02522e72f | frozen | Readiness PASS; diff/spec audit PASS (3 implementation files, 226 added lines, 1 test file); zero untracked files. User-owned EBA-2 metadata edit explicitly excluded from the frozen ticket range. |
 
 ## Review dispositions
 
 | Round | Finding | Disposition | Evidence |
 |---|---|---|---|
 | 1 (invalidated; provisional spec) | MISSING P2 — warm output reset covariance instead of carrying the prior state | accepted | EBA-3 criterion 42 requires covariance state on every returned slice; output now carries the once-predicted covariance. EBA-4 remains responsible for active quote-information refresh; the focused covariance-chain regression passes. |
-| 1 (invalidated; provisional standards) | Blocking — 251 added non-fixture lines | rejected | The provisional count included test additions; the deterministic helper sizes implementation/non-fixture additions separately. The fresh round-2 snapshot will be checked with `check_diff_spec.py`; its result is the gate evidence. |
-| 1 (invalidated; provisional verification) | UNTESTED — valid covariance attached to a nonmatching expiry | accepted | EBA-4 will test a valid covariance attached to a different expiry and require the exact-expiry cold-start path, as required by the parent spec. |
+| 1 (invalidated; provisional standards) | Blocking — 251 added non-fixture lines | rejected | Round 2 `check_diff_spec.py` passed: 191 implementation/documentation additions, two implementation files, one test file. Round 3 also passed at 226 added implementation lines across three implementation files and one test file. |
+| 1 (invalidated; provisional verification) | UNTESTED — valid covariance attached to a nonmatching expiry | accepted | EBA-3 now includes a public valid-covariance/different-expiry case; the exact current expiry cold-starts to the cold-fit parameters and cold covariance. Focused test passes. |
 | 2 (spec P2) | Historical `previous_quotes` mids can bypass posterior refinement through the large-move shortcut | accepted | `cpp/calibrator.cpp` now computes the shortcut from current mid IVs versus the exact-expiry prior surface. The public regression crosses the threshold by changing only historical mids while holding prior/current fixed; Red reproduced the route change and Green verifies identical route, MAP surface, and raw objective. |
 | 2 (standards blocker) | Failed calendar-repair fallback no longer asserts retention of the prior strict-safe slice | accepted | Restored exact `theta`, `psi`, and `rho` equality against `old_next`; existing calendar and dense-grid checks remain. Focused and full suites pass. |
 | 2 (standards P2) | README says warm results always use cold diagonal covariance | accepted | README now distinguishes cold `0.25` initialization from valid matched warm/fallback covariance plus one process-noise step, and states that EBA-3 does not refresh covariance from quotes. |
