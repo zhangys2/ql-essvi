@@ -2,10 +2,10 @@
 
 ## State
 
-- Current: changes-requested
-- Last transition: reviewing -> changes-requested
-- At: 2026-10-31T14:47:30Z
-- Reason/evidence: Round 1 invalidated: posterior data gradient/Hessian were half-scaled relative to the scored data term; a provisional spec review also found warm outputs reset covariance instead of carrying the predicted state. Both are corrected with focused Red/Green evidence below. Old input: base f2335ed4b26e4c9275f8f85a27f163502740df0b, HEAD 8639750b4879406f0ece579164c74ebb46611c9c, snapshot SHA-256 ca9a84873d2c557f9e10ddf039cc185a4ada083d02e39c55aee135ec6214db4c. Configured final verification and a fresh round-2 review remain required.
+- Current: reviewing
+- Last transition: changes-requested -> reviewing
+- At: 2026-10-31T14:59:16Z
+- Reason/evidence: Round 1 remains invalidated. Corrections are committed in 4bb24e04e8b495e5dc4afcb187bfccefd19853f3; configured final verification passed (Release build, CTest 6/6, pytest 81/81; timeline row 14:58:08Z). Round-1 provisional findings are dispositioned below; request fresh review round 2.
 - Blocker: None
 
 ## State history
@@ -19,6 +19,7 @@
 | 2026-10-31T14:43:34Z | implementing -> implemented | Implementation commit `6cc0213415f5885e0f6a5e970d123cae3f50b9e3`; focused and configured final verification passed. |
 | 2026-10-31T14:44:58Z | implemented -> reviewing | Round 1 input pinned to base f2335ed4b26e4c9275f8f85a27f163502740df0b, HEAD 8639750b4879406f0ece579164c74ebb46611c9c, snapshot SHA-256 ca9a84873d2c557f9e10ddf039cc185a4ada083d02e39c55aee135ec6214db4c, and spec SHA-256 5e634c44225a6aa8ac7124a18ba64343f0ad08fcddf567112828a4b54a7b8cea. |
 | 2026-10-31T14:47:30Z | reviewing -> changes-requested | Round 1 invalidated after identifying half-scaled data gradient/Hessian; old base/HEAD/snapshot identity is recorded in the preceding transition and the round-1 input manifest. New review requires a committed correction and fresh final verification. |
+| 2026-10-31T14:59:16Z | changes-requested -> reviewing | Corrections committed; final configured verification passed; round-1 provisional findings dispositioned; request round 2 under the three-round review cap. |
 
 ## Claim
 
