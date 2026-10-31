@@ -951,6 +951,64 @@ void finishResult(CalibrationResult& result, Clock::time_point started,
   result.mm_bound_calls = bound_calls;
   result.runtime_seconds = secondsSince(started);
 }
+
+using StateMatrix = std::array<std::array<double, 3>, 3>;
+using StateCovariance = std::array<double, 6>;
+constexpr double kColdStateVariance = 0.25;
+
+StateMatrix unpackCovariance(const StateCovariance& packed) {
+  StateMatrix matrix{};
+  matrix[0][0] = packed[0];
+  matrix[0][1] = matrix[1][0] = packed[1];
+  matrix[0][2] = matrix[2][0] = packed[2];
+  matrix[1][1] = packed[3];
+  matrix[1][2] = matrix[2][1] = packed[4];
+  matrix[2][2] = packed[5];
+  return matrix;
+}
+
+bool cholesky(const StateMatrix& matrix, StateMatrix& lower) {
+  lower = {};
+  for (int row = 0; row < 3; ++row) {
+    for (int column = 0; column <= row; ++column) {
+      double value = matrix[row][column];
+      if (!std::isfinite(value)) return false;
+      for (int index = 0; index < column; ++index)
+        value -= lower[row][index] * lower[column][index];
+      if (row == column) {
+        if (!(value > 0.0) || !std::isfinite(value)) return false;
+        lower[row][column] = std::sqrt(value);
+      } else {
+        lower[row][column] = value / lower[column][column];
+        if (!std::isfinite(lower[row][column])) return false;
+      }
+    }
+  }
+  return true;
+}
+
+bool validCovariance(const StateCovariance& covariance) {
+  StateMatrix lower{};
+  return cholesky(unpackCovariance(covariance), lower);
+}
+
+StateCovariance coldCovariance() {
+  return {kColdStateVariance, 0.0, 0.0, kColdStateVariance, 0.0,
+          kColdStateVariance};
+}
+
+const StateCovariance* posteriorCovarianceAt(
+    const CalibrationResult* result, double expiry) {
+  if (!result || !result->converged ||
+      result->posterior_covariances.size() != result->surface.slices.size())
+    return nullptr;
+  for (std::size_t index = 0; index < result->surface.slices.size(); ++index) {
+    if (result->surface.slices[index].expiry != expiry) continue;
+    const auto& covariance = result->posterior_covariances[index];
+    return validCovariance(covariance) ? &covariance : nullptr;
+  }
+  return nullptr;
+}
 }  // namespace
 
 std::vector<Quote> readQuotes(const std::string& path) {
@@ -1043,6 +1101,7 @@ CalibrationResult calibrate(const std::vector<Quote>& quotes) {
     return out;
   }
   out.reuse_ages.reserve(groups.expiries.size());
+  out.posterior_covariances.reserve(groups.expiries.size());
 
   // Avoid thread startup for one-expiry requests; multi-slice chains reuse this pool.
   RhoWorkerPool rho_workers(groups.expiries.size() > 1);
@@ -1062,6 +1121,7 @@ CalibrationResult calibrate(const std::vector<Quote>& quotes) {
     }
     out.surface.slices.push_back(part.surface.slices.front());
     out.reuse_ages.push_back(0);
+    out.posterior_covariances.push_back(coldCovariance());
     ++out.slices_refit;
   }
   out.timings.slice_fitting_seconds = secondsSince(fitting_started);
@@ -1112,6 +1172,7 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
     return out;
   }
   out.reuse_ages.reserve(current_groups.expiries.size());
+  out.posterior_covariances.reserve(current_groups.expiries.size());
   out.degraded_ages.reserve(current_groups.expiries.size());
 
   RhoWorkerPool rho_workers(current_groups.expiries.size() > 1);
@@ -1209,7 +1270,10 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
         auto& plan = candidates[i];
         plan.prepared = prepareQuotes(current_groups.slices[i]);
         plan.loss_scale = bandLossScale(plan.prepared);
-        plan.warm_start = surfaceSliceAt(previous_surface, expiry);
+        plan.warm_start =
+            posteriorCovarianceAt(previous_result, expiry)
+                ? surfaceSliceAt(previous_surface, expiry)
+                : nullptr;
         plan.old_previous = previousSliceBefore(expiry);
         if (!plan.warm_start ||
             previousDegradedAge(expiry) >= kDegradedAgeBeforeForcedCold)
@@ -1613,6 +1677,7 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
         }
   
         out.surface.slices.push_back(candidate);
+        out.posterior_covariances.push_back(coldCovariance());
         out.reuse_ages.push_back(candidate_reused
                                      ? previousReuseAge(expiry) + 1
                                      : 0);
@@ -1665,6 +1730,7 @@ CalibrationResult calibrateWarm(const std::vector<Quote>& current_quotes,
   out.converged = out.error.empty();
   if (!out.converged) {
     out.surface.slices.clear();
+    out.posterior_covariances.clear();
     out.reuse_ages.clear();
     out.degraded_ages.clear();
     out.degraded_slices = 0;

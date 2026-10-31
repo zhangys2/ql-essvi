@@ -819,6 +819,63 @@ void stagedFallbackBudgetReturnsValidDegradedResults() {
   assert(reset.degraded_ages.size() == 1);
   assert(reset.degraded_ages.front() == 0);
 }
+
+void checkPosteriorCovariances(const essvi::CalibrationResult& result) {
+  assert(result.posterior_covariances.size() == result.surface.slices.size());
+  for (const auto& covariance : result.posterior_covariances) {
+    const double a = covariance[0];
+    const double b = covariance[1];
+    const double c = covariance[2];
+    const double d = covariance[3];
+    const double e = covariance[4];
+    const double f = covariance[5];
+    assert(std::isfinite(a) && std::isfinite(b) && std::isfinite(c));
+    assert(std::isfinite(d) && std::isfinite(e) && std::isfinite(f));
+    assert(a > 0.0 && a * d - b * b > 0.0);
+    assert(a * (d * f - e * e) - b * (b * f - c * e) +
+               c * (b * e - c * d) > 0.0);
+  }
+}
+
+void covarianceStateIsAlignedAndInvalidStateColdStarts() {
+  const auto previous_quotes = essvi::bench::realisticChain(2, 100, 6);
+  const auto previous = essvi::calibrate(previous_quotes);
+  assert(previous.converged);
+  checkPosteriorCovariances(previous);
+
+  const auto warm = essvi::calibrateWarm(previous_quotes, &previous,
+                                          previous_quotes);
+  assert(warm.converged);
+  checkPosteriorCovariances(warm);
+
+  const auto& cold = previous;
+  auto malformed = previous;
+  malformed.posterior_covariances.front()[0] = -1.0;
+  const auto invalid = essvi::calibrateWarm(previous_quotes, &malformed,
+                                             previous_quotes);
+  assert(invalid.converged);
+  assert(invalid.surface.slices.front().theta ==
+         cold.surface.slices.front().theta);
+  assert(invalid.surface.slices.front().psi ==
+         cold.surface.slices.front().psi);
+  assert(invalid.surface.slices.front().rho ==
+         cold.surface.slices.front().rho);
+  checkPosteriorCovariances(invalid);
+
+  auto missing = previous;
+  missing.posterior_covariances.clear();
+  const auto absent = essvi::calibrateWarm(previous_quotes, &missing,
+                                            previous_quotes);
+  assert(absent.converged);
+  assert(absent.surface.slices.front().theta ==
+         cold.surface.slices.front().theta);
+  assert(absent.surface.slices.front().psi ==
+         cold.surface.slices.front().psi);
+  assert(absent.surface.slices.front().rho ==
+         cold.surface.slices.front().rho);
+  checkPosteriorCovariances(absent);
+}
+
 }  // namespace
 
 int main() {
@@ -879,6 +936,7 @@ int main() {
   localSolverTraversesFallbackRhoRangeForNormalTilt();
   fastScenarioPreservesQuoteSpreadsAtIvFloor();
   highFallbackShortcutUsesFastScenarioMoveScale();
+  covarianceStateIsAlignedAndInvalidStateColdStarts();
   stagedFallbackBudgetReturnsValidDegradedResults();
   return 0;
 }

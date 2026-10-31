@@ -129,7 +129,17 @@ NB_MODULE(_core, m) {
       .def_ro("path", &CalibrationResult::path)
       .def_ro("timings", &CalibrationResult::timings)
       .def_ro("runtime_seconds", &CalibrationResult::runtime_seconds)
-      .def_ro("error", &CalibrationResult::error);
+      .def_ro("error", &CalibrationResult::error)
+      .def_prop_ro(
+          "posterior_covariances",
+          [](const CalibrationResult& result) {
+            nb::list snapshots;
+            for (const auto& covariance : result.posterior_covariances)
+              snapshots.append(nb::make_tuple(
+                  covariance[0], covariance[1], covariance[2], covariance[3],
+                  covariance[4], covariance[5]));
+            return nb::tuple(snapshots);
+          });
 
   m.def("read_quotes", [](const std::filesystem::path& path) {
     return readQuotes(path.string());

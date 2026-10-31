@@ -126,6 +126,19 @@ def test_none_previous_result_uses_cold_calibration(quotes, cold, essvi):
     assert parameters(result.surface) == parameters(cold.surface)
 
 
+def test_posterior_covariance_state_is_readonly(quotes, essvi):
+    result = essvi.calibrate(quotes)
+    assert result.converged, result.error
+    covariance_snapshot = result.posterior_covariances
+    assert isinstance(covariance_snapshot, tuple)
+    assert len(covariance_snapshot) == len(result.surface.slices)
+    assert all(len(covariance) == 6 for covariance in covariance_snapshot)
+    with pytest.raises(TypeError):
+        covariance_snapshot[0][0] = 0.0
+    with pytest.raises(AttributeError):
+        result.posterior_covariances = []
+
+
 def test_empty_quotes_return_failed_result(essvi):
     result = essvi.calibrate(essvi.Quotes())
     assert not result.converged
