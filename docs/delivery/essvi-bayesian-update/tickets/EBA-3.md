@@ -2,10 +2,10 @@
 
 ## State
 
-- Current: implementing
-- Last transition: baseline-passed -> implementing
-- At: 2026-10-31T14:08:51Z
-- Reason/evidence: Baseline passed; `calibrateWarm` and `CalibrationResult` public seam confirmed for prior influence, feasibility, and raw-objective behavior.
+- Current: implemented
+- Last transition: implementing -> implemented
+- At: 2026-10-31T14:43:34Z
+- Reason/evidence: Implementation commit `6cc0213415f5885e0f6a5e970d123cae3f50b9e3`; focused Refactor/Green and configured Final verification passed.
 - Blocker: None
 
 ## State history
@@ -16,6 +16,7 @@
 | 2026-10-31T14:07:20Z | ready -> baseline-checking | Claimed branch `delivery/essvi-bayesian-update/EBA-3`; baseline worktree `/tmp/ql-essvi-eba3-baseline` is detached at the declared base. |
 | 2026-10-31T14:08:18Z | baseline-checking -> baseline-passed | Exact-base checkout at `f2335ed4b26e4c9275f8f85a27f163502740df0b` passed the configured Release build, CTest 6/6, and pytest 81/81. |
 | 2026-10-31T14:08:51Z | baseline-passed -> implementing | Baseline timeline row recorded; public `calibrateWarm`/`CalibrationResult` seam confirmed. |
+| 2026-10-31T14:43:34Z | implementing -> implemented | Implementation commit `6cc0213415f5885e0f6a5e970d123cae3f50b9e3`; focused and configured final verification passed. |
 
 ## Claim
 
