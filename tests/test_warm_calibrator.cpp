@@ -824,6 +824,95 @@ void stagedFallbackBudgetReturnsValidDegradedResults() {
   assert(reset.degraded_ages.front() == 0);
 }
 
+using TestMatrix = std::array<std::array<double, 3>, 3>;
+using TestCovariance = std::array<double, 6>;
+
+TestMatrix invertTestMatrix(TestMatrix matrix) {
+  TestMatrix inverse{{{1.0, 0.0, 0.0},
+                      {0.0, 1.0, 0.0},
+                      {0.0, 0.0, 1.0}}};
+  for (int pivot = 0; pivot < 3; ++pivot) {
+    const double divisor = matrix[pivot][pivot];
+    assert(std::isfinite(divisor) && divisor != 0.0);
+    for (int column = 0; column < 3; ++column) {
+      matrix[pivot][column] /= divisor;
+      inverse[pivot][column] /= divisor;
+    }
+    for (int row = 0; row < 3; ++row) {
+      if (row == pivot) continue;
+      const double factor = matrix[row][pivot];
+      for (int column = 0; column < 3; ++column) {
+        matrix[row][column] -= factor * matrix[pivot][column];
+        inverse[row][column] -= factor * inverse[pivot][column];
+      }
+    }
+  }
+  return inverse;
+}
+
+TestCovariance independentlyRefreshedCovariance(
+    TestCovariance predicted, const essvi::Slice& fitted,
+    const std::vector<essvi::Quote>& quotes) {
+  const std::array<double, 3> state{
+      std::log(fitted.theta), std::atanh(fitted.rho), std::log(fitted.psi)};
+  double loss_scale = 0.0;
+  for (const auto& quote : quotes) {
+    const double width = std::max(
+        quote.expiry * (quote.ask_iv * quote.ask_iv - quote.bid_iv * quote.bid_iv),
+        1e-6);
+    loss_scale += quote.weight * quote.weight * width * width;
+  }
+
+  TestMatrix information{};
+  for (const auto& quote : quotes) {
+    const double k = std::log(quote.strike / quote.forward);
+    const double variance = essvi::sliceTotalVariance(fitted, k);
+    const double bid = quote.expiry * quote.bid_iv * quote.bid_iv;
+    const double ask = quote.expiry * quote.ask_iv * quote.ask_iv;
+    if (variance >= bid && variance <= ask) continue;
+    std::array<double, 3> jacobian{};
+    for (int coordinate = 0; coordinate < 3; ++coordinate) {
+      auto upper = state;
+      auto lower = state;
+      upper[coordinate] += 1e-6;
+      lower[coordinate] -= 1e-6;
+      const auto sliceAt = [&](const std::array<double, 3>& x) {
+        return essvi::Slice{fitted.expiry, std::exp(x[0]), std::exp(x[2]),
+                            std::tanh(x[1])};
+      };
+      jacobian[coordinate] =
+          (essvi::sliceTotalVariance(sliceAt(upper), k) -
+           essvi::sliceTotalVariance(sliceAt(lower), k)) /
+          2e-6;
+    }
+    const double scale = quote.weight * quote.weight / loss_scale;
+    for (int row = 0; row < 3; ++row)
+      for (int column = 0; column < 3; ++column)
+        information[row][column] +=
+            scale * jacobian[row] * jacobian[column];
+  }
+
+  TestMatrix covariance{{{predicted[0], predicted[1], predicted[2]},
+                         {predicted[1], predicted[3], predicted[4]},
+                         {predicted[2], predicted[4], predicted[5]}}};
+  TestMatrix precision = invertTestMatrix(covariance);
+  for (int row = 0; row < 3; ++row)
+    for (int column = 0; column < 3; ++column)
+      precision[row][column] += information[row][column];
+  TestMatrix refreshed = invertTestMatrix(precision);
+  for (int i = 0; i < 3; ++i)
+    refreshed[i][i] = std::max(refreshed[i][i], 1e-8);
+  return {refreshed[0][0], refreshed[0][1], refreshed[0][2],
+          refreshed[1][1], refreshed[1][2], refreshed[2][2]};
+}
+
+void assertCovarianceNear(const TestCovariance& actual,
+                          const TestCovariance& expected) {
+  for (std::size_t i = 0; i < actual.size(); ++i)
+    assert(std::abs(actual[i] - expected[i]) <=
+           1e-10 * (1.0 + std::abs(expected[i])));
+}
+
 void checkPosteriorCovariances(const essvi::CalibrationResult& result) {
   assert(result.posterior_covariances.size() == result.surface.slices.size());
   for (const auto& covariance : result.posterior_covariances) {
@@ -1226,12 +1315,37 @@ void covarianceStateIsAlignedAndInvalidStateColdStarts() {
   assert(large_covariance_warm.converged);
   assert(std::abs(std::log(large_covariance_warm.surface.slices.front().theta /
                            previous.surface.slices.front().theta)) > 1e-4);
-  bool large_prior_refreshed = false;
-  for (const auto& covariance : large_covariance_warm.posterior_covariances)
-    large_prior_refreshed = large_prior_refreshed || covariance[0] < 1e100 ||
-                            covariance[3] < 1e100 || covariance[5] < 1e100;
-  assert(large_prior_refreshed);
+  assert(large_covariance_warm.posterior_covariances.front()[0] > 1e100);
   checkPosteriorCovariances(large_covariance_warm);
+
+  auto invalid_large_prior = large_covariance_prior;
+  for (auto& covariance : invalid_large_prior.posterior_covariances)
+    covariance[0] = -1.0;
+  const auto invalid_large_warm = essvi::calibrateWarm(
+      shifted_quotes, &invalid_large_prior, previous_quotes,
+      large_covariance_options);
+  const auto shifted_cold = essvi::calibrate(shifted_quotes);
+  assert(invalid_large_warm.converged && shifted_cold.converged);
+  assert(invalid_large_warm.path == essvi::CalibrationPath::cold);
+  assert(invalid_large_warm.posterior_covariances ==
+         shifted_cold.posterior_covariances);
+  assert(invalid_large_warm.surface.slices.size() ==
+         shifted_cold.surface.slices.size());
+  for (std::size_t i = 0; i < shifted_cold.surface.slices.size(); ++i) {
+    const auto& slice = shifted_cold.surface.slices[i];
+    const auto& quotes = shifted_quotes;
+    std::vector<essvi::Quote> expiry_quotes;
+    std::copy_if(quotes.begin(), quotes.end(),
+                 std::back_inserter(expiry_quotes), [&](const auto& quote) {
+                   return quote.expiry == slice.expiry;
+                 });
+    if (i == 0) continue;
+    const TestCovariance cold_prediction{0.25, 0.0, 0.0, 0.25, 0.0, 0.25};
+    assertCovarianceNear(
+        shifted_cold.posterior_covariances[i],
+        independentlyRefreshedCovariance(cold_prediction, slice,
+                                         expiry_quotes));
+  }
 }
 
 void activeQuoteInformationRefreshesColdAndWarmCovariance() {
@@ -1265,9 +1379,12 @@ void activeQuoteInformationRefreshesColdAndWarmCovariance() {
   assert(warm.converged);
   assert(warm.fallback_slices == 0);
   checkPosteriorCovariances(warm);
-  const auto& warm_covariance = warm.posterior_covariances.front();
-  assert(warm_covariance[0] < 0.41 || warm_covariance[3] < 5.6 ||
-         warm_covariance[5] < 5.8);
+  const TestCovariance predicted_warm{0.41, 0.0, 0.0, 5.6, 0.0, 5.8};
+  assertCovarianceNear(
+      warm.posterior_covariances.front(),
+      independentlyRefreshedCovariance(predicted_warm,
+                                       warm.surface.slices.front(),
+                                       current_quotes));
 
   auto fallback_options = options;
   fallback_options.quote_cap = 0.1;
@@ -1276,16 +1393,21 @@ void activeQuoteInformationRefreshesColdAndWarmCovariance() {
   assert(fallback.converged);
   assert(fallback.fallback_slices > 0);
   checkPosteriorCovariances(fallback);
-  const auto& fallback_covariance = fallback.posterior_covariances.front();
-  assert(fallback_covariance[0] < 0.41 || fallback_covariance[3] < 5.6 ||
-         fallback_covariance[5] < 5.8);
+  assertCovarianceNear(
+      fallback.posterior_covariances.front(),
+      independentlyRefreshedCovariance(predicted_warm,
+                                       fallback.surface.slices.front(),
+                                       current_quotes));
 
   const auto cold = essvi::calibrate(current_quotes);
   assert(cold.converged);
   checkPosteriorCovariances(cold);
-  const auto& cold_covariance = cold.posterior_covariances.front();
-  assert(cold_covariance[0] < 0.25 || cold_covariance[3] < 0.25 ||
-         cold_covariance[5] < 0.25);
+  const TestCovariance cold_prediction{0.25, 0.0, 0.0, 0.25, 0.0, 0.25};
+  assertCovarianceNear(
+      cold.posterior_covariances.front(),
+      independentlyRefreshedCovariance(cold_prediction,
+                                       cold.surface.slices.front(),
+                                       current_quotes));
   checkDenseGrid(warm.surface);
   checkDenseGrid(cold.surface);
 }
