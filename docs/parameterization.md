@@ -41,6 +41,14 @@ observed quotes. **D19:** exact in-band fraction uses a `1e-12` tolerance; model
 mean/median IV distance to the nearer bid/ask edge (zero if inside). Butterfly constraints use
 the Martini--Mingone infimum (D21), independently checked by the dense-grid scan.
 
+## Generalized-Bayes warm updates
+
+The existing band objective uses `residual_i = w(k_i,T_i) - clamp(w(k_i,T_i), bidVariance_i, askVariance_i)` and scale `L = sum_i weight_i^2 * max(askVariance_i - bidVariance_i, 1e-6)^2`. Only included, finite two-sided bands strictly outside the fitted interval contribute local information. This is a generalized-Bayes working likelihood for the band loss, not a claim that quotes are independent Gaussian observations.
+
+Covariance uses `z = (log(theta), atanh(rho), log(psi))`. A cold slice starts with `Sigma = 0.25 I`; a valid exact-expiry warm prior receives process noise `Q = diag(0.01, 5, 5)` exactly once per update. At the returned candidate, active band residuals form the positive-semidefinite Gauss--Newton data information `I = sum_active (weight_i^2 / L) J_z,i J_z,i^T`, where `J_z,i` is the total-variance derivative in transformed coordinates. The local covariance is `(Sigma_pred^-1 + I)^-1` with a `1e-8` diagonal variance floor. No active residuals leave the predicted covariance unchanged. Missing, malformed, or unusable exact-expiry covariance cold-starts instead of inventing a warm prior.
+
+Accepted warm candidates receive the local posterior-mode refinement used by the calibration path. Restricted and full-cold fallback candidates remain subject to the existing hard arbitrage constraints and quote-quality gates, but are not guaranteed posterior modes. Reported covariance is a local approximation, not a calibrated predictive interval.
+
 ## Enforcement and independent checks
 
 | Property | Calibration enforcement (D18) | Post-fit check |

@@ -9,7 +9,7 @@ standalone C++ project linking QuantLib, so it can be benchmarked against the ex
 containment and arbitrage-violation counts.
 
 Complete when every decision ticket is closed and the implementation plan is written.
-**No production code** — building is authorised separately.
+**Original charter: planning only; production code requires separate authorization.**
 
 ## Notes
 
@@ -52,7 +52,10 @@ Environment facts verified 2026-09-12:
 Skills: use `grilling` for HITL tickets; use `domain-modeling` only if terminology becomes
 canonical or a hard-to-reverse architectural choice needs an ADR.
 
-Execution exception: **none**. This map plans decisions only.
+Execution exception: On 2026-10-31 the user separately authorized the constrained Bayesian
+warm-update ticket in this checkout. **D23** records that scope; the approved implementation
+spec and local ticket are [`implementation-spec.md`](../../docs/delivery/essvi-bayesian-update/implementation-spec.md)
+and the sequential tickets [`EBA-2`](../../docs/delivery/essvi-bayesian-update/tickets/EBA-2.md), [`EBA-3`](../../docs/delivery/essvi-bayesian-update/tickets/EBA-3.md), and [`EBA-4`](../../docs/delivery/essvi-bayesian-update/tickets/EBA-4.md). EBA-1 preserves the initial changes-requested review record. This authorization does not reopen the original QuantLib/CVI charter.
 
 ## Decisions so far
 
@@ -73,6 +76,7 @@ These decisions were confirmed by the user on 2026-09-12. Additional confirmed i
 - **D20** Retire the Mingone joint global solver; sequential Corbetta did not calendar-lock (see [T11](../tickets/T11-mingone-global.md)).
 - **D21** Butterfly uses the Martini–Mingone N&S infimum instead of Gatheral–Jacquier sufficiency (see [T10](../tickets/T10-mm-butterfly.md)).
 - **D22** Fill CVI IVs at missing strikes by interpolating the existing CVI smile; do not change CVI fitting (see [T12](../tickets/T12-cvi-quote-gap.md)).
+- **D23** For the separately authorized eSSVI warm update, carry per-expiry Gaussian covariance in `(log(theta), atanh(rho), log(psi))`, preserve normalized D17 bid/ask band loss as generalized-Bayes evidence, and select the posterior mode under existing hard butterfly/calendar constraints. Confirmed 2026-10-31; implementation is split across [EBA-2](../../docs/delivery/essvi-bayesian-update/tickets/EBA-2.md), [EBA-3](../../docs/delivery/essvi-bayesian-update/tickets/EBA-3.md), and [EBA-4](../../docs/delivery/essvi-bayesian-update/tickets/EBA-4.md).
 
 The exact sufficient conditions and schemas are documented in `docs/parameterization.md` (D18 form; T10 MM butterfly plus Mingone's calendar `ψ` upper bound) and `docs/csv-contract.md`.
 

@@ -1,6 +1,7 @@
 #pragma once
 #include "essvi_surface.hpp"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -44,6 +45,9 @@ struct CalibrationResult {
   Surface surface;
   // Consecutive unchanged-parameter reuses, aligned with surface.slices.
   std::vector<std::size_t> reuse_ages;
+  // Symmetric covariance in (log(theta), atanh(rho), log(psi)) order:
+  // [00, 01, 02, 11, 12, 22], aligned with surface.slices.
+  std::vector<std::array<double, 6>> posterior_covariances;
   bool converged{};
   double objective{};
   int iterations{};
